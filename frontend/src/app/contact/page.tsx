@@ -1,274 +1,617 @@
 'use client';
 
 import React, { useState } from 'react';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
-import { contactService } from '@/services';
-import { MOCK_FAQS } from '@/data/mockData';
-import { 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Clock, 
-  Send, 
-  CheckCircle2, 
-  ChevronDown, 
-  ChevronUp, 
-  HelpCircle 
-} from 'lucide-react';
+import Link from 'next/link';
 
 export default function ContactPage() {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    department: 'general' as any,
-    subject: '',
-    message: '',
-    caseNumber: '',
-  });
-  const [openFaq, setOpenFaq] = useState<string | null>(MOCK_FAQS[0]?.id || null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [ticketResult, setTicketResult] = useState<string | null>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      const res = await contactService.submitInquiry(formData);
-      setTicketResult(res.ticketNumber);
-      setFormData({
-        fullName: '',
-        email: '',
-        phone: '',
-        department: 'general',
-        subject: '',
-        message: '',
-        caseNumber: '',
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface-bg text-text-primary">
-      <Header />
-
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
-        <div className="text-center max-w-3xl mx-auto space-y-3">
-          <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-text-primary">
-            კონტაქტი და მხარდაჭერა
-          </h1>
-          <p className="text-xs sm:text-sm text-text-muted">
-            გაქვთ შეკითხვა რეესტრთან, საქმის წარმოებასთან ან გადახდებთან დაკავშირებით? დაგვიკავშირდით.
-          </p>
+    <div className="bg-surface-bg text-text-primary min-h-screen flex flex-col antialiased selection:bg-secondary-container selection:text-text-primary">
+<div>
+  {/* ================= TOP NAVIGATION BAR (SHARED COMPONENT) ================= */}
+  <header className="bg-surface-card dark:bg-inverse-surface docked full-width top-0 sticky z-50 shadow-sm border-b border-border-subtle dark:border-outline">
+    <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
+      {/* Brand Logo */}
+      <div className="flex items-center gap-3">
+        <a className="flex items-center gap-2 group" href="#">
+          <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-sm group-hover:scale-105 transition-transform">
+            <span className="material-symbols-outlined text-xl" data-icon="account_balance">account_balance</span>
+          </div>
+          <span className="text-headline-sm font-headline-sm font-bold text-primary dark:text-inverse-primary tracking-tight">Debitinfo.GE</span>
+        </a>
+        <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-surface-container text-secondary font-semibold border border-border-subtle">
+          FINTECH REGISTRY
+        </span>
+      </div>
+      {/* Navigation Links (Desktop) */}
+      <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
+        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">სერვისები</a>
+        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">რეესტრი</a>
+        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">ტარიფები</a>
+        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">ბლოგი</a>
+        {/* Active link: კონტაქტი (JSON exact label match) */}
+        <a className="text-primary dark:text-inverse-primary font-label-md text-label-md border-b-2 border-primary dark:border-inverse-primary pb-1 font-semibold" href="#">კონტაქტი</a>
+      </nav>
+      {/* Trailing Action Cluster */}
+      <div className="flex items-center space-x-3">
+        {/* Language Switcher */}
+        <button className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-text-muted hover:text-primary hover:bg-surface-bg transition-colors active:scale-95 text-label-md font-label-md">
+          <span className="material-symbols-outlined text-base" data-icon="language">language</span>
+          <span className="font-data-mono-md text-data-mono-md">GE</span>
+        </button>
+        {/* Secondary: შესვლა */}
+        <a className="hidden sm:inline-flex items-center px-4 py-2 rounded-lg text-primary text-body-md font-medium hover:bg-surface-container-low transition-colors duration-150 active:scale-95" href="#">
+          შესვლა
+        </a>
+        {/* Primary: რეგისტრაცია */}
+        <a className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary-container text-on-primary text-body-md font-medium shadow-sm hover:bg-primary transition-all duration-150 active:scale-95" href="#">
+          რეგისტრაცია
+        </a>
+      </div>
+    </div>
+  </header>
+  {/* ================= CONTACT HERO SECTION ================= */}
+  <section className="relative bg-surface-card border-b border-border-subtle overflow-hidden">
+    {/* Subtle technical grid ambient background */}
+    <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{backgroundImage: 'radial-gradient(#0D45FC 1px, transparent 1px)', backgroundSize: '24px 24px'}} />
+    <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12 md:py-16 relative">
+      <div className="max-w-3xl">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-bg border border-border-subtle mb-4">
+          <span className="inline-block w-2 h-2 rounded-full bg-accent-mint animate-pulse" />
+          <span className="text-label-md font-label-md text-text-muted">ოპერატიული მხარდაჭერა 24/7</span>
+          <span className="text-text-muted">•</span>
+          <span className="text-label-md font-label-md text-primary font-semibold">საქართველოს მასშტაბით</span>
         </div>
-
-        {/* 2-Column: Contact Details & Form */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Left Column: Hotline & Info (5 cols) */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-border-subtle shadow-xs space-y-6">
-              <h3 className="text-lg font-bold text-text-primary">საკონტაქტო არხები</h3>
-
-              <div className="space-y-5 text-xs">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-primary flex items-center justify-center shrink-0">
-                    <Phone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-text-primary">ცხელი ხაზი</div>
-                    <div className="text-sm font-mono font-semibold text-primary mt-0.5">+995 32 2 100 200</div>
-                    <div className="text-[11px] text-text-muted mt-0.5">ორშაბათი - პარასკევი: 09:30 - 18:30</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                    <Mail className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-text-primary">ელექტრონული ფოსტა</div>
-                    <div className="font-mono text-text-primary mt-0.5">info@debitinfo.ge</div>
-                    <div className="text-[11px] text-text-muted">იურიდიული დეპარტამენტი: legal@debitinfo.ge</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-                    <MapPin className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-text-primary">მთავარი ოფისი</div>
-                    <div className="text-text-primary mt-0.5">ქ. თბილისი, ი. ჭავჭავაძის გამზ. 37მ (Pixel Centre)</div>
-                    <div className="text-[11px] text-text-muted">სართული 5, ოფისი 502</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                    <Clock className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-text-primary">სამუშაო საათები</div>
-                    <div className="text-text-primary mt-0.5">სამუშაო დღეები: 09:30 — 18:30</div>
-                    <div className="text-[11px] text-text-muted">შაბათ-კვირა: დასვენება</div>
-                  </div>
-                </div>
+        <h1 className="text-headline-xl-mobile md:text-headline-xl font-headline-xl text-text-primary tracking-tight mb-4">
+          დაგვიკავშირდით
+        </h1>
+        <p className="text-body-lg font-body-lg text-text-muted leading-relaxed">
+          ჩვენი გუნდი მზადაა უპასუხოს თქვენს შეკითხვებს და დაგეხმაროთ ფინანსური დავებისა და დავალიანებების მედიაციაში. მიიღეთ კვალიფიციური იურიდიული და ანალიტიკური კონსულტაცია.
+        </p>
+      </div>
+      {/* Quick Telemetry Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-8 border-t border-border-subtle">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined text-xl" data-icon="timer">timer</span>
+          </div>
+          <div>
+            <div className="text-label-sm font-label-sm text-text-muted uppercase">რეაგირების დრო</div>
+            <div className="text-data-mono-md font-data-mono-md font-semibold text-text-primary">~15 წუთი</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined text-xl" data-icon="verified_user">verified_user</span>
+          </div>
+          <div>
+            <div className="text-label-sm font-label-sm text-text-muted uppercase">სისტემური სტატუსი</div>
+            <div className="text-body-sm font-body-sm font-semibold text-text-primary flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-rating-a" /> RS.GE Online
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined text-xl" data-icon="handshake">handshake</span>
+          </div>
+          <div>
+            <div className="text-label-sm font-label-sm text-text-muted uppercase">მედიატორები</div>
+            <div className="text-data-mono-md font-data-mono-md font-semibold text-text-primary">18 აკრედიტებული</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-surface-container-low flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined text-xl" data-icon="security">security</span>
+          </div>
+          <div>
+            <div className="text-label-sm font-label-sm text-text-muted uppercase">უსაფრთხოება</div>
+            <div className="text-data-mono-md font-data-mono-md font-semibold text-text-primary">256-bit SSL</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  {/* ================= MAIN TWO-COLUMN WORKSPACE ================= */}
+  <main className="flex-grow max-w-7xl mx-auto w-full px-4 lg:px-8 py-10">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {/* LEFT COLUMN: Institutional Contact Channels (5 Cols) */}
+      <div className="lg:col-span-5 space-y-6">
+        {/* Central Office Card */}
+        <div className="bg-surface-card rounded-xl p-6 border border-border-subtle shadow-sm hover:border-outline-variant transition-colors">
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-lg bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-2xl" data-icon="corporate_fare">corporate_fare</span>
+            </div>
+            <div className="space-y-1">
+              <span className="text-label-sm font-label-sm text-primary uppercase font-bold tracking-wide">მთავარი ოფისი</span>
+              <h2 className="text-headline-sm font-headline-sm text-text-primary">ცენტრალური ფილიალი</h2>
+              <p className="text-body-md font-body-md text-text-muted mt-2">
+                ქ. თბილისი, ი. ჭავჭავაძის გამზ. 34, მე-5 სართული, ბიზნეს ცენტრი "Pixel"
+              </p>
+              <div className="pt-3 flex items-center gap-2 text-label-md font-label-md text-text-muted">
+                <span className="material-symbols-outlined text-base text-primary" data-icon="schedule">schedule</span>
+                <span>სამუშაო საათები: ორშ - პარ 09:00 - 19:00</span>
               </div>
             </div>
           </div>
-
-          {/* Right Column: Inquiry Form (7 cols) */}
-          <div className="lg:col-span-7">
-            <div className="bg-white rounded-3xl p-6 sm:p-8 border border-border-subtle shadow-xs space-y-6">
-              <h3 className="text-lg font-bold text-text-primary">ონლაინ შეტყობინების გაგზავნა</h3>
-
-              {ticketResult ? (
-                <div className="p-6 rounded-2xl bg-emerald-50 border border-emerald-200 text-center space-y-3">
-                  <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
-                  <h4 className="text-base font-bold text-emerald-900">შეტყობინება წარმატებით გაიგზავნა!</h4>
-                  <p className="text-xs text-emerald-700">
-                    თქვენს შეტყობინებას მიენიჭა ბილეთის ნომერი: <strong className="font-mono">{ticketResult}</strong>. ჩვენი ოპერატორი უახლოეს 2 საათში დაგიკავშირდებათ.
-                  </p>
-                  <button
-                    onClick={() => setTicketResult(null)}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"
-                  >
-                    ახალი შეტყობინება
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-text-muted">სრული სახელი / ორგანიზაცია</label>
-                      <input
-                        type="text"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-border-subtle text-xs focus:outline-none focus:border-primary text-text-primary"
-                        placeholder="მაგ: გიორგი ბერიძე"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-text-muted">ელფოსტა</label>
-                      <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-border-subtle text-xs focus:outline-none focus:border-primary text-text-primary"
-                        placeholder="example@mail.ge"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-text-muted">ტელეფონი</label>
-                      <input
-                        type="tel"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-border-subtle text-xs font-mono focus:outline-none focus:border-primary text-text-primary"
-                        placeholder="+995 599 00 00 00"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-semibold text-text-muted">საქმის ნომერი (არასავალდებულო)</label>
-                      <input
-                        type="text"
-                        value={formData.caseNumber}
-                        onChange={(e) => setFormData({ ...formData, caseNumber: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-border-subtle text-xs font-mono focus:outline-none focus:border-primary text-text-primary"
-                        placeholder="მაგ: DB-2024-8841"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-text-muted">თემატიკა</label>
-                    <select
-                      value={formData.department}
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value as any })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-border-subtle text-xs text-text-primary focus:outline-none focus:border-primary"
-                    >
-                      <option value="general">ზოგადი ინფორმაცია & რეგისტრაცია</option>
-                      <option value="debtor">მოვალის დავალიანების გარკვევა</option>
-                      <option value="creditor">კრედიტორის პორტფელის მართვა</option>
-                      <option value="legal">იურიდიული დავა & სააღსრულებო</option>
-                      <option value="support">ტექნიკური მხარდაჭერა</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-text-muted">შეტყობინების ტექსტი</label>
-                    <textarea
-                      rows={4}
-                      value={formData.message}
-                      onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-border-subtle text-xs focus:outline-none focus:border-primary text-text-primary"
-                      placeholder="აღწერეთ თქვენი საკითხი დეტალურად..."
-                      required
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full py-3 rounded-xl bg-primary text-white text-xs font-bold hover:bg-blue-700 transition-colors shadow-xs flex items-center justify-center gap-2"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{isSubmitting ? 'იგზავნება...' : 'შეტყობინების გაგზავნა'}</span>
-                  </button>
-                </form>
-              )}
+        </div>
+        {/* Call Center & Hotlines */}
+        <div className="bg-surface-card rounded-xl p-6 border border-border-subtle shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-lg bg-surface-container-low text-primary flex items-center justify-center">
+                <span className="material-symbols-outlined text-2xl" data-icon="call">call</span>
+              </div>
+              <div>
+                <span className="text-label-sm font-label-sm text-primary uppercase font-bold tracking-wide">ქოლ-ცენტრი</span>
+                <h3 className="text-headline-sm font-headline-sm text-text-primary">ცხელი ხაზი</h3>
+              </div>
+            </div>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-accent-mint/15 text-text-primary font-semibold">
+              ხაზი თავისუფალია
+            </span>
+          </div>
+          <div className="space-y-3 pt-2">
+            <a className="flex items-center justify-between p-3 rounded-lg bg-surface-bg hover:bg-surface-container-low transition-colors group" href="tel:+995322123456">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-text-muted group-hover:text-primary" data-icon="phone_in_talk">phone_in_talk</span>
+                <span className="text-body-md font-body-md text-text-muted">ქალაქის ნომერი:</span>
+              </div>
+              <span className="font-data-mono-md text-data-mono-md font-semibold text-text-primary group-hover:text-primary transition-colors">+995 32 2 123 456</span>
+            </a>
+            <a className="flex items-center justify-between p-3 rounded-lg bg-surface-bg hover:bg-surface-container-low transition-colors group" href="tel:+995599000000">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-text-muted group-hover:text-primary" data-icon="smartphone">smartphone</span>
+                <span className="text-body-md font-body-md text-text-muted">მობილური კონსიერჟი:</span>
+              </div>
+              <span className="font-data-mono-md text-data-mono-md font-semibold text-text-primary group-hover:text-primary transition-colors">+995 599 00 00 00</span>
+            </a>
+          </div>
+        </div>
+        {/* Official Department Inboxes */}
+        <div className="bg-surface-card rounded-xl p-6 border border-border-subtle shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-11 h-11 rounded-lg bg-surface-container-low text-primary flex items-center justify-center">
+              <span className="material-symbols-outlined text-2xl" data-icon="mark_email_read">mark_email_read</span>
+            </div>
+            <div>
+              <span className="text-label-sm font-label-sm text-primary uppercase font-bold tracking-wide">ოფიციალური მიმოწერა</span>
+              <h3 className="text-headline-sm font-headline-sm text-text-primary">სპეციალიზებული ელფოსტა</h3>
+            </div>
+          </div>
+          <ul className="divide-y divide-border-subtle text-body-md font-body-md">
+            <li className="py-2.5 flex items-center justify-between">
+              <span className="text-text-muted">საერთო საინფორმაციო:</span>
+              <a className="font-data-mono-md text-data-mono-md text-primary font-medium hover:underline" href="mailto:info@debitinfo.ge">info@debitinfo.ge</a>
+            </li>
+            <li className="py-2.5 flex items-center justify-between">
+              <span className="text-text-muted">იურიდიული დეპარტამენტი:</span>
+              <a className="font-data-mono-md text-data-mono-md text-primary font-medium hover:underline" href="mailto:legal@debitinfo.ge">legal@debitinfo.ge</a>
+            </li>
+            <li className="py-2.5 flex items-center justify-between">
+              <span className="text-text-muted">მედიაციის პალატა:</span>
+              <a className="font-data-mono-md text-data-mono-md text-primary font-medium hover:underline" href="mailto:mediation@debitinfo.ge">mediation@debitinfo.ge</a>
+            </li>
+          </ul>
+        </div>
+        {/* Instant Channels (Live Chat / Social) */}
+        <div className="bg-surface-card rounded-xl p-6 border border-border-subtle shadow-sm">
+          <h4 className="text-label-md font-label-md text-text-muted uppercase tracking-wider mb-3 font-semibold">მესინჯერები &amp; სწრაფი არხები</h4>
+          <div className="grid grid-cols-3 gap-3">
+            <a className="flex flex-col items-center justify-center p-3 rounded-lg border border-border-subtle hover:border-primary-container hover:bg-surface-container-low transition-all text-center group" href="#">
+              <span className="material-symbols-outlined text-2xl text-primary mb-1 group-hover:scale-110 transition-transform" data-icon="forum">forum</span>
+              <span className="text-label-md font-label-md text-text-primary font-medium">Live Chat</span>
+              <span className="text-label-sm font-label-sm text-rating-b font-mono">ონლაინ</span>
+            </a>
+            <a className="flex flex-col items-center justify-center p-3 rounded-lg border border-border-subtle hover:border-primary-container hover:bg-surface-container-low transition-all text-center group" href="#">
+              <span className="material-symbols-outlined text-2xl text-secondary mb-1 group-hover:scale-110 transition-transform" data-icon="send">send</span>
+              <span className="text-label-md font-label-md text-text-primary font-medium">Telegram</span>
+              <span className="text-label-sm font-label-sm text-text-muted font-mono">@debitinfo</span>
+            </a>
+            <a className="flex flex-col items-center justify-center p-3 rounded-lg border border-border-subtle hover:border-primary-container hover:bg-surface-container-low transition-all text-center group" href="#">
+              <span className="material-symbols-outlined text-2xl text-emerald-600 mb-1 group-hover:scale-110 transition-transform" data-icon="chat">chat</span>
+              <span className="text-label-md font-label-md text-text-primary font-medium">WhatsApp</span>
+              <span className="text-label-sm font-label-sm text-text-muted font-mono">Business</span>
+            </a>
+          </div>
+        </div>
+        {/* Official Bank Requisites Card */}
+        <div className="bg-surface-card rounded-xl p-6 border border-border-subtle shadow-sm space-y-4">
+          <div className="flex items-center gap-2 border-b border-border-subtle pb-3">
+            <span className="material-symbols-outlined text-text-muted text-xl" data-icon="account_balance_wallet">account_balance_wallet</span>
+            <h4 className="text-headline-sm font-headline-sm text-text-primary">საბანკო რეკვიზიტები</h4>
+          </div>
+          <div className="space-y-2 text-body-sm font-body-sm">
+            <div className="flex justify-between items-center text-text-muted">
+              <span>კომპანიის ს/კ:</span>
+              <span className="font-data-mono-md text-data-mono-md text-text-primary font-bold">405234981</span>
+            </div>
+            <div className="flex justify-between items-center text-text-muted">
+              <span>მიმღები:</span>
+              <span className="text-text-primary font-medium">შპს დებიტინფო ჯორჯია</span>
+            </div>
+            <div className="pt-2 border-t border-border-subtle">
+              <div className="text-label-sm font-label-sm text-text-muted mb-1">საქართველოს ბანკი (BOG):</div>
+              <div className="flex items-center justify-between bg-surface-bg p-2 rounded border border-border-subtle">
+                <span className="font-data-mono-md text-data-mono-md text-text-primary tracking-tight">GE29BG0000000123456789</span>
+                <button className="text-primary hover:text-secondary active:scale-95 text-xs font-semibold" title="კოპირება">Copy</button>
+              </div>
+            </div>
+            <div className="pt-1">
+              <div className="text-label-sm font-label-sm text-text-muted mb-1">თიბისი ბანკი (TBC):</div>
+              <div className="flex items-center justify-between bg-surface-bg p-2 rounded border border-border-subtle">
+                <span className="font-data-mono-md text-data-mono-md text-text-primary tracking-tight">GE73TB7000000987654321</span>
+                <button className="text-primary hover:text-secondary active:scale-95 text-xs font-semibold" title="კოპირება">Copy</button>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* FAQ Accordion Section */}
-        <section className="bg-white rounded-3xl p-6 sm:p-10 border border-border-subtle shadow-xs space-y-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-primary flex items-center justify-center">
-              <HelpCircle className="w-5 h-5" />
+      </div>
+      {/* RIGHT COLUMN: Official Feedback & Mediation Inquiry Form (7 Cols) */}
+      <div className="lg:col-span-7">
+        <div className="bg-surface-card rounded-xl p-6 md:p-8 border border-border-subtle shadow-sm">
+          <div className="border-b border-border-subtle pb-6 mb-6">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <span className="text-label-sm font-label-sm text-primary uppercase font-bold tracking-wide">ონლაინ განაცხადი</span>
+                <h2 className="text-headline-md font-headline-md text-text-primary mt-1">შეტყობინების გაგზავნა</h2>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-bg border border-border-subtle text-label-sm font-label-sm text-text-muted">
+                <span className="material-symbols-outlined text-sm text-primary" data-icon="lock">lock</span>
+                დაცულია 256-bit SSL
+              </span>
             </div>
+            <p className="text-body-md font-body-md text-text-muted mt-2">
+              შეავსეთ მოცემული ფორმა. ჩვენი იურიდიული მრჩეველი ან მედიატორი გიპასუხებთ 1 საათის განმავლობაში.
+            </p>
+          </div>
+          <form className="space-y-6" id="contactForm" onSubmit={(e) => e.preventDefault()}>
+            {/* Subject Type Radio Buttons */}
             <div>
-              <h2 className="text-base font-bold text-text-primary">ხშირად დასმული კითხვები (FAQ)</h2>
-              <p className="text-xs text-text-muted">პასუხები ყველაზე გავრცელებულ კითხვებზე რეესტრის შესახებ.</p>
+              <label className="block text-label-md font-label-md text-text-primary mb-2 font-medium">სუბიექტის ტიპი *</label>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="flex items-center gap-3 p-3.5 rounded-lg border border-border-subtle bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-colors has-[:checked]:border-primary has-[:checked]:bg-surface-container-low">
+                  <input defaultChecked className="w-4 h-4 text-primary focus:ring-primary border-border-subtle" name="entity_type" type="radio" defaultValue="individual" />
+                  <span className="flex items-center gap-2 text-body-md font-body-md text-text-primary font-medium">
+                    <span className="material-symbols-outlined text-lg text-primary" data-icon="person">person</span>
+                    ფიზიკური პირი
+                  </span>
+                </label>
+                <label className="flex items-center gap-3 p-3.5 rounded-lg border border-border-subtle bg-surface-bg hover:bg-surface-container-low cursor-pointer transition-colors has-[:checked]:border-primary has-[:checked]:bg-surface-container-low">
+                  <input className="w-4 h-4 text-primary focus:ring-primary border-border-subtle" name="entity_type" type="radio" defaultValue="legal" />
+                  <span className="flex items-center gap-2 text-body-md font-body-md text-text-primary font-medium">
+                    <span className="material-symbols-outlined text-lg text-secondary" data-icon="domain">domain</span>
+                    იურიდიული პირი
+                  </span>
+                </label>
+              </div>
+            </div>
+            {/* Two-column inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {/* Full Name / Org Name */}
+              <div>
+                <label className="block text-label-md font-label-md text-text-primary mb-1.5 font-medium" htmlFor="fullName">
+                  სახელი და გვარი / კომპანია *
+                </label>
+                <div className="relative">
+                  <input className="w-full bg-surface-card border border-border-subtle rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all" id="fullName" placeholder="მაგ: გიორგი ბერიძე" required type="text" />
+                </div>
+              </div>
+              {/* Identification Number */}
+              <div>
+                <label className="block text-label-md font-label-md text-text-primary mb-1.5 font-medium" htmlFor="idNumber">
+                  პირადი ნომერი / ს/კ <span className="text-text-muted text-body-sm font-normal">(არასავალდებულო)</span>
+                </label>
+                <input className="w-full bg-surface-card border border-border-subtle rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary font-data-mono-md placeholder:text-text-muted focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all" id="idNumber" placeholder="11 ან 9 ნიშნა კოდი" type="text" />
+              </div>
+              {/* Phone */}
+              <div>
+                <label className="block text-label-md font-label-md text-text-primary mb-1.5 font-medium" htmlFor="phone">
+                  ტელეფონის ნომერი *
+                </label>
+                <div className="relative">
+                  <input className="w-full bg-surface-card border border-border-subtle rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary font-data-mono-md placeholder:text-text-muted focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all" id="phone" placeholder="+995 5XX XX XX XX" required type="tel" />
+                </div>
+              </div>
+              {/* Email */}
+              <div>
+                <label className="block text-label-md font-label-md text-text-primary mb-1.5 font-medium" htmlFor="email">
+                  ელფოსტის მისამართი *
+                </label>
+                <input className="w-full bg-surface-card border border-border-subtle rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all" id="email" placeholder="name@domain.ge" required type="email" />
+              </div>
+            </div>
+            {/* Subject Select */}
+            <div>
+              <label className="block text-label-md font-label-md text-text-primary mb-1.5 font-medium" htmlFor="inquiryType">
+                მიმართვის თემა / კატეგორია *
+              </label>
+              <select className="w-full bg-surface-card border border-border-subtle rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all" id="inquiryType" required>
+                <option disabled value="">აირჩიეთ კატეგორია...</option>
+                <option value="consultation">ზოგადი კონსულტაცია</option>
+                <option value="debt-check">დავალიანების გადამოწმება &amp; სტატუსი</option>
+                <option value="mediation">მედიაციის მოთხოვნა (კრედიტორსა და მსესხებელს შორის)</option>
+                <option value="legal">იურიდიული მხარდაჭერა &amp; საჩივრები</option>
+                <option value="tech">ტექნიკური დახმარება პორტალზე</option>
+              </select>
+            </div>
+            {/* Message Textarea */}
+            <div>
+              <label className="block text-label-md font-label-md text-text-primary mb-1.5 font-medium" htmlFor="message">
+                შეტყობინების დეტალური აღწერა *
+              </label>
+              <textarea className="w-full bg-surface-card border border-border-subtle rounded-lg p-3.5 text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 outline-none transition-all resize-y" id="message" placeholder="დეტალურად აღწერეთ თქვენი საქმე, დავალიანების ხასიათი ან საკითხი..." required rows={4} defaultValue={""} />
+            </div>
+            {/* File Upload Attachment */}
+            <div>
+              <label className="block text-label-md font-label-md text-text-primary mb-1.5 font-medium">
+                დოკუმენტაციის მიბმა <span className="text-text-muted font-normal text-body-sm">(ხელშეკრულება, შედარების აქტი, PDF/DOCX - მაქს. 15MB)</span>
+              </label>
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-border-subtle border-dashed rounded-lg hover:border-primary-container transition-colors bg-surface-bg cursor-pointer group">
+                <div className="space-y-1 text-center">
+                  <span className="material-symbols-outlined text-3xl text-text-muted group-hover:text-primary transition-colors" data-icon="cloud_upload">cloud_upload</span>
+                  <div className="flex text-body-sm font-body-sm text-text-muted justify-center items-center">
+                    <label className="relative cursor-pointer font-semibold text-primary hover:underline" htmlFor="file-upload">
+                      <span>ატვირთეთ ფაილი</span>
+                      <input className="sr-only" id="file-upload" name="file-upload" type="file" />
+                    </label>
+                    <p className="pl-1">ან ჩააგდეთ აქ</p>
+                  </div>
+                  <p className="text-label-sm font-label-sm text-text-muted">PDF, PNG, JPG, DOCX 15 მბ-მდე</p>
+                </div>
+              </div>
+            </div>
+            {/* Agreement Checkbox */}
+            <div className="flex items-start gap-3">
+              <input className="h-4 w-4 mt-0.5 rounded border-border-subtle text-primary-container focus:ring-primary-container" id="terms" required type="checkbox" />
+              <label className="text-body-sm font-body-sm text-text-muted" htmlFor="terms">
+                ვეთანხმები პერსონალურ მონაცემთა დამუშავების პირობებსა და <a className="text-primary underline" href="#">კონფიდენციალურობის პოლიტიკას</a>.
+              </label>
+            </div>
+            {/* Submit Button & Security Note */}
+            <div className="pt-2">
+              <button className="w-full py-3.5 px-6 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-headline-sm text-body-md font-semibold shadow-sm transition-all duration-150 active:scale-[0.99] flex items-center justify-center gap-2" type="submit">
+                <span className="material-symbols-outlined text-xl" data-icon="send">send</span>
+                შეტყობინების გაგზავნა
+              </button>
+              <div className="flex items-center justify-center gap-2 mt-4 text-label-sm font-label-sm text-text-muted">
+                <span className="material-symbols-outlined text-sm text-rating-a" data-icon="verified">verified</span>
+                <span>თქვენი მონაცემები დაცულია 256-bit SSL დაშიფვრით და ინახება საქართველოს კანონმდებლობის შესაბამისად.</span>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+  {/* ================= INTERACTIVE LOCATION & MAP SECTION ================= */}
+  <section className="max-w-7xl mx-auto w-full px-4 lg:px-8 py-10">
+    <div className="bg-surface-card rounded-xl border border-border-subtle shadow-sm overflow-hidden">
+      {/* Section Header Inside Card */}
+      <div className="p-6 md:p-8 border-b border-border-subtle flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-xl" data-icon="map">map</span>
+            <span className="text-label-sm font-label-sm text-primary uppercase font-bold tracking-wide">ლოკაცია და მისვლა</span>
+          </div>
+          <h2 className="text-headline-md font-headline-md text-text-primary mt-1">როგორ მოგვაგნოთ</h2>
+          <p className="text-body-md font-body-md text-text-muted mt-0.5">ქ. თბილისი, ჭავჭავაძის გამზ. 34, ბიზნეს ცენტრი 'Pixel' (სართული 5)</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <a className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-subtle hover:bg-surface-bg text-text-primary text-body-md font-medium transition-colors" href="https://maps.google.com" rel="noopener noreferrer" target="_blank">
+            <span className="material-symbols-outlined text-base text-primary" data-icon="open_in_new">open_in_new</span>
+            Google Maps-ში გახსნა
+          </a>
+          <a className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-low text-primary hover:bg-surface-container text-body-md font-medium transition-colors" href="#directions">
+            <span className="material-symbols-outlined text-base" data-icon="directions">directions</span>
+            მარშრუტი
+          </a>
+        </div>
+      </div>
+      {/* Map Mockup Graphic Canvas & Location Specs */}
+      <div className="grid grid-cols-1 lg:grid-cols-12">
+        {/* Interactive Map Canvas Area */}
+        <div className="lg:col-span-8 relative min-h-[360px] bg-surface-bg flex items-center justify-center overflow-hidden border-b lg:border-b-0 lg:border-r border-border-subtle" data-location="Tbilisi, Georgia" style={{}}>
+          {/* Stylized Mock Map Canvas using vector graphics & ambient elements */}
+          <div className="absolute inset-0 bg-[#EBF2F7] opacity-90" />
+          {/* Stylized road vectors */}
+          <svg className="absolute inset-0 w-full h-full opacity-40" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern height={40} id="grid-pattern" patternUnits="userSpaceOnUse" width={40}>
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#CBD5E1" strokeWidth="0.8" />
+              </pattern>
+            </defs>
+            <rect fill="url(#grid-pattern)" height="100%" width="100%" />
+            <path d="M-50,220 C200,200 400,240 850,190" fill="none" stroke="#FFFFFF" strokeWidth={16} />
+            <path d="M-50,220 C200,200 400,240 850,190" fill="none" stroke="#94A3B8" strokeDasharray="8 6" strokeWidth={2} />
+            <path d="M300,-20 C320,150 280,300 310,500" fill="none" stroke="#FFFFFF" strokeWidth={20} />
+            <path d="M520,-20 C540,150 490,300 530,500" fill="none" stroke="#FFFFFF" strokeWidth={14} />
+          </svg>
+          {/* Metro Stations & Parks Mock markers */}
+          <div className="absolute top-1/4 left-1/4 px-2.5 py-1 rounded-full bg-white shadow-sm border border-border-subtle text-xs font-medium text-text-muted flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" /> ვაკის პარკი (500მ)
+          </div>
+          {/* Active Pin: Pixel Center */}
+          <div className="relative z-10 flex flex-col items-center animate-bounce duration-1000">
+            <div className="px-3.5 py-1.5 rounded-lg bg-text-primary text-white shadow-lg text-xs font-semibold flex items-center gap-1.5 mb-1">
+              <span className="material-symbols-outlined text-sm text-accent-mint" data-icon="apartment">apartment</span>
+              Pixel Business Center (Debitinfo)
+            </div>
+            <div className="w-8 h-8 rounded-full bg-primary-container text-white flex items-center justify-center shadow-md ring-4 ring-primary-container/20">
+              <span className="material-symbols-outlined text-base" data-icon="location_on">location_on</span>
+            </div>
+            <div className="w-2.5 h-1 bg-text-primary/30 rounded-full blur-[1px] mt-0.5" />
+          </div>
+          {/* Map Controls UI Mockup */}
+          <div className="absolute bottom-4 right-4 flex flex-col shadow-sm rounded-lg overflow-hidden border border-border-subtle bg-surface-card">
+            <button className="w-9 h-9 flex items-center justify-center hover:bg-surface-bg border-b border-border-subtle text-text-muted font-bold text-lg">+</button>
+            <button className="w-9 h-9 flex items-center justify-center hover:bg-surface-bg text-text-muted font-bold text-lg">−</button>
+          </div>
+          <div className="absolute top-4 left-4 bg-surface-card/95 backdrop-blur-sm px-3 py-1.5 rounded-md border border-border-subtle text-label-sm font-label-sm text-text-primary flex items-center gap-1.5 shadow-sm">
+            <span className="material-symbols-outlined text-sm text-primary" data-icon="navigation">navigation</span>
+            <span>41.7102° N, 44.7578° E</span>
+          </div>
+        </div>
+        {/* Location Specs & Transport Access Details (4 Cols) */}
+        <div className="lg:col-span-4 p-6 md:p-8 space-y-6 bg-surface-card justify-between flex flex-col">
+          <div className="space-y-5">
+            <h3 className="text-headline-sm font-headline-sm text-text-primary">ტრანსპორტი &amp; პარკინგი</h3>
+            {/* Item 1: Metro */}
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="material-symbols-outlined text-xl" data-icon="directions_subway">directions_subway</span>
+              </div>
+              <div>
+                <div className="text-body-md font-body-md font-semibold text-text-primary">მეტრო</div>
+                <div className="text-body-sm font-body-sm text-text-muted mt-0.5">მ/ს "რუსთაველი" ან "დელისი", შემდგომ ავტობუსი ჭავჭავაძის მიმართულებით (10-12 წუთი).</div>
+              </div>
+            </div>
+            {/* Item 2: Bus */}
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="material-symbols-outlined text-xl" data-icon="directions_bus">directions_bus</span>
+              </div>
+              <div>
+                <div className="text-body-md font-body-md font-semibold text-text-primary">ავტობუსის გაჩერება</div>
+                <div className="text-body-sm font-body-sm text-text-muted mt-0.5">გაჩერება: "ჭავჭავაძის 34" (ავტობუსები: #301, #307, #345, #351, #354 პირდაპირ ბიზნეს ცენტრთან).</div>
+              </div>
+            </div>
+            {/* Item 3: Parking */}
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="material-symbols-outlined text-xl" data-icon="local_parking">local_parking</span>
+              </div>
+              <div>
+                <div className="text-body-md font-body-md font-semibold text-text-primary">პარკინგი</div>
+                <div className="text-body-sm font-body-sm text-text-muted mt-0.5">ბიზნეს ცენტრს გააჩნია მიწისქვეშა 2-დონიანი ვიზიტორთა პარკინგი და თბილისის ზონალური პარკინგი (ზონა A).</div>
+              </div>
             </div>
           </div>
-
-          <div className="space-y-3">
-            {MOCK_FAQS.map((faq) => {
-              const isOpen = openFaq === faq.id;
-              return (
-                <div key={faq.id} className="rounded-2xl border border-border-subtle overflow-hidden transition-all">
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaq(isOpen ? null : faq.id)}
-                    className="w-full p-4 text-left flex items-center justify-between bg-slate-50/50 hover:bg-slate-50 transition-colors"
-                  >
-                    <span className="text-xs sm:text-sm font-bold text-text-primary">{faq.question}</span>
-                    {isOpen ? <ChevronUp className="w-4 h-4 text-primary" /> : <ChevronDown className="w-4 h-4 text-text-muted" />}
-                  </button>
-                  {isOpen && (
-                    <div className="p-4 bg-white border-t border-border-subtle text-xs text-text-muted leading-relaxed">
-                      {faq.answer}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          {/* Access Pass Note */}
+          <div className="p-4 rounded-lg bg-surface-bg border border-border-subtle text-body-sm font-body-sm text-text-muted flex items-start gap-2.5">
+            <span className="material-symbols-outlined text-primary text-lg mt-0.5" data-icon="badge">badge</span>
+            <span>შენობაში შემოსვლისას რეგისტრატურაში მოითხოვეთ საშვი <strong>Debitinfo.GE</strong>-ის მე-5 სართულის სათაო ოფისში.</span>
           </div>
-        </section>
-      </main>
+        </div>
+      </div>
+    </div>
+  </section>
+  {/* ================= FAQ QUICK ACCORDION SECTION ================= */}
+  <section className="max-w-7xl mx-auto w-full px-4 lg:px-8 py-8 mb-10">
+    <div className="bg-surface-card rounded-xl p-6 md:p-8 border border-border-subtle shadow-sm">
+      <div className="text-center max-w-2xl mx-auto mb-8">
+        <span className="text-label-sm font-label-sm text-primary uppercase font-bold tracking-wide">მხარდაჭერა &amp; გზამკვლევი</span>
+        <h2 className="text-headline-md font-headline-md text-text-primary mt-1">ხშირად დასმული კითხვები</h2>
+        <p className="text-body-md font-body-md text-text-muted mt-1">პასუხები ყველაზე გავრცელებულ კითხვებზე მედიაციისა და სერვისების შესახებ</p>
+      </div>
+      <div className="max-w-3xl mx-auto space-y-4">
+        {/* Accordion Item 1 */}
+        <details className="group bg-surface-bg rounded-lg border border-border-subtle open:bg-surface-container-low transition-colors">
+          <summary className="flex items-center justify-between p-4 cursor-pointer list-none font-semibold text-body-md text-text-primary">
+            <span>როგორ შემიძლია ჩავერთო ფინანსური დავალიანების მედიაციაში?</span>
+            <span className="material-symbols-outlined text-text-muted group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+          </summary>
+          <div className="px-4 pb-4 text-body-md font-body-md text-text-muted leading-relaxed">
+            მედიაციის პროცესის დასაწყებად შეავსეთ საკონტაქტო ფორმა თემით "მედიაციის მოთხოვნა" ან დაგვირეკეთ ცხელ ხაზზე. ჩვენი იურიდიული მრჩეველი შეამოწმებს დავალიანების რეესტრის სტატუსს, მოამზადებს შეთავაზებას და დაუკავშირდება ორივე მხარეს გრაფიკის რესტრუქტურიზაციის მიზნით.
+          </div>
+        </details>
+        {/* Accordion Item 2 */}
+        <details className="group bg-surface-bg rounded-lg border border-border-subtle open:bg-surface-container-low transition-colors">
+          <summary className="flex items-center justify-between p-4 cursor-pointer list-none font-semibold text-body-md text-text-primary">
+            <span>რა დოკუმენტებია საჭირო საქმის პირველადი განხილვისთვის?</span>
+            <span className="material-symbols-outlined text-text-muted group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+          </summary>
+          <div className="px-4 pb-4 text-body-md font-body-md text-text-muted leading-relaxed">
+            პირველად ეტაპზე საკმარისია პირადობის მოწმობა / კომპანიის ამონაწერი და ვალდებულების წარმოშობის დოკუმენტი (ხელშეკრულება, ინვოისი ან მიღება-ჩაბარების აქტი). დამატებითი დოკუმენტების აუცილებლობას განსაზღვრავს საქმის მწარმოებელი.
+          </div>
+        </details>
+        {/* Accordion Item 3 */}
+        <details className="group bg-surface-bg rounded-lg border border-border-subtle open:bg-surface-container-low transition-colors">
+          <summary className="flex items-center justify-between p-4 cursor-pointer list-none font-semibold text-body-md text-text-primary">
+            <span>რა საათებში მუშაობს ფიზიკური მიღების ცენტრი?</span>
+            <span className="material-symbols-outlined text-text-muted group-open:rotate-180 transition-transform" data-icon="expand_more">expand_more</span>
+          </summary>
+          <div className="px-4 pb-4 text-body-md font-body-md text-text-muted leading-relaxed">
+            ცენტრალური ოფისის მიღება მუშაობს ორშაბათიდან პარასკევის ჩათვლით 09:00 საათიდან 19:00 საათამდე. ონლაინ მონიტორინგის სისტემა და ჩატბოტი ხელმისაწვდომია 24/7 რეჟიმში.
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+  {/* ================= SUBMISSION SUCCESS MODAL (MICRO-INTERACTION) ================= */}
+  <div className="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" id="formSuccessModal">
+    <div className="bg-surface-card rounded-xl p-6 md:p-8 max-w-md w-full border border-border-subtle shadow-2xl text-center space-y-4 animate-scale-up">
+      <div className="w-14 h-14 rounded-full bg-accent-mint/20 text-emerald-700 mx-auto flex items-center justify-center">
+        <span className="material-symbols-outlined text-3xl" data-icon="check_circle">check_circle</span>
+      </div>
+      <h3 className="text-headline-md font-headline-md text-text-primary">განაცხადი მიღებულია!</h3>
+      <p className="text-body-md font-body-md text-text-muted">
+        თქვენი შეტყობინება წარმატებით გაეგზავნა Debitinfo.GE-ის შესაბამის დეპარტამენტს. ჩვენი წარმომადგენელი უახლოეს დროში დაგიკავშირდებათ.
+      </p>
+      <div className="pt-2">
+        <button className="w-full py-2.5 px-4 rounded-lg bg-primary-container text-on-primary font-medium hover:bg-primary transition-colors" onClick={() => {}}>
+          დახურვა
+        </button>
+      </div>
+    </div>
+  </div>
+  {/* ================= COMPREHENSIVE FOOTER (SHARED COMPONENT) ================= */}
+  <footer className="bg-surface-card dark:bg-inverse-surface border-t border-border-subtle dark:border-outline docked full-width bottom-0 mt-auto">
+    <div className="w-full max-w-7xl mx-auto px-4 lg:px-8 py-12 flex flex-col gap-8">
+      {/* Top Row: Brand & Integration Badges */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-border-subtle">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary">
+              <span className="material-symbols-outlined text-lg" data-icon="account_balance">account_balance</span>
+            </div>
+            <span className="text-headline-sm font-headline-sm font-bold text-primary dark:text-inverse-primary tracking-tight">Debitinfo.GE</span>
+          </div>
+          <p className="text-body-sm font-body-sm text-text-muted mt-1">ფინანსური დავალიანებების მონიტორინგი, იურიდიული მედიაცია და რეესტრი</p>
+        </div>
+        {/* Trust & RS.GE Integration Badges */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-bg border border-border-subtle text-label-sm font-label-sm text-text-primary">
+            <span className="material-symbols-outlined text-primary text-base" data-icon="verified">verified</span>
+            <span>RS.GE სისტემური ინტეგრაცია</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-bg border border-border-subtle text-label-sm font-label-sm text-text-primary">
+            <span className="material-symbols-outlined text-secondary text-base" data-icon="security">security</span>
+            <span>ISO 27001 სტანდარტი</span>
+          </div>
+        </div>
+      </div>
+      {/* Links Grid from JSON */}
+      <div className="flex flex-wrap items-center justify-between gap-4 text-body-sm font-body-sm">
+        <div className="flex flex-wrap gap-6">
+          <a className="text-text-muted dark:text-outline-variant hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150 hover:underline" href="#">კონფიდენციალურობის პოლიტიკა</a>
+          <a className="text-text-muted dark:text-outline-variant hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150 hover:underline" href="#">მომსახურების პირობები</a>
+          <a className="text-text-muted dark:text-outline-variant hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150 hover:underline" href="#">რეკვიზიტები</a>
+          <a className="text-text-muted dark:text-outline-variant hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150 hover:underline" href="#">საგადასახადო შემოწმება</a>
+          {/* Active link in footer: საკონტაქტო პირი */}
+          <a className="text-primary dark:text-inverse-primary font-semibold hover:underline" href="#">საკონტაქტო პირი</a>
+        </div>
+        {/* Partner Banks Indicators */}
+        <div className="flex items-center gap-2 text-label-sm font-label-sm text-text-muted font-mono">
+          <span>PARTNERS: BOG • TBC • CREDO</span>
+        </div>
+      </div>
+      {/* Copyright & Bottom Disclaimer from JSON */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border-subtle text-body-sm font-body-sm text-text-muted">
+        <div>
+          © 2024 Debitinfo.GE. ყველა უფლება დაცულია. ინტეგრირებულია RS.GE სისტემასთან.
+        </div>
+        <div className="flex items-center gap-4 text-label-sm font-label-sm">
+          <span>ვერსია: v2.4.1 (Stable)</span>
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-accent-mint" />
+          <span>სერვერები: თბილისი / ფრანკფურტი</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>
 
-      <Footer />
     </div>
   );
 }
