@@ -6,6 +6,17 @@ import Link from 'next/link';
 export default function CrmPage() {
 
   const [callActive, setCallActive] = useState(false);
+  const [seconds, setSeconds] = useState(165);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setSeconds(s => s + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const secs = (seconds % 60).toString().padStart(2, '0');
 
   return (
     <div className="bg-surface-bg text-text-primary h-full flex flex-col font-body-md antialiased overflow-hidden">
@@ -13,12 +24,12 @@ export default function CrmPage() {
   {/* TopNavBar (Shared Component implementation) */}
   <header className="w-full px-space-xl h-16 flex items-center justify-between border-b border-border-subtle bg-surface-card docked full-width top-0 sticky z-50 shadow-sm">
     <div className="flex items-center gap-space-lg">
-      <div className="flex items-center gap-space-sm">
-        <span className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary">
+      <Link href="/" className="flex items-center gap-space-sm group cursor-pointer">
+        <span className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary group-hover:scale-105 transition-transform">
           <span className="material-symbols-outlined text-lg" data-icon="account_balance">account_balance</span>
         </span>
-        <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight">Debitinfo.GE Operator</span>
-      </div>
+        <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight group-hover:underline">Debitinfo.GE Operator</span>
+      </Link>
       {/* Navigation Links from JSON */}
       <nav className="hidden lg:flex items-center gap-space-md ml-space-md">
         <a className="border-b-2 border-primary text-primary font-headline-sm text-body-md pb-1 flex items-center gap-1.5" href="#">
@@ -417,7 +428,7 @@ export default function CrmPage() {
               </div>
               <div className="flex items-center gap-1.5 text-xs text-[#047857] font-medium mt-0.5">
                 <span className="w-2 h-2 rounded-full bg-[#047857] animate-ping" />
-                <span className="font-data-mono-md text-data-mono-md">02:45</span>
+                <span className="font-data-mono-md text-data-mono-md">{mins}:{secs}</span>
                 <span className="text-text-muted">მიმდინარეობს საუბარი (ჩაწერა ჩართულია)</span>
               </div>
             </div>

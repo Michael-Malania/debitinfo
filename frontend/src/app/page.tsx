@@ -18,7 +18,7 @@ export default function LandingPage() {
   <header className="bg-surface-card sticky top-0 z-50 shadow-sm border-b border-border-subtle">
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo */}
-      <a className="flex items-center gap-2 group" href="#">
+      <a className="flex items-center gap-2 group" href="/">
         <div className="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-bold shadow-sm">
           <span className="material-symbols-outlined text-lg">assured_workload</span>
         </div>
@@ -75,7 +75,7 @@ export default function LandingPage() {
             {/* Interactive Slides Container */}
             <div className="relative min-h-[220px]">
               {/* Slide 1 */}
-              <div className="transition-opacity duration-300" id="hero-slide-1">
+              <div className={`transition-opacity duration-300 ${currentSlide === 1 ? '' : 'hidden'}`} id="hero-slide-1">
                 <h1 className="text-headline-xl lg:text-headline-xl font-headline-xl text-text-primary tracking-tight leading-tight mb-4">
                   მიიღე ინფორმაცია საკუთარ დებიტორულ დავალიანებაზე ან შენს სახელზე არსებულ დავალიანებაზე <span className="text-primary-container">უფასოდ</span> — ხელი რომ არ შეგეშალოს ბიზნეს საქმიანობაში
                 </h1>
@@ -84,7 +84,7 @@ export default function LandingPage() {
                 </p>
               </div>
               {/* Slide 2 */}
-              <div className="hidden transition-opacity duration-300" id="hero-slide-2">
+              <div className={`transition-opacity duration-300 ${currentSlide === 2 ? '' : 'hidden'}`} id="hero-slide-2">
                 <h1 className="text-headline-xl lg:text-headline-xl font-headline-xl text-text-primary tracking-tight leading-tight mb-4">
                   მართე <span className="text-primary-container">ფინანსური რისკები</span> და დაიცავი შენი ბიზნესი რეალურ დროში
                 </h1>
@@ -96,14 +96,14 @@ export default function LandingPage() {
             {/* Slider Controls */}
             <div className="flex items-center gap-4 mt-8 pt-4">
               <div className="flex items-center gap-2">
-                <button aria-label="Slide 1" className="w-8 h-2 rounded-full bg-primary-container transition-all duration-200" id="slider-btn-1" onClick={() => {}} />
-                <button aria-label="Slide 2" className="w-3 h-2 rounded-full bg-border-subtle hover:bg-outline-variant transition-all duration-200" id="slider-btn-2" onClick={() => {}} />
+                <button aria-label="Slide 1" className={`${currentSlide === 1 ? 'w-8 bg-primary-container' : 'w-3 bg-border-subtle hover:bg-outline-variant'} h-2 rounded-full transition-all duration-200 cursor-pointer`} id="slider-btn-1" onClick={() => setCurrentSlide(1)} />
+                <button aria-label="Slide 2" className={`${currentSlide === 2 ? 'w-8 bg-primary-container' : 'w-3 bg-border-subtle hover:bg-outline-variant'} h-2 rounded-full transition-all duration-200 cursor-pointer`} id="slider-btn-2" onClick={() => setCurrentSlide(2)} />
               </div>
               <div className="flex items-center gap-1.5 ml-4">
-                <button className="w-8 h-8 rounded-lg border border-border-subtle bg-surface-card flex items-center justify-center text-text-muted hover:text-text-primary hover:border-text-muted transition-all" onClick={() => {}}>
+                <button className="w-8 h-8 rounded-lg border border-border-subtle bg-surface-card flex items-center justify-center text-text-muted hover:text-text-primary hover:border-text-muted transition-all cursor-pointer" onClick={() => setCurrentSlide(s => s === 1 ? 2 : 1)}>
                   <span className="material-symbols-outlined text-sm">arrow_back</span>
                 </button>
-                <button className="w-8 h-8 rounded-lg border border-border-subtle bg-surface-card flex items-center justify-center text-text-muted hover:text-text-primary hover:border-text-muted transition-all" onClick={() => {}}>
+                <button className="w-8 h-8 rounded-lg border border-border-subtle bg-surface-card flex items-center justify-center text-text-muted hover:text-text-primary hover:border-text-muted transition-all cursor-pointer" onClick={() => setCurrentSlide(s => s === 1 ? 2 : 1)}>
                   <span className="material-symbols-outlined text-sm">arrow_forward</span>
                 </button>
               </div>
@@ -155,28 +155,28 @@ export default function LandingPage() {
               </div>
               {/* Segmented Selection Tabs */}
               <div className="grid grid-cols-2 gap-1 p-1 bg-surface-bg rounded-lg border border-border-subtle mb-4">
-                <button className="py-2 text-label-md font-label-md rounded bg-surface-card text-primary-container shadow-xs font-semibold text-center transition-all" id="tab-personal" onClick={() => {}} type="button">
+                <button className={`py-2 text-label-md font-label-md rounded text-center transition-all cursor-pointer ${searchMode === 'personal' ? 'bg-surface-card text-primary-container shadow-xs font-semibold' : 'text-text-muted hover:text-text-primary'}`} id="tab-personal" onClick={() => { setSearchMode('personal'); setSearchResultVisible(false); }} type="button">
                   პირადი ნომერი (11 ნიშნა)
                 </button>
-                <button className="py-2 text-label-md font-label-md rounded text-text-muted hover:text-text-primary text-center transition-all" id="tab-corporate" onClick={() => {}} type="button">
+                <button className={`py-2 text-label-md font-label-md rounded text-center transition-all cursor-pointer ${searchMode === 'corporate' ? 'bg-surface-card text-primary-container shadow-xs font-semibold' : 'text-text-muted hover:text-text-primary'}`} id="tab-corporate" onClick={() => { setSearchMode('corporate'); setSearchResultVisible(false); }} type="button">
                   საიდენტიფიკაციო (9 ნიშნა)
                 </button>
               </div>
               {/* Search Form */}
-              <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); if (searchValue.trim()) setSearchResultVisible(true); }}>
                 <div>
                   <label className="block text-label-md font-label-md text-text-primary mb-1.5" id="input-label">
-                    მოქალაქის პირადი ნომერი
+                    {searchMode === 'personal' ? 'მოქალაქის პირადი ნომერი' : 'კომპანიის საიდენტიფიკაციო კოდი'}
                   </label>
                   <div className="relative rounded-lg shadow-xs">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
                       <span className="material-symbols-outlined text-lg">badge</span>
                     </div>
-                    <input className="block w-full pl-10 pr-4 py-2.5 bg-surface-card border border-border-subtle rounded-lg text-body-md font-data-mono-md text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-secondary-container/40 focus:border-secondary-container transition-all" id="search-input" maxLength={11} placeholder="მაგ: 01024012345" type="text" />
+                    <input className="block w-full pl-10 pr-4 py-2.5 bg-surface-card border border-border-subtle rounded-lg text-body-md font-data-mono-md text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-secondary-container/40 focus:border-secondary-container transition-all" id="search-input" maxLength={searchMode === 'personal' ? 11 : 9} placeholder={searchMode === 'personal' ? 'მაგ: 01024012345' : 'მაგ: 405123456'} value={searchValue} onChange={(e) => setSearchValue(e.target.value)} type="text" />
                   </div>
                   <p className="text-body-sm font-body-sm text-text-muted mt-1.5 flex items-center gap-1" id="helper-text">
                     <span className="material-symbols-outlined text-xs">info</span>
-                    შეიყვანეთ ზუსტად 11 ციფრი RS.GE ავთენტიფიკაციისთვის
+                    {searchMode === 'personal' ? 'შეიყვანეთ ზუსტად 11 ციფრი RS.GE ავთენტიფიკაციისთვის' : 'შეიყვანეთ კომპანიის 9-ნიშნა საიდენტიფიკაციო კოდი'}
                   </p>
                 </div>
                 {/* Terms check */}
@@ -187,13 +187,13 @@ export default function LandingPage() {
                   </label>
                 </div>
                 {/* High-Emphasis CTA Button */}
-                <button className="w-full py-3 px-4 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-md text-body-md font-semibold transition-all duration-150 shadow-sm flex items-center justify-center gap-2 active:scale-[0.99]" id="search-cta" type="submit">
+                <button className="w-full py-3 px-4 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-md text-body-md font-semibold transition-all duration-150 shadow-sm flex items-center justify-center gap-2 active:scale-[0.99] cursor-pointer" id="search-cta" type="submit">
                   <span className="material-symbols-outlined text-lg">manage_search</span>
                   <span>გადამოწმება ბაზაში</span>
                 </button>
               </form>
               {/* Dynamic Result Placeholder for Interaction */}
-              <div className="hidden mt-4 p-3 bg-surface-bg border border-accent-mint/50 rounded-lg" id="search-result-box">
+              <div className={`${searchResultVisible ? '' : 'hidden'} mt-4 p-3 bg-surface-bg border border-accent-mint/50 rounded-lg`} id="search-result-box">
                 <div className="flex items-center justify-between text-body-sm font-body-sm">
                   <span className="text-text-muted flex items-center gap-1">
                     <span className="material-symbols-outlined text-accent-mint text-sm">check_circle</span>
@@ -309,10 +309,10 @@ export default function LandingPage() {
           </p>
           {/* Toggle Control */}
           <div className="inline-flex items-center p-1.5 bg-surface-card rounded-xl border border-border-subtle mt-8 shadow-xs">
-            <button className="px-5 py-2 rounded-lg text-body-md font-body-md font-semibold transition-all bg-primary-container text-on-primary shadow-xs" id="pricing-btn-ind" onClick={() => {}} type="button">
+            <button className={`px-5 py-2 rounded-lg text-body-md font-body-md transition-all cursor-pointer ${pricingTier === 'individual' ? 'font-semibold bg-primary-container text-on-primary shadow-xs' : 'text-text-muted hover:text-text-primary'}`} id="pricing-btn-ind" onClick={() => setPricingTier('individual')} type="button">
               ფიზიკური პირი
             </button>
-            <button className="px-5 py-2 rounded-lg text-body-md font-body-md text-text-muted hover:text-text-primary transition-all" id="pricing-btn-corp" onClick={() => {}} type="button">
+            <button className={`px-5 py-2 rounded-lg text-body-md font-body-md transition-all cursor-pointer ${pricingTier === 'corporate' ? 'font-semibold bg-primary-container text-on-primary shadow-xs' : 'text-text-muted hover:text-text-primary'}`} id="pricing-btn-corp" onClick={() => setPricingTier('corporate')} type="button">
               იურიდიული პირი (კომპანია)
             </button>
           </div>
@@ -376,7 +376,7 @@ export default function LandingPage() {
               <h3 className="text-headline-md font-headline-md text-text-primary mb-2">პროფესიონალი / ბიზნეს სტანდარტი</h3>
               <p className="text-body-sm font-body-sm text-text-muted mb-6">მცირე ბიზნესისა და აქტიური მეწარმეებისთვის.</p>
               <div className="flex items-baseline gap-1 mb-6 pb-6 border-b border-border-subtle">
-                <span className="text-headline-xl font-data-mono-lg text-text-primary" id="price-card-2">49 ₾</span>
+                <span className="text-headline-xl font-data-mono-lg text-text-primary" id="price-card-2">{pricingTier === 'individual' ? '49 ₾' : '89 ₾'}</span>
                 <span className="text-body-sm font-body-sm text-text-muted">/ თვე</span>
               </div>
               {/* Features */}
@@ -403,7 +403,7 @@ export default function LandingPage() {
                 </li>
               </ul>
             </div>
-            <button className="w-full py-3 px-4 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-md text-body-md font-semibold transition-colors shadow-sm" type="button">
+            <button className="w-full py-3 px-4 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-md text-body-md font-semibold transition-colors shadow-sm cursor-pointer" type="button">
               პაკეტის არჩევა
             </button>
           </div>
@@ -419,7 +419,7 @@ export default function LandingPage() {
               <h3 className="text-headline-md font-headline-md text-text-primary mb-2">კორპორაციული / ენტერპრაიზი</h3>
               <p className="text-body-sm font-body-sm text-text-muted mb-6">მსხვილი სადისტრიბუციო და ფინანსური ინსტიტუტებისთვის.</p>
               <div className="flex items-baseline gap-1 mb-6 pb-6 border-b border-border-subtle">
-                <span className="text-headline-xl font-data-mono-lg text-text-primary" id="price-card-3">199 ₾</span>
+                <span className="text-headline-xl font-data-mono-lg text-text-primary" id="price-card-3">{pricingTier === 'individual' ? '199 ₾' : '349 ₾'}</span>
                 <span className="text-body-sm font-body-sm text-text-muted">/ თვე</span>
               </div>
               {/* Features */}

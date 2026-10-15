@@ -15,7 +15,7 @@ export default function FieldOfficerPage() {
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand & Module Badge */}
       <div className="flex items-center gap-3">
-        <a className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight flex items-center gap-2" href="#">
+        <a className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight flex items-center gap-2" href="/">
           <span className="w-8 h-8 rounded-lg bg-primary-container text-white flex items-center justify-center font-bold text-sm shadow-sm">DI</span>
           <span>Debitinfo.GE</span>
         </a>

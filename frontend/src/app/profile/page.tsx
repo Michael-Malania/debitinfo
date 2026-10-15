@@ -6,6 +6,7 @@ import Link from 'next/link';
 export default function ProfilePage() {
 
   const [downloading, setDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   return (
     <div className="bg-surface-bg text-text-primary antialiased min-h-screen flex flex-col font-body-md text-body-md selection:bg-primary selection:text-white">
@@ -15,7 +16,7 @@ export default function ProfilePage() {
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo */}
       <div className="flex items-center gap-3">
-        <a className="flex items-center gap-2 group" href="#">
+        <a className="flex items-center gap-2 group" href="/">
           <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm shadow-primary/30 transition-transform group-hover:scale-105">
             <span className="material-symbols-outlined text-[20px]" style={{fontVariationSettings: '"FILL" 1'}}>assured_workload</span>
           </div>
@@ -127,8 +128,8 @@ export default function ProfilePage() {
             <span className="font-label-sm text-label-sm text-text-muted uppercase tracking-wider block">პირადი ნომერი (პ/ნ)</span>
             <div className="flex items-center gap-2">
               <span className="font-data-mono-md text-data-mono-md text-text-primary tracking-wide">01024089123</span>
-              <button className="text-text-muted hover:text-primary transition-colors" onClick={() => {}} title="კოპირება" type="button">
-                <span className="material-symbols-outlined text-[15px]">content_copy</span>
+              <button className="text-text-muted hover:text-primary transition-colors cursor-pointer" onClick={() => { navigator.clipboard.writeText('01024089123'); setCopied(true); setTimeout(() => setCopied(false), 2000); }} title="კოპირება" type="button">
+                <span className="material-symbols-outlined text-[15px]">{copied ? 'check' : 'content_copy'}</span>
               </button>
             </div>
           </div>

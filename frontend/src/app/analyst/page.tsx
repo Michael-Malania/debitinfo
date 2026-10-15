@@ -6,6 +6,20 @@ import Link from 'next/link';
 export default function AnalystPage() {
 
   const [filterPeriod, setFilterPeriod] = useState('30d');
+  const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
+  const [registrationTab, setRegistrationTab] = useState<'debtor' | 'creditor'>('debtor');
+  const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsRegistrationOpen(false);
+        setIsFilterDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <div className="bg-surface-bg text-text-primary min-h-screen antialiased flex flex-col font-body-md select-none selection:bg-primary-container selection:text-white">
@@ -17,7 +31,7 @@ export default function AnalystPage() {
     <div className="w-full px-4 lg:px-8 max-w-[1720px] mx-auto flex items-center justify-between h-16">
       {/* Brand & Operations Subtitle */}
       <div className="flex items-center gap-4">
-        <a className="flex items-center gap-2 group" href="#">
+        <a className="flex items-center gap-2 group" href="/">
           <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm shadow-primary/30 transition-transform group-hover:scale-105">
             <span className="material-symbols-outlined text-[20px]" style={{fontVariationSettings: '"FILL" 1'}}>account_balance</span>
           </div>
@@ -131,7 +145,7 @@ export default function AnalystPage() {
             </button>
           </div>
         </div><div className="px-1 pt-2">
-          <button type="button" onClick={() => {}} className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-primary/20 text-primary hover:border-primary hover:shadow-sm transition-all group cursor-pointer" title="გაფართოებული ფილტრაცია">
+          <button type="button" onClick={() => setIsFilterDrawerOpen(true)} className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-primary/20 text-primary hover:border-primary hover:shadow-sm transition-all group cursor-pointer" title="გაფართოებული ფილტრაცია">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center shadow-xs">
                 <span className="material-symbols-outlined text-[17px]">tune</span>
@@ -185,7 +199,7 @@ export default function AnalystPage() {
             საქართველოს იურიდიულ პირთა დავალიანების მონიტორინგი, რისკ-შეფასება და დავალებების დისპეტჩერიზაცია
           </p>
         </div>
-        <div className="flex items-center gap-3"><button type="button" onClick={() => {}} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-card border border-primary/30 text-primary hover:bg-blue-50 transition-colors text-body-md font-body-md font-medium shadow-sm cursor-pointer" title="გაფართოებული ფილტრაცია">
+        <div className="flex items-center gap-3"><button type="button" onClick={() => setIsFilterDrawerOpen(true)} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-card border border-primary/30 text-primary hover:bg-blue-50 transition-colors text-body-md font-body-md font-medium shadow-sm cursor-pointer" title="გაფართოებული ფილტრაცია">
             <span className="material-symbols-outlined text-[18px]">tune</span>
             <span className="">ფილტრები</span>
             <span className="px-1.5 py-0.2 rounded bg-blue-100 text-[10px] font-mono font-bold text-primary">Audit</span>
@@ -194,7 +208,7 @@ export default function AnalystPage() {
             <span className="material-symbols-outlined text-[18px] text-text-muted">download</span>
             <span className="">ექსპორტი (XLSX)</span>
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 active:scale-95 text-body-md font-body-md font-semibold cursor-pointer" onClick={() => {}}>
+          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 active:scale-95 text-body-md font-body-md font-semibold cursor-pointer" onClick={() => setIsRegistrationOpen(true)}>
             <span className="material-symbols-outlined text-[19px]">person_add</span>
             <span className="">+ სუბიექტის რეგისტრაცია</span>
           </button>
@@ -971,12 +985,12 @@ export default function AnalystPage() {
   {/* ========================================================================= */}
   {/* HIGH-FIDELITY SUBJECT REGISTRATION MODAL / POPUP DIALOG */}
   {/* ========================================================================= */}
-  <div aria-labelledby="modal-title" aria-modal="true" className="fixed inset-0 z-50 overflow-y-auto hidden" id="subjectRegistrationModal" role="dialog">
+  <div aria-labelledby="modal-title" aria-modal="true" className={`fixed inset-0 z-50 overflow-y-auto ${isRegistrationOpen ? '' : 'hidden'}`} id="subjectRegistrationModal" role="dialog">
     {/* Backdrop */}
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => {}} />
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setIsRegistrationOpen(false)} />
     {/* Modal Center Container */}
     <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-6">
-      <div className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all w-full max-w-3xl border border-border-subtle" onClick={() => {}}>
+      <div className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all w-full max-w-3xl border border-border-subtle" onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <div className="bg-surface-card px-6 py-5 border-b border-border-subtle flex items-start justify-between">
           <div className="flex items-center gap-3.5">
@@ -998,19 +1012,19 @@ export default function AnalystPage() {
               </p>
             </div>
           </div>
-          <button className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-slate-100 transition-colors" onClick={() => {}} title="დახურვა">
+          <button className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => setIsRegistrationOpen(false)} title="დახურვა">
             <span className="material-symbols-outlined text-[22px]">close</span>
           </button>
         </div>
         {/* Segmented Mode Tabs (Debtor vs Creditor) */}
         <div className="px-6 pt-5 pb-1 bg-surface-bg/50 border-b border-border-subtle">
           <div className="grid grid-cols-2 p-1 bg-slate-200/70 rounded-xl gap-1">
-            <button className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-body-md font-semibold text-primary bg-white shadow-sm transition-all text-sm" id="tabBtnDebtor" onClick={() => {}}>
+            <button className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-body-md transition-all text-sm cursor-pointer ${registrationTab === 'debtor' ? 'font-semibold text-primary bg-white shadow-sm' : 'font-medium text-text-muted hover:text-text-primary'}`} id="tabBtnDebtor" onClick={() => setRegistrationTab('debtor')}>
               <span className="material-symbols-outlined text-[19px] text-sky-600">person_add</span>
               <span className="">დებიტორის რეგისტრაცია (Debtor)</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-100/70 text-sky-800 font-normal hidden sm:inline">მოვალე</span>
             </button>
-            <button className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-body-md font-medium text-text-muted hover:text-text-primary transition-all text-sm" id="tabBtnCreditor" onClick={() => {}}>
+            <button className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-body-md transition-all text-sm cursor-pointer ${registrationTab === 'creditor' ? 'font-semibold text-primary bg-white shadow-sm' : 'font-medium text-text-muted hover:text-text-primary'}`} id="tabBtnCreditor" onClick={() => setRegistrationTab('creditor')}>
               <span className="material-symbols-outlined text-[19px]">domain_add</span>
               <span className="">კრედიტორის რეგისტრაცია (Creditor)</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-normal hidden sm:inline">მოთხოვნის მფლობელი</span>
@@ -1020,7 +1034,7 @@ export default function AnalystPage() {
         {/* Modal Body Form Area */}
         <div className="p-6 max-h-[calc(85vh-200px)] overflow-y-auto">
           {/* FORM 1: DEBTOR FORM */}
-          <div className="space-y-4" id="formDebtorSection">
+          <div className={`space-y-4 ${registrationTab === 'debtor' ? '' : 'hidden'}`} id="formDebtorSection">
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
               <div className="flex items-center gap-4 text-body-sm">
                 <span className="font-semibold text-text-primary text-xs uppercase tracking-wider text-slate-500">სუბიექტის ტიპი:</span>
@@ -1102,7 +1116,7 @@ export default function AnalystPage() {
             </div>
           </div>
           {/* FORM 2: CREDITOR FORM */}
-          <div className="space-y-4 hidden" id="formCreditorSection">
+          <div className={`space-y-4 ${registrationTab === 'creditor' ? '' : 'hidden'}`} id="formCreditorSection">
             <div className="flex items-center justify-between pb-2 border-b border-border-subtle">
               <div className="flex items-center gap-3 text-body-sm">
                 <span className="font-semibold text-text-primary text-xs uppercase tracking-wider text-slate-500">კრედიტორის კატეგორია:</span>
@@ -1194,14 +1208,14 @@ export default function AnalystPage() {
             <span className="">Excel რეესტრიდან მასიური იმპორტი</span>
           </button>
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            <button className="px-4 py-2 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors" onClick={() => {}} type="button">
+            <button className="px-4 py-2 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors cursor-pointer" onClick={() => setIsRegistrationOpen(false)} type="button">
               გაუქმება
             </button>
-            <button className="px-5 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md shadow-sm shadow-primary/20 flex items-center gap-2 transition-all active:scale-95" id="modalSubmitBtnDebtor" onClick={() => {}} type="button">
+            <button className={`${registrationTab === 'debtor' ? '' : 'hidden'} px-5 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md shadow-sm shadow-primary/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer`} id="modalSubmitBtnDebtor" onClick={() => setIsRegistrationOpen(false)} type="button">
               <span className="material-symbols-outlined text-[18px]">check</span>
               <span className="">დებიტორის ბაზაში დამატება &amp; ვერიფიკაცია</span>
             </button>
-            <button className="hidden px-5 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md shadow-sm shadow-primary/20 flex items-center gap-2 transition-all active:scale-95" id="modalSubmitBtnCreditor" onClick={() => {}} type="button">
+            <button className={`${registrationTab === 'creditor' ? '' : 'hidden'} px-5 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md shadow-sm shadow-primary/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer`} id="modalSubmitBtnCreditor" onClick={() => setIsRegistrationOpen(false)} type="button">
               <span className="material-symbols-outlined text-[18px]">how_to_reg</span>
               <span className="">კრედიტორის რეგისტრაცია &amp; აქტივაცია</span>
             </button>
@@ -1240,11 +1254,11 @@ export default function AnalystPage() {
   {/* ========================================================================= */}
   {/* ADVANCED AUDIT & MULTI-PARAMETER FILTER DRAWER */}
   {/* ========================================================================= */}
-  <div id="advancedFilterDrawer" className="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-headline">
+  <div id="advancedFilterDrawer" className={`fixed inset-0 z-50 overflow-hidden ${isFilterDrawerOpen ? '' : 'hidden'}`} role="dialog" aria-modal="true" aria-labelledby="drawer-headline">
     {/* Backdrop */}
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => {}} />
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setIsFilterDrawerOpen(false)} />
     <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-      <div className="w-screen max-w-2xl bg-surface-card shadow-2xl border-l border-border-subtle flex flex-col justify-between overflow-hidden" onClick={() => {}}>
+      <div className="w-screen max-w-2xl bg-surface-card shadow-2xl border-l border-border-subtle flex flex-col justify-between overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Drawer Header */}
         <div className="p-5 bg-surface-bg border-b border-border-subtle flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1259,7 +1273,7 @@ export default function AnalystPage() {
               <p className="text-body-sm font-body-sm text-text-muted mt-0.5">საქმეების, სუბიექტების, ზარებისა და საველე ვიზიტების კომპლექსური ანალიზი</p>
             </div>
           </div>
-          <button type="button" onClick={() => {}} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-200/60 transition-colors" title="დახურვა">
+          <button type="button" onClick={() => setIsFilterDrawerOpen(false)} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-200/60 transition-colors cursor-pointer" title="დახურვა">
             <span className="material-symbols-outlined text-[22px]">close</span>
           </button>
         </div>
@@ -1499,14 +1513,14 @@ export default function AnalystPage() {
         </div>
         {/* Drawer Footer Action Bar */}
         <div className="p-5 bg-surface-bg border-t border-border-subtle flex items-center justify-between gap-3">
-          <button type="button" onClick={() => {}} className="px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors">
+          <button type="button" onClick={() => { const form = document.querySelector('#advancedFilterDrawer form') as HTMLFormElement; form?.reset(); }} className="px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors cursor-pointer">
             გასუფთავება
           </button>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => {}} className="px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors">
+            <button type="button" onClick={() => setIsFilterDrawerOpen(false)} className="px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors cursor-pointer">
               დახურვა
             </button>
-            <button type="button" onClick={() => {}} className="px-6 py-2.5 rounded-lg bg-primary hover:bg-[#0A37CA] text-white text-body-md font-semibold shadow-md shadow-primary/20 flex items-center gap-2 transition-all active:scale-95">
+            <button type="button" onClick={() => setIsFilterDrawerOpen(false)} className="px-6 py-2.5 rounded-lg bg-primary hover:bg-[#0A37CA] text-white text-body-md font-semibold shadow-md shadow-primary/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
               <span className="material-symbols-outlined text-[18px]">filter_alt</span>
               <span className="">ფილტრის გამოყენება</span>
             </button>

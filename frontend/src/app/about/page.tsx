@@ -12,7 +12,7 @@ export default function AboutPage() {
   <header className="bg-surface-card dark:bg-inverse-surface docked full-width top-0 sticky z-50 shadow-sm border-b border-border-subtle dark:border-outline">
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo */}
-      <a className="flex items-center gap-2 group" href="#">
+      <a className="flex items-center gap-2 group" href="/">
         <span className="w-8 h-8 rounded-lg bg-primary-container text-white flex items-center justify-center font-bold text-headline-sm shadow-sm transition-transform group-hover:scale-105">
           D
         </span>

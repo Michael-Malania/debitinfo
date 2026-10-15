@@ -5,18 +5,38 @@ import Link from 'next/link';
 
 export default function HrPage() {
 
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [isWarningModalOpen, setIsWarningModalOpen] = useState(false);
+  const [activeDossierTab, setActiveDossierTab] = useState<'tab-docs' | 'tab-bank' | 'tab-discipline' | 'tab-access'>('tab-docs');
+
+  const saveEmployee = () => {
+    alert("თანამშრომელი წარმატებით დარეგისტრირდა RS.GE და Debitinfo.GE ბაზაში!");
+    setIsRegisterModalOpen(false);
+  };
+
+  const issueWarning = () => {
+    alert("დისციპლინური გაფრთხილება გაიცა და დაფიქსირდა პერსონალის დოსიეში.");
+    setIsWarningModalOpen(false);
+  };
+
+  const confirmTermination = () => {
+    if (confirm("ნამდვილად გსურთ თეონა პეტრიაშვილის შრომითი ურთიერთობის შეწყვეტა (ოფბორდინგი)?")) {
+      alert("ოფბორდინგის აქტი გენერირებულია და გადაცემულია იურიდიულ დეპარტამენტს.");
+    }
+  };
+
   return (
     <div className="h-full text-text-primary bg-surface-bg flex flex-col font-body-md text-body-md antialiased overflow-hidden">
 <div>
   {/* TOP APP BAR (from Shared Components JSON: TopNavBar) */}
   <header className="docked full-width top-0 sticky z-40 border-b border-border-subtle shadow-sm flex justify-between items-center w-full px-space-lg h-16 bg-surface-container-lowest">
     <div className="flex items-center gap-space-lg">
-      <div className="flex items-center gap-space-xs">
-        <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight">Debitinfo.GE</span>
+      <Link href="/" className="flex items-center gap-space-xs group cursor-pointer">
+        <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight group-hover:underline">Debitinfo.GE</span>
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-accent-mint/20 text-[#047857] border border-accent-mint/30 ml-2 font-semibold">
           HR &amp; ადმინისტრატორი v2.4 Live
         </span>
-      </div>
+      </Link>
       {/* Search Bar on Left */}
       <div className="relative w-80 md:w-96">
         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[18px]">search</span>
@@ -62,7 +82,7 @@ export default function HrPage() {
     <aside className="flex flex-col justify-between h-full p-space-md w-64 bg-surface-container-lowest border-r border-border-subtle shrink-0">
       <div className="flex flex-col gap-space-md">
         {/* Quick CTA inside SideBar */}
-        <button className="w-full flex items-center justify-center gap-2 bg-primary-container text-on-primary py-2.5 px-4 rounded-lg font-label-md text-label-md hover:bg-[#0A37CA] active:scale-[0.99] transition-all shadow-sm" onClick={() => {}}>
+        <button className="w-full flex items-center justify-center gap-2 bg-primary-container text-on-primary py-2.5 px-4 rounded-lg font-label-md text-label-md hover:bg-[#0A37CA] active:scale-[0.99] transition-all shadow-sm cursor-pointer" onClick={() => setIsRegisterModalOpen(true)}>
           <span className="material-symbols-outlined text-[18px]">person_add</span>
           <span>+ ახალი თანამშრომელი</span>
         </button>
@@ -140,12 +160,12 @@ export default function HrPage() {
             <span>ექსპორტი (Excel/PDF)</span>
           </button>
           {/* Warning Action */}
-          <button className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FFFBEB] border border-[#FDE68A] text-[#B45309] rounded-lg text-body-md font-body-md hover:bg-[#FEF3C7] transition-colors shadow-sm" onClick={() => {}}>
+          <button className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#FFFBEB] border border-[#FDE68A] text-[#B45309] rounded-lg text-body-md font-body-md hover:bg-[#FEF3C7] transition-colors shadow-sm cursor-pointer" onClick={() => setIsWarningModalOpen(true)}>
             <span className="material-symbols-outlined text-[18px]">warning</span>
             <span>+ გაფრთხილების გაცემა</span>
           </button>
           {/* Register Primary Action */}
-          <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-container text-on-primary rounded-lg text-body-md font-body-md hover:bg-[#0A37CA] transition-colors shadow-sm" onClick={() => {}}>
+          <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary-container text-on-primary rounded-lg text-body-md font-body-md hover:bg-[#0A37CA] transition-colors shadow-sm cursor-pointer" onClick={() => setIsRegisterModalOpen(true)}>
             <span className="material-symbols-outlined text-[18px]">add_circle</span>
             <span>+ ახალი თანამშრომლის რეგისტრაცია</span>
           </button>
@@ -324,10 +344,10 @@ export default function HrPage() {
                         <button className="p-1 rounded text-primary hover:bg-white shadow-xs" title="დოსიეს ნახვა">
                           <span className="material-symbols-outlined text-[18px]">visibility</span>
                         </button>
-                        <button className="p-1 rounded text-[#D97706] hover:bg-white" onClick={() => {}} title="გაფრთხილება">
+                        <button className="p-1 rounded text-[#D97706] hover:bg-white cursor-pointer" onClick={() => setIsWarningModalOpen(true)} title="გაფრთხილება">
                           <span className="material-symbols-outlined text-[18px]">warning</span>
                         </button>
-                        <button className="p-1 rounded text-error hover:bg-white" title="გათავისუფლება (ოფბორდინგი)">
+                        <button className="p-1 rounded text-error hover:bg-white cursor-pointer" onClick={confirmTermination} title="გათავისუფლება (ოფბორდინგი)">
                           <span className="material-symbols-outlined text-[18px]">person_remove</span>
                         </button>
                       </div>
@@ -566,19 +586,19 @@ export default function HrPage() {
             </div>
             {/* Dossier Navigation Tabs */}
             <div className="flex items-center border-b border-border-subtle px-4 bg-surface-card overflow-x-auto custom-scrollbar">
-              <button className="py-3 px-3 text-body-sm font-body-sm font-semibold text-primary border-b-2 border-primary shrink-0 flex items-center gap-1.5" id="btn-tab-docs" onClick={() => {}}>
+              <button className={`py-3 px-3 text-body-sm font-body-sm shrink-0 flex items-center gap-1.5 cursor-pointer border-b-2 ${activeDossierTab === 'tab-docs' ? 'font-semibold text-primary border-primary' : 'text-text-muted hover:text-text-primary border-transparent'}`} id="btn-tab-docs" onClick={() => setActiveDossierTab('tab-docs')}>
                 <span className="material-symbols-outlined text-[16px]">folder</span>
                 <span>დოკუმენტები &amp; კანცელარია</span>
               </button>
-              <button className="py-3 px-3 text-body-sm font-body-sm text-text-muted hover:text-text-primary border-b-2 border-transparent shrink-0 flex items-center gap-1.5" id="btn-tab-bank" onClick={() => {}}>
+              <button className={`py-3 px-3 text-body-sm font-body-sm shrink-0 flex items-center gap-1.5 cursor-pointer border-b-2 ${activeDossierTab === 'tab-bank' ? 'font-semibold text-primary border-primary' : 'text-text-muted hover:text-text-primary border-transparent'}`} id="btn-tab-bank" onClick={() => setActiveDossierTab('tab-bank')}>
                 <span className="material-symbols-outlined text-[16px]">account_balance</span>
                 <span>საბანკო &amp; ხელფასი</span>
               </button>
-              <button className="py-3 px-3 text-body-sm font-body-sm text-text-muted hover:text-text-primary border-b-2 border-transparent shrink-0 flex items-center gap-1.5" id="btn-tab-discipline" onClick={() => {}}>
+              <button className={`py-3 px-3 text-body-sm font-body-sm shrink-0 flex items-center gap-1.5 cursor-pointer border-b-2 ${activeDossierTab === 'tab-discipline' ? 'font-semibold text-primary border-primary' : 'text-text-muted hover:text-text-primary border-transparent'}`} id="btn-tab-discipline" onClick={() => setActiveDossierTab('tab-discipline')}>
                 <span className="material-symbols-outlined text-[16px]">gavel</span>
                 <span>დისციპლინა (1)</span>
               </button>
-              <button className="py-3 px-3 text-body-sm font-body-sm text-text-muted hover:text-text-primary border-b-2 border-transparent shrink-0 flex items-center gap-1.5" id="btn-tab-access" onClick={() => {}}>
+              <button className={`py-3 px-3 text-body-sm font-body-sm shrink-0 flex items-center gap-1.5 cursor-pointer border-b-2 ${activeDossierTab === 'tab-access' ? 'font-semibold text-primary border-primary' : 'text-text-muted hover:text-text-primary border-transparent'}`} id="btn-tab-access" onClick={() => setActiveDossierTab('tab-access')}>
                 <span className="material-symbols-outlined text-[16px]">devices</span>
                 <span>როლები &amp; აპარატურა</span>
               </button>
@@ -586,7 +606,7 @@ export default function HrPage() {
             {/* Dossier Tab Content Area */}
             <div className="p-4 flex flex-col gap-4 min-h-[360px]">
               {/* TAB 1: Documents & Chancery (Active) */}
-              <div className="flex flex-col gap-3" id="tab-docs">
+              <div className={`flex flex-col gap-3 ${activeDossierTab === 'tab-docs' ? '' : 'hidden'}`} id="tab-docs">
                 <div className="flex items-center justify-between">
                   <span className="text-body-sm font-body-sm font-semibold text-text-primary">თანამშრომლის ციფრული არქივი</span>
                   <button className="text-primary hover:text-primary-container text-body-sm font-body-sm font-medium flex items-center gap-1">
@@ -665,7 +685,7 @@ export default function HrPage() {
                 </div>
               </div>
               {/* TAB 2: Banking & Payroll (Hidden by default, toggled via JS) */}
-              <div className="hidden flex-col gap-3" id="tab-bank">
+              <div className={`flex flex-col gap-3 ${activeDossierTab === 'tab-bank' ? '' : 'hidden'}`} id="tab-bank">
                 <div className="bg-surface-bg border border-border-subtle rounded-lg p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-label-sm font-label-sm text-text-muted uppercase">საბანკო ანგარიში (IBAN)</span>
@@ -699,10 +719,10 @@ export default function HrPage() {
                 </div>
               </div>
               {/* TAB 3: Discipline & Warnings (Hidden by default) */}
-              <div className="hidden flex-col gap-3" id="tab-discipline">
+              <div className={`flex flex-col gap-3 ${activeDossierTab === 'tab-discipline' ? '' : 'hidden'}`} id="tab-discipline">
                 <div className="flex items-center justify-between">
                   <span className="text-body-sm font-body-sm font-semibold text-text-primary">დისციპლინური ისტორია</span>
-                  <button className="text-rating-b hover:text-[#B45309] text-body-sm font-body-sm font-medium flex items-center gap-1" onClick={() => {}}>
+                  <button className="text-rating-b hover:text-[#B45309] text-body-sm font-body-sm font-medium flex items-center gap-1 cursor-pointer" onClick={() => setIsWarningModalOpen(true)}>
                     <span className="material-symbols-outlined text-[16px]">add_alert</span>
                     <span>გაფრთხილების დამატება</span>
                   </button>
@@ -725,7 +745,7 @@ export default function HrPage() {
                 </div>
               </div>
               {/* TAB 4: Roles & Hardware (Hidden by default) */}
-              <div className="hidden flex-col gap-3" id="tab-access">
+              <div className={`flex flex-col gap-3 ${activeDossierTab === 'tab-access' ? '' : 'hidden'}`} id="tab-access">
                 <div className="p-3 border border-border-subtle rounded-lg bg-surface-bg flex flex-col gap-2">
                   <span className="text-body-sm font-body-sm font-semibold text-text-primary">მინიჭებული ტექნიკა &amp; ინვენტარი</span>
                   <ul className="text-body-sm font-body-sm text-text-muted space-y-1.5">
@@ -751,11 +771,11 @@ export default function HrPage() {
             </div>
             {/* Dossier Footer Action Buttons */}
             <div className="p-4 bg-slate-50 border-t border-border-subtle flex items-center justify-between flex-wrap gap-2">
-              <button className="inline-flex items-center gap-1 px-3 py-2 bg-white border border-[#FDE68A] text-[#B45309] rounded-lg text-body-sm font-body-sm hover:bg-[#FEF3C7] transition-colors shadow-xs" onClick={() => {}}>
+              <button className="inline-flex items-center gap-1 px-3 py-2 bg-white border border-[#FDE68A] text-[#B45309] rounded-lg text-body-sm font-body-sm hover:bg-[#FEF3C7] transition-colors shadow-xs cursor-pointer" onClick={() => setIsWarningModalOpen(true)}>
                 <span className="material-symbols-outlined text-[16px]">warning</span>
                 <span>გაფრთხილების შედგენა</span>
               </button>
-              <button className="inline-flex items-center gap-1 px-3 py-2 bg-white border border-error text-error rounded-lg text-body-sm font-body-sm hover:bg-error-container/40 transition-colors shadow-xs" onClick={() => {}}>
+              <button className="inline-flex items-center gap-1 px-3 py-2 bg-white border border-error text-error rounded-lg text-body-sm font-body-sm hover:bg-error-container/40 transition-colors shadow-xs cursor-pointer" onClick={confirmTermination}>
                 <span className="material-symbols-outlined text-[16px]">person_remove</span>
                 <span>შრომითი ურთიერთობის შეწყვეტა</span>
               </button>
@@ -781,8 +801,8 @@ export default function HrPage() {
     </div>
   </footer>
   {/* MODAL 1: REGISTRATION MODAL (+ ახალი თანამშრომლის რეგისტრაცია) */}
-  <div className="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4" id="registerModal">
-    <div className="bg-surface-card border border-border-subtle rounded-xl shadow-2xl max-w-2xl w-full max-h-[921px] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+  <div className={`fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 ${isRegisterModalOpen ? '' : 'hidden'}`} id="registerModal" onClick={() => setIsRegisterModalOpen(false)}>
+    <div className="bg-surface-card border border-border-subtle rounded-xl shadow-2xl max-w-2xl w-full max-h-[921px] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
       {/* Modal Header */}
       <div className="p-4 border-b border-border-subtle flex items-center justify-between bg-surface-bg">
         <div className="flex items-center gap-2">
@@ -794,7 +814,7 @@ export default function HrPage() {
             <p className="text-body-sm font-body-sm text-text-muted">RS.GE ბაზაში გადამოწმება &amp; პერსონალის დოსიეს შექმნა</p>
           </div>
         </div>
-        <button className="text-text-muted hover:text-text-primary p-1 rounded-lg" onClick={() => {}}>
+        <button className="text-text-muted hover:text-text-primary p-1 rounded-lg cursor-pointer" onClick={() => setIsRegisterModalOpen(false)}>
           <span className="material-symbols-outlined text-[20px]">close</span>
         </button>
       </div>
@@ -884,18 +904,18 @@ export default function HrPage() {
       </div>
       {/* Modal Footer */}
       <div className="p-4 border-t border-border-subtle bg-slate-50 flex items-center justify-end gap-2">
-        <button className="px-4 py-2 border border-border-subtle rounded-lg text-body-md font-body-md text-text-muted hover:bg-white transition-colors" onClick={() => {}}>
+        <button className="px-4 py-2 border border-border-subtle rounded-lg text-body-md font-body-md text-text-muted hover:bg-white transition-colors cursor-pointer" onClick={() => setIsRegisterModalOpen(false)}>
           გაუქმება
         </button>
-        <button className="px-4 py-2 bg-primary-container text-white rounded-lg text-body-md font-body-md hover:bg-[#0A37CA] transition-colors shadow-sm font-medium" onClick={() => {}}>
+        <button className="px-4 py-2 bg-primary-container text-white rounded-lg text-body-md font-body-md hover:bg-[#0A37CA] transition-colors shadow-sm font-medium cursor-pointer" onClick={saveEmployee}>
           თანამშრომლის რეგისტრაცია &amp; შენახვა
         </button>
       </div>
     </div>
   </div>
   {/* MODAL 2: DISCIPLINARY WARNING MODAL (+ გაფრთხილების გაცემა) */}
-  <div className="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4" id="warningModal">
-    <div className="bg-surface-card border border-border-subtle rounded-xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+  <div className={`fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 ${isWarningModalOpen ? '' : 'hidden'}`} id="warningModal" onClick={() => setIsWarningModalOpen(false)}>
+    <div className="bg-surface-card border border-border-subtle rounded-xl shadow-2xl max-w-lg w-full flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
       {/* Warning Header */}
       <div className="p-4 border-b border-[#FDE68A] bg-[#FFFBEB] flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -907,7 +927,7 @@ export default function HrPage() {
             <p className="text-body-sm font-body-sm text-[#B45309]">ოფიციალური ჩანაწერი პერსონალის დოსიეში</p>
           </div>
         </div>
-        <button className="text-text-muted hover:text-text-primary p-1 rounded-lg" onClick={() => {}}>
+        <button className="text-text-muted hover:text-text-primary p-1 rounded-lg cursor-pointer" onClick={() => setIsWarningModalOpen(false)}>
           <span className="material-symbols-outlined text-[20px]">close</span>
         </button>
       </div>
@@ -935,10 +955,10 @@ export default function HrPage() {
       </div>
       {/* Warning Footer */}
       <div className="p-4 border-t border-border-subtle bg-slate-50 flex items-center justify-end gap-2">
-        <button className="px-4 py-2 border border-border-subtle rounded-lg text-body-md font-body-md text-text-muted hover:bg-white" onClick={() => {}}>
+        <button className="px-4 py-2 border border-border-subtle rounded-lg text-body-md font-body-md text-text-muted hover:bg-white cursor-pointer" onClick={() => setIsWarningModalOpen(false)}>
           გაუქმება
         </button>
-        <button className="px-4 py-2 bg-[#B45309] text-white rounded-lg text-body-md font-body-md hover:bg-[#92400E] shadow-sm font-medium" onClick={() => {}}>
+        <button className="px-4 py-2 bg-[#B45309] text-white rounded-lg text-body-md font-body-md hover:bg-[#92400E] shadow-sm font-medium cursor-pointer" onClick={issueWarning}>
           გაფრთხილების გაცემა &amp; გაგზავნა
         </button>
       </div>

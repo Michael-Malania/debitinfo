@@ -6,6 +6,7 @@ import Link from 'next/link';
 export default function RegisterPage() {
 
   const [step, setStep] = useState(1);
+  const [entityType, setEntityType] = useState<'legal' | 'physical'>('legal');
 
   return (
     <div className="min-h-screen flex flex-col font-body-md text-text-primary bg-surface-bg antialiased selection:bg-primary selection:text-white">
@@ -14,7 +15,7 @@ export default function RegisterPage() {
   <header className="bg-surface-card dark:bg-inverse-surface docked full-width top-0 sticky z-50 border-b border-border-subtle dark:border-outline shadow-sm">
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo */}
-      <a className="flex items-center gap-2 group" href="#">
+      <a className="flex items-center gap-2 group" href="/">
         <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm ring-2 ring-primary/20">
           <span className="material-symbols-outlined text-accent-mint" data-icon="account_balance">account_balance</span>
         </div>
@@ -65,18 +66,18 @@ export default function RegisterPage() {
         {/* SUB-TOGGLE: Legal Entity vs Physical Person */}
         <div className="p-4 bg-slate-50 border border-border-subtle rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4" id="entityTypeToggleSection">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-xl" data-icon="domain" id="entityToggleIcon">domain</span>
+            <span className="material-symbols-outlined text-primary text-xl" data-icon="domain" id="entityToggleIcon">{entityType === 'legal' ? 'domain' : 'person'}</span>
             <span className="font-headline-sm text-sm text-text-primary font-semibold">სუბიექტის ტიპი</span>
           </div>
           <div className="inline-flex p-1 bg-white border border-border-subtle rounded-lg shadow-2xs self-start sm:self-auto" role="tablist">
-            <button aria-selected="true" className="px-4 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 bg-primary-container text-white shadow-xs" id="btnLegalEntity" role="tab" type="button">იურიდიული პირი</button>
-            <button aria-selected="false" className="px-4 py-1.5 text-xs font-medium text-text-muted hover:text-text-primary rounded-md transition-all duration-150" id="btnPhysicalEntity" role="tab" type="button">ფიზიკური პირი</button>
+            <button aria-selected={entityType === 'legal'} className={`px-4 py-1.5 text-xs rounded-md transition-all duration-150 cursor-pointer ${entityType === 'legal' ? 'font-semibold bg-primary-container text-white shadow-xs' : 'font-medium text-text-muted hover:text-text-primary'}`} id="btnLegalEntity" onClick={() => setEntityType('legal')} role="tab" type="button">იურიდიული პირი</button>
+            <button aria-selected={entityType === 'physical'} className={`px-4 py-1.5 text-xs rounded-md transition-all duration-150 cursor-pointer ${entityType === 'physical' ? 'font-semibold bg-primary-container text-white shadow-xs' : 'font-medium text-text-muted hover:text-text-primary'}`} id="btnPhysicalEntity" onClick={() => setEntityType('physical')} role="tab" type="button">ფიზიკური პირი</button>
           </div>
         </div>
         {/* ======================================================== */}
         {/* SECTION GROUP 1: LEGAL ENTITY                            */}
         {/* ======================================================== */}
-        <div className="space-y-8" id="legal-entity-fields">
+        <div className={`space-y-8 ${entityType === 'legal' ? '' : 'hidden'}`} id="legal-entity-fields">
           {/* Block 1: ორგანიზაციის მონაცემები */}
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-border-subtle pb-2">
@@ -202,7 +203,7 @@ export default function RegisterPage() {
         {/* ======================================================== */}
         {/* SECTION GROUP 2: INDIVIDUAL / PHYSICAL PERSON             */}
         {/* ======================================================== */}
-        <div className="space-y-8 hidden" id="individual-fields">
+        <div className={`space-y-8 ${entityType === 'physical' ? '' : 'hidden'}`} id="individual-fields">
           {/* Block 1: ფიზიკური პირის პერსონალური მონაცემები */}
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-border-subtle pb-2">

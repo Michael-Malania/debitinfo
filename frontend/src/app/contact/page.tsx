@@ -5,6 +5,8 @@ import Link from 'next/link';
 
 export default function ContactPage() {
 
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+
   return (
     <div className="bg-surface-bg text-text-primary min-h-screen flex flex-col antialiased selection:bg-secondary-container selection:text-text-primary">
 <div>
@@ -13,7 +15,7 @@ export default function ContactPage() {
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo */}
       <div className="flex items-center gap-3">
-        <a className="flex items-center gap-2 group" href="#">
+        <a className="flex items-center gap-2 group" href="/">
           <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-sm group-hover:scale-105 transition-transform">
             <span className="material-symbols-outlined text-xl" data-icon="account_balance">account_balance</span>
           </div>
@@ -266,7 +268,7 @@ export default function ContactPage() {
               შეავსეთ მოცემული ფორმა. ჩვენი იურიდიული მრჩეველი ან მედიატორი გიპასუხებთ 1 საათის განმავლობაში.
             </p>
           </div>
-          <form className="space-y-6" id="contactForm" onSubmit={(e) => e.preventDefault()}>
+          <form className="space-y-6" id="contactForm" onSubmit={(e) => { e.preventDefault(); setIsSuccessModalOpen(true); }}>
             {/* Subject Type Radio Buttons */}
             <div>
               <label className="block text-label-md font-label-md text-text-primary mb-2 font-medium">სუბიექტის ტიპი *</label>
@@ -540,8 +542,8 @@ export default function ContactPage() {
     </div>
   </section>
   {/* ================= SUBMISSION SUCCESS MODAL (MICRO-INTERACTION) ================= */}
-  <div className="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" id="formSuccessModal">
-    <div className="bg-surface-card rounded-xl p-6 md:p-8 max-w-md w-full border border-border-subtle shadow-2xl text-center space-y-4 animate-scale-up">
+  <div className={`${isSuccessModalOpen ? 'flex' : 'hidden'} fixed inset-0 z-50 items-center justify-center bg-black/40 backdrop-blur-sm p-4`} id="formSuccessModal" onClick={() => setIsSuccessModalOpen(false)}>
+    <div className="bg-surface-card rounded-xl p-6 md:p-8 max-w-md w-full border border-border-subtle shadow-2xl text-center space-y-4 animate-scale-up" onClick={(e) => e.stopPropagation()}>
       <div className="w-14 h-14 rounded-full bg-accent-mint/20 text-emerald-700 mx-auto flex items-center justify-center">
         <span className="material-symbols-outlined text-3xl" data-icon="check_circle">check_circle</span>
       </div>
@@ -550,7 +552,7 @@ export default function ContactPage() {
         თქვენი შეტყობინება წარმატებით გაეგზავნა Debitinfo.GE-ის შესაბამის დეპარტამენტს. ჩვენი წარმომადგენელი უახლოეს დროში დაგიკავშირდებათ.
       </p>
       <div className="pt-2">
-        <button className="w-full py-2.5 px-4 rounded-lg bg-primary-container text-on-primary font-medium hover:bg-primary transition-colors" onClick={() => {}}>
+        <button className="w-full py-2.5 px-4 rounded-lg bg-primary-container text-on-primary font-medium hover:bg-primary transition-colors" type="button" onClick={() => setIsSuccessModalOpen(false)}>
           დახურვა
         </button>
       </div>

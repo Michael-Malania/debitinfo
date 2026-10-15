@@ -6,6 +6,7 @@ import Link from 'next/link';
 export default function CreditorPage() {
 
   const [activeTab, setActiveTab] = useState('claims');
+  const [paymentAmount, setPaymentAmount] = useState('300');
 
   return (
     <div className="min-h-full flex flex-col font-body-md text-text-primary bg-surface-bg antialiased selection:bg-primary-container selection:text-white">
@@ -15,7 +16,7 @@ export default function CreditorPage() {
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo & Institutional Tag */}
       <div className="flex items-center gap-6">
-        <a className="flex items-center gap-2 group" href="#">
+        <a className="flex items-center gap-2 group" href="/">
           <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm group-hover:bg-primary transition-colors">
             <span className="material-symbols-outlined text-[20px]">account_balance</span>
           </div>
@@ -552,17 +553,17 @@ export default function CreditorPage() {
               გადასახდელი თანხა (GEL)
             </label>
             <div className="relative rounded-lg shadow-sm">
-              <input className="w-full rounded-lg border border-border-subtle bg-white px-3.5 py-2.5 font-data-mono-lg text-headline-sm font-bold text-text-primary placeholder:text-text-muted focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 transition-all text-right pr-12" id="payment-amount" placeholder="0.00" type="number" defaultValue={300} />
+              <input className="w-full rounded-lg border border-border-subtle bg-white px-3.5 py-2.5 font-data-mono-lg text-headline-sm font-bold text-text-primary placeholder:text-text-muted focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 transition-all text-right pr-12" id="payment-amount" placeholder="0.00" type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} />
               <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
                 <span className="font-data-mono-md font-bold text-text-muted">₾</span>
               </div>
             </div>
             {/* Quick Pill Buttons */}
             <div className="grid grid-cols-2 gap-2 pt-1">
-              <button className="px-2.5 py-1.5 rounded-lg border border-primary/30 bg-blue-50 text-primary text-body-sm font-medium hover:bg-blue-100 transition-colors text-center" onClick={() => {}} type="button">
+              <button className="px-2.5 py-1.5 rounded-lg border border-primary/30 bg-blue-50 text-primary text-body-sm font-medium hover:bg-blue-100 transition-colors text-center cursor-pointer" onClick={() => setPaymentAmount('300')} type="button">
                 მომდევნო: 300 ₾
               </button>
-              <button className="px-2.5 py-1.5 rounded-lg border border-border-subtle bg-surface-bg text-text-primary text-body-sm font-medium hover:bg-slate-200 transition-colors text-center" onClick={() => {}} type="button">
+              <button className="px-2.5 py-1.5 rounded-lg border border-border-subtle bg-surface-bg text-text-primary text-body-sm font-medium hover:bg-slate-200 transition-colors text-center cursor-pointer" onClick={() => setPaymentAmount('2900')} type="button">
                 სრული: 2,900 ₾
               </button>
             </div>

@@ -15,7 +15,7 @@ export default function LegalPage() {
     <div className="w-full px-4 lg:px-8 max-w-[1720px] mx-auto flex items-center justify-between h-16">
       {/* Brand & Status */}
       <div className="flex items-center gap-6">
-        <a className="flex items-center gap-2 group" href="#">
+        <a className="flex items-center gap-2 group" href="/">
           <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
             <span className="material-symbols-outlined text-[22px]">balance</span>
           </div>
