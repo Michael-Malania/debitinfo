@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #0032c6;
+  --color-primary-container: #0d45fc;
+  --color-on-primary: #ffffff;
+  --color-primary-fixed: #dee1ff;
+  --color-primary-fixed-dim: #bac3ff;
+  --color-on-primary-fixed: #001159;
+  --color-on-primary-fixed-variant: #0031c5;
+  --color-inverse-primary: #bac3ff;
+
+  --color-secondary: #00668a;
+  --color-secondary-container: #12bdfd;
+  --color-on-secondary: #ffffff;
+  --color-secondary-fixed: #c4e7ff;
+  --color-secondary-fixed-dim: #7cd0ff;
+  --color-on-secondary-fixed: #001e2c;
+  --color-on-secondary-fixed-variant: #004c69;
+
+  --color-tertiary: #8b1c00;
+  --color-tertiary-container: #b62700;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #ffcec3;
+  --color-tertiary-fixed: #ffdad2;
+  --color-tertiary-fixed-dim: #ffb4a3;
+  --color-on-tertiary-fixed: #3d0700;
+  --color-on-tertiary-fixed-variant: #8a1b00;
+
+  --color-accent-mint: #0dfcc4;
+  --color-rating-a: #0dfcc4;
+  --color-rating-b: #fbbf24;
+  --color-rating-c: #ef4444;
+
+  --color-surface-bg: #f8fafc;
+  --color-surface-card: #ffffff;
+  --color-border-subtle: #e2e8f0;
+  --color-text-primary: #0f172a;
+  --color-text-muted: #64748b;
+
+  --color-surface: #fbf8ff;
+  --color-surface-dim: #d9d9e7;
+  --color-surface-bright: #fbf8ff;
+  --color-surface-variant: #e2e1ef;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f2ff;
+  --color-surface-container: #edecfb;
+  --color-surface-container-high: #e8e7f5;
+  --color-surface-container-highest: #e2e1ef;
+
+  --color-outline: #747688;
+  --color-outline-variant: #c4c5da;
+  --color-inverse-surface: #2e303a;
+  --color-inverse-on-surface: #f0effe;
+
+  --color-error: #ba1a1a;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+}
+
+:root {
+  --font-georgian: 'Noto Sans Georgian', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  font-family: var(--font-georgian);
+  background-color: #f8fafc;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Material Symbols configuration */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'liga';
+  vertical-align: middle;
+}
+
+.brand-glow {
+  box-shadow: 0 0 24px -4px rgba(13, 69, 252, 0.15);
+}
+
+.card-hover-effect {
+  transition: all 0.2s ease-in-out;
+}
+.card-hover-effect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+}
