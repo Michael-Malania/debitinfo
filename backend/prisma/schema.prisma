@@ -1,0 +1,553 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// ENUMS
+// ----------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  CREDITOR
+  DEBTOR
+  ANALYST
+  LEGAL
+  OPERATOR
+  FIELD_OFFICER
+  REGULAR
+}
+
+enum EntityType {
+  PHYSICAL
+  LEGAL
+}
+
+enum RiskRating {
+  A
+  B
+  C
+}
+
+enum ClaimStatus {
+  ACTIVE
+  OVERDUE
+  IN_LITIGATION
+  SETTLED
+  CLEAN
+  DISPUTED
+  RESTRUCTURED
+}
+
+enum ScheduleType {
+  STANDARD     // <= 12 months
+  NON_STANDARD // > 12 months
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_ACCEPTED
+  RESOLVED_REJECTED
+}
+
+enum LegalCaseStatus {
+  PRE_TRIAL
+  IN_COURT
+  DECISION_ENFORCED
+  APPEALED
+  CLOSED
+}
+
+enum CallDisposition {
+  PROMISE_TO_PAY
+  REFUSED
+  WRONG_NUMBER
+  CALLBACK
+  VOICEMAIL
+  DISPUTE_RAISED
+}
+
+enum VisitStatus {
+  PENDING
+  COMPLETED
+  RESCHEDULED
+  UNREACHABLE
+}
+
+// ----------------------------------------------------
+// USERS & IDENTITY
+// ----------------------------------------------------
+
+model User {
+  id               String      @id @default(uuid())
+  email            String      @unique
+  passwordHash     String?     // Optional for RS.GE OAuth pure users
+  personalId       String      @unique // 11-digit PIN or 9-digit Company Tax ID
+  entityType       EntityType  @default(PHYSICAL)
+  role             UserRole    @default(REGULAR)
+  phone            String?
+  isRsVerified     Boolean     @default(false)
+  rsAuthKey        String?
+  status           String      @default("ACTIVE") // ACTIVE, SUSPENDED, PENDING_VERIFICATION
+  refreshTokenHash String?
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  // Profiles
+  individualProfile IndividualProfile?
+  companyProfile    CompanyProfile?
+  staffProfile      StaffProfile?
+
+  // Claims & Relationships
+  ownedClaims       DebtClaim[]      @relation("CreditorClaims")
+  liabilities       DebtClaim[]      @relation("DebtorLiabilities")
+  assignedPortfolios Portfolio[]     @relation("AnalystPortfolios")
+  managedPortfolios  Portfolio[]     @relation("OfficerPortfolios")
+  crmLogs           CrmCallLog[]     @relation("OperatorLogs")
+  fieldTasks        FieldVisitTask[] @relation("OfficerTasks")
+  blogPosts         BlogPost[]       @relation("UserBlogPosts")
+  auditLogs         AuditLog[]
+
+  assignedLegalCases LegalCase[]         @relation("LawyerLegalCases")
+  timelineEvents     CaseTimelineEvent[] @relation("UserTimelineEvents")
+  contactPersons     ContactPerson[]
+
+  @@index([personalId])
+  @@index([email])
+  @@index([role])
+}
+
+model IndividualProfile {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName        String
+  lastName         String
+  birthDate        DateTime?
+  legalAddress     String?
+  actualAddress    String
+  employmentStatus String? // employed, self_employed, individual_entrepreneur, freelancer, other
+  employerName     String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model CompanyProfile {
+  id               String    @id @default(uuid())
+  userId           String    @unique
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName      String
+  legalForm        String    // LTD (შპს), IE (ინდ. მეწარმე), JSC (სს), NNLE (ა(ა)იპ)
+  taxId            String    @unique // 9 digits
+  legalAddress     String
+  actualAddress    String
+  isVatPayer       Boolean   @default(false)
+  hasMortgage      Boolean   @default(false)
+  hasSequestration Boolean   @default(false)
+  rsDataPayload    Json?     // Raw payload from RSPublicInfo
+
+  // Director
+  directorName     String
+  directorLastName String
+  directorPin      String
+  directorPhone    String
+  directorEmail    String
+
+  // Optional Accountant
+  accountantName     String?
+  accountantLastName String?
+  accountantPhone    String?
+  accountantEmail    String?
+  accountantPin      String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model StaffProfile {
+  id             String    @id @default(uuid())
+  userId         String    @unique
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName       String
+  firstName      String?
+  lastName       String?
+  legalAddress   String?
+  actualAddress  String?
+  photoUrl       String?
+  department     String
+  salaryCardNo   String?   // Encrypted
+  idCardCopyUrl  String?   // Secure document path
+  contractUrl    String?   // Secure employment agreement
+  internalExt    String?
+  status         String    @default("ACTIVE") // ACTIVE, ON_LEAVE, TERMINATED
+  joinedDate     DateTime  @default(now())
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  contactPersons ContactPerson[]
+}
+
+model ContactPerson {
+  id             String        @id @default(uuid())
+  firstName      String
+  lastName       String
+  phone          String
+  email          String?
+  address        String?
+  relationType   String        @default("EMERGENCY") // EMERGENCY, REPRESENTATIVE, GUARANTOR, FAMILY, OTHER
+
+  staffProfileId String?
+  staffProfile   StaffProfile? @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([staffProfileId])
+  @@index([userId])
+  @@index([phone])
+}
+
+// ----------------------------------------------------
+// PORTFOLIOS & CLAIMS
+// ----------------------------------------------------
+
+model Portfolio {
+  id              String      @id @default(uuid())
+  title           String
+  description     String?
+  analystId       String
+  analyst         User        @relation("AnalystPortfolios", fields: [analystId], references: [id])
+  assignedToId    String?
+  assignedTo      User?       @relation("OfficerPortfolios", fields: [assignedToId], references: [id])
+  status          String      @default("ACTIVE") // ACTIVE, CLOSED, ARCHIVED
+
+  claims          DebtClaim[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([analystId])
+  @@index([assignedToId])
+}
+
+model DebtClaim {
+  id              String          @id @default(uuid())
+  caseNumber      String          @unique // e.g. "DI-2026-0084"
+  portfolioId     String?
+  portfolio       Portfolio?      @relation(fields: [portfolioId], references: [id], onDelete: SetNull)
+
+  creditorId      String
+  creditor        User            @relation("CreditorClaims", fields: [creditorId], references: [id])
+
+  debtorId        String
+  debtor          User            @relation("DebtorLiabilities", fields: [debtorId], references: [id])
+
+  agreementNumber String
+  initialAmount   Decimal         @db.Decimal(12, 2)
+  remainingAmount Decimal         @db.Decimal(12, 2)
+  penaltyAmount   Decimal         @default(0.00) @db.Decimal(12, 2)
+  currency        String          @default("GEL")
+  daysOverdue     Int             @default(0)
+  status          ClaimStatus     @default(ACTIVE)
+  rating          RiskRating      @default(B)
+  riskScore       Int             @default(50) // 0 - 100
+
+  // Schedules & Repayments
+  scheduleType    ScheduleType    @default(STANDARD)
+  schedules       RepaymentSchedule[]
+  payments        PaymentTransaction[]
+  disputes        Dispute[]
+  legalCases      LegalCase[]
+  crmLogs         CrmCallLog[]
+  fieldTasks      FieldVisitTask[]
+  timelineEvents  CaseTimelineEvent[]
+
+  lastActivityAt  DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([creditorId])
+  @@index([debtorId])
+  @@index([caseNumber])
+  @@index([status])
+  @@index([rating])
+}
+
+model RepaymentSchedule {
+  id              String          @id @default(uuid())
+  claimId         String
+  claim           DebtClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  type            ScheduleType    @default(STANDARD)
+  totalMonths     Int             // 1 to 12 (standard) or >12 (non-standard)
+  monthlyAmount   Decimal         @db.Decimal(12, 2)
+  startDate       DateTime
+  isActive        Boolean         @default(true)
+
+  installments    RepaymentInstallment[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model RepaymentInstallment {
+  id              String          @id @default(uuid())
+  scheduleId      String
+  schedule        RepaymentSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  installmentNo   Int
+  dueDate         DateTime
+  amount          Decimal         @db.Decimal(12, 2)
+  paidAmount      Decimal         @default(0.00) @db.Decimal(12, 2)
+  isPaid          Boolean         @default(false)
+  paidAt          DateTime?
+
+  payments        PaymentTransaction[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model PaymentTransaction {
+  id                 String                @id @default(uuid())
+  claimId            String
+  claim              DebtClaim             @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  installmentId      String?
+  installment        RepaymentInstallment? @relation(fields: [installmentId], references: [id], onDelete: SetNull)
+  amount             Decimal               @db.Decimal(12, 2)
+  currency           String                @default("GEL")
+  provider           String                // TBC, BOG, PAYZE, MANUAL_CASH, BANK_TRANSFER
+  transactionRef     String                @unique
+  status             PaymentStatus         @default(PENDING)
+  rawGatewayResponse Json?
+
+  paidAt             DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@index([transactionRef])
+}
+
+model Dispute {
+  id              String          @id @default(uuid())
+  claimId         String
+  claim           DebtClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  reason          String
+  attachmentUrl   String?
+  status          DisputeStatus   @default(OPEN)
+  resolutionNotes String?
+  resolvedAt      DateTime?
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+// ----------------------------------------------------
+// LEGAL, CRM & FIELD VISITS
+// ----------------------------------------------------
+
+model LegalCase {
+  id                   String          @id @default(uuid())
+  caseNumber           String          @unique // e.g. "LEG-2025-084"
+  claimId              String
+  claim                DebtClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  assignedLawyerId     String?
+  assignedLawyer       User?           @relation("LawyerLegalCases", fields: [assignedLawyerId], references: [id], onDelete: SetNull)
+
+  courtInstance        String          // e.g. "თბილისის საქალაქო სასამართლო", "წინასასამართლო მედიაციის პალატა"
+  courtCaseNumber      String?         // e.g. "#3/1142-24"
+  judgeName            String?
+  enforcementOfficer   String?
+  status               LegalCaseStatus @default(PRE_TRIAL)
+  stage                String          @default("LAWSUIT_PREPARATION") // OFFICIAL_WARNING, LAWSUIT_PREPARATION, COURT_PROCEEDINGS, SETTLEMENT, ENFORCEMENT, CLOSED
+  priority             String          @default("HIGH") // HIGH, MEDIUM, LOW
+
+  courtDutyFee         Decimal?        @db.Decimal(12, 2)
+  hasSequestration     Boolean         @default(false)
+  settlementTerms      String?         // e.g. "გრაფიკი: 4 თვე"
+
+  nextHearingDate      DateTime?
+  deadlineDate         DateTime?
+  executionSheetNumber String?
+
+  legalOpinion            String?      @db.Text
+  checklistWarningSent    Boolean      @default(false)
+  checklistLawsuitDrafted Boolean      @default(false)
+  checklistDutyPaid       Boolean      @default(false)
+
+  documentsCount       Int             @default(0)
+  documents            LegalDocument[]
+  timelineEvents       CaseTimelineEvent[]
+
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  @@index([claimId])
+  @@index([assignedLawyerId])
+  @@index([status])
+  @@index([stage])
+}
+
+model LegalDocument {
+  id           String    @id @default(uuid())
+  legalCaseId  String
+  legalCase    LegalCase @relation(fields: [legalCaseId], references: [id], onDelete: Cascade)
+  title        String    // e.g. "RS.GE ამონაწერი (მიბმულია)", "ხელშეკრულება #OR-2023.pdf"
+  documentType String    // RS_EXTRACT, CONTRACT, BANK_DETAILS, COURT_SUMMONS, LAWSUIT_DRAFT, ENFORCEMENT_SHEET
+  fileUrl      String
+  isVerified   Boolean   @default(false)
+  fileSize     String?
+  createdAt    DateTime  @default(now())
+
+  @@index([legalCaseId])
+}
+
+model CaseTimelineEvent {
+  id              String     @id @default(uuid())
+  legalCaseId     String?
+  legalCase       LegalCase? @relation(fields: [legalCaseId], references: [id], onDelete: Cascade)
+  claimId         String
+  claim           DebtClaim  @relation(fields: [claimId], references: [id], onDelete: Cascade)
+
+  authorId        String
+  author          User       @relation("UserTimelineEvents", fields: [authorId], references: [id])
+
+  department      String     // LEGAL, FIELD_VISIT, CALL_CENTER, ANALYST, ADMIN
+  authorRoleTitle String     // e.g. "იურისტი - გიორგი ბერიძე", "ვიზიტორი - ლევან ხუციშვილი", "ქოლ-ცენტრის ოპერატორი - მარიამი", "ანალიტიკოსი - ნინო კაპანაძე"
+  actionType      String     // LAWSUIT_DRAFTED, VISIT_COMPLETED, CALL_MADE, HANDOFF_ANALYST, STATUS_CHANGED, NOTE_ADDED
+  description     String     @db.Text
+
+  createdAt       DateTime   @default(now())
+
+  @@index([legalCaseId])
+  @@index([claimId])
+  @@index([authorId])
+}
+
+model CrmCallLog {
+  id             String          @id @default(uuid())
+  claimId        String
+  claim          DebtClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  operatorId     String
+  operator       User            @relation("OperatorLogs", fields: [operatorId], references: [id])
+  disposition    CallDisposition
+  promisedDate   DateTime?
+  promisedAmount Decimal?        @db.Decimal(12, 2)
+  notes          String
+
+  createdAt      DateTime        @default(now())
+
+  @@index([operatorId])
+  @@index([claimId])
+}
+
+model FieldVisitTask {
+  id              String          @id @default(uuid())
+  claimId         String
+  claim           DebtClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  officerId       String
+  officer         User            @relation("OfficerTasks", fields: [officerId], references: [id])
+  scheduledTime   DateTime
+  priority        String          @default("REGULAR") // URGENT, HIGH, REGULAR
+  status          VisitStatus     @default(PENDING)
+  latitude        Float
+  longitude       Float
+  district        String
+  addressSnapshot String
+  notes           String?
+  signatureUrl    String?
+  photos          String[]
+
+  completedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([officerId])
+  @@index([claimId])
+}
+
+model BlogPost {
+  id          String    @id @default(uuid())
+  title       String
+  slug        String    @unique
+  category    String    // financial_literacy, credit_risks, tax_updates, legal_mediation, news
+  categoryKa  String
+  excerpt     String
+  content     String    @db.Text
+  coverImage  String?
+  authorId    String?
+  author      User?     @relation("UserBlogPosts", fields: [authorId], references: [id], onDelete: SetNull)
+  authorName  String
+  authorRole  String
+  published   Boolean   @default(true)
+  publishedAt DateTime  @default(now())
+  viewsCount  Int       @default(0)
+  tags        String[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([category])
+  @@index([published])
+  @@index([slug])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   // LOGIN, RS_VERIFY, CLAIM_CREATE, PAYMENT_RECORD, DISPUTE_OPEN
+  entity    String   // USER, CLAIM, PAYMENT, PORTFOLIO
+  entityId  String?
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ----------------------------------------------------
+// EXCEL REGISTRY STAGING (DEBTORS & CREDITORS)
+// ----------------------------------------------------
+
+model StagedRegistryItem {
+  id              String   @id @default(uuid())
+  type            String   // "DEBTOR" or "CREDITOR"
+  personalId      String   // 9 or 11 digits (Tax ID or PIN)
+  name            String   // Full Name or Company Name
+  companyOrPerson String?  // Optional employer or contact person
+  agreementNumber String?  // Contract/Agreement reference
+  amount          Decimal  @default(0.00) @db.Decimal(12, 2)
+  creditorName    String?  // Name of creditor for debt claim
+  overdueDays     Int      @default(0)
+  status          String   @default("PENDING") // PENDING, MATCHED, ASSIGNED
+  sourceFile      String?  // Excel source sheet name (e.g. "debtors_registry.xlsx")
+  matchedUserId   String?  // User ID if registered on platform
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([personalId])
+  @@index([type])
+  @@index([status])
+}
+

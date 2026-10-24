@@ -13,10 +13,20 @@ frontend/.next/
 frontend/out/
 .turbo/
 
+# Backend build
+backend/dist/
+dist/
+
+# Python cache & temporary scripts
+__pycache__/
+*.pyc
+focus.py
+
 # Environment files
 .env
 .env*.local
 !.env.example
+!**/.env.example
 
 # IDE & OS files
 .DS_Store
