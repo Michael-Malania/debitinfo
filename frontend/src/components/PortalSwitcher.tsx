@@ -28,10 +28,10 @@ interface PortalLink {
 }
 
 const PORTALS: PortalLink[] = [
-  { href: '/', nameKa: 'მთავარი (Landing Page)', badge: 'Public', icon: <Globe className="w-4 h-4" /> },
-  { href: '/creditor', nameKa: 'კრედიტორის კაბინეტი', badge: 'Creditor', icon: <Briefcase className="w-4 h-4" /> },
-  { href: '/register', nameKa: 'რეგისტრაცია (4-ნაბიჯი)', badge: 'Auth', icon: <UserCheck className="w-4 h-4" /> },
-  { href: '/debtor', nameKa: 'დებიტორის პორტალი & დავები', badge: 'Debtor', icon: <User className="w-4 h-4" /> },
+  { href: '/', nameKa: 'მთავარი გვერდი (Landing Page)', badge: 'Public', icon: <Globe className="w-4 h-4" /> },
+  { href: '/login', nameKa: 'ავტორიზაცია (შესვლა)', badge: 'Auth', icon: <UserCheck className="w-4 h-4" /> },
+  { href: '/register', nameKa: 'რეგისტრაცია', badge: 'Auth', icon: <UserCheck className="w-4 h-4" /> },
+  { href: '/dashboard', nameKa: 'ერთიანი სამუშაო კაბინეტი (Dashboard)', badge: 'Dashboard', icon: <User className="w-4 h-4" /> },
   { href: '/analyst', nameKa: 'ანალიტიკოსის კონსოლი', badge: 'Analyst', icon: <BarChart3 className="w-4 h-4" /> },
   { href: '/legal', nameKa: 'იურისტის კაბინეტი & სააღსრულებო', badge: 'Legal', icon: <Scale className="w-4 h-4" /> },
   { href: '/crm', nameKa: 'CRM ოპერატორის საკოლცენტრე', badge: 'CRM', icon: <Headphones className="w-4 h-4" /> },

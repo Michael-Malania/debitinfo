@@ -22,25 +22,25 @@ export default function AboutPage() {
       </a>
       {/* Navigation Links */}
       <nav className="hidden md:flex items-center gap-8">
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/">
+          მთავარი გვერდი
+        </Link>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/#services">
           სერვისები
-        </a>
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">
-          რეესტრი
-        </a>
+        </Link>
         {/* Active Nav: ჩვენს შესახებ */}
-        <a className="text-primary dark:text-inverse-primary font-label-md text-label-md border-b-2 border-primary dark:border-inverse-primary pb-1" href="#">
+        <Link className="text-primary dark:text-inverse-primary font-label-md text-label-md border-b-2 border-primary dark:border-inverse-primary pb-1" href="/about">
           ჩვენს შესახებ
-        </a>
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">
+        </Link>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/#pricing">
           ტარიფები
-        </a>
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">
+        </Link>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/#blog">
           ბლოგი
-        </a>
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">
+        </Link>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/contact">
           კონტაქტი
-        </a>
+        </Link>
       </nav>
       {/* Trailing Action Cluster */}
       <div className="flex items-center gap-4">
@@ -50,14 +50,14 @@ export default function AboutPage() {
           <span>GE</span>
         </button>
         {/* Secondary Action: შესვლა */}
-        <a className="text-text-muted hover:text-primary font-label-md text-label-md transition-colors px-2 py-1" href="#">
+        <Link className="text-text-muted hover:text-primary font-label-md text-label-md transition-colors px-2 py-1" href="/login">
           შესვლა
-        </a>
+        </Link>
         {/* Primary Action: რეგისტრაცია */}
-        <a className="bg-primary-container text-white px-4 py-2 rounded-lg font-label-md text-label-md shadow-sm hover:bg-primary active:scale-95 transition-all duration-150 flex items-center gap-1.5" href="#">
+        <Link className="bg-primary-container text-white px-4 py-2 rounded-lg font-label-md text-label-md shadow-sm hover:bg-primary active:scale-95 transition-all duration-150 flex items-center gap-1.5" href="/register">
           <span>რეგისტრაცია</span>
           <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-        </a>
+        </Link>
       </div>
     </div>
   </header>

@@ -29,11 +29,11 @@ export default function LandingPage() {
       </a>
       {/* Desktop Navigation Menu */}
       <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
+        <Link className="text-primary-container border-b-2 border-primary-container pb-1 font-label-md text-label-md" href="/">მთავარი გვერდი</Link>
         <a className="text-text-muted hover:text-primary-container transition-colors duration-150 font-label-md text-label-md" href="#services">სერვისები</a>
-        <a className="text-primary-container border-b-2 border-primary-container pb-1 font-label-md text-label-md" href="#registry">დებიტორთა რეესტრი</a>
         <a className="text-text-muted hover:text-primary-container transition-colors duration-150 font-label-md text-label-md" href="#pricing">ტარიფები</a>
         <a className="text-text-muted hover:text-primary-container transition-colors duration-150 font-label-md text-label-md" href="#blog">ბლოგი &amp; სიახლეები</a>
-        <a className="text-text-muted hover:text-primary-container transition-colors duration-150 font-label-md text-label-md" href="#contact">კონტაქტი</a>
+        <Link className="text-text-muted hover:text-primary-container transition-colors duration-150 font-label-md text-label-md" href="/contact">კონტაქტი</Link>
       </nav>
       {/* Right Side Actions & Language Switcher */}
       <div className="flex items-center gap-3">
@@ -45,13 +45,13 @@ export default function LandingPage() {
         </div>
         {/* Auth Actions */}
         <div className="flex items-center gap-2">
-          <button className="px-3 py-1.5 rounded-lg text-body-md font-body-md text-text-primary hover:bg-surface-bg transition-colors duration-150 active:scale-95" type="button">
+          <Link className="px-3 py-1.5 rounded-lg text-body-md font-body-md text-text-primary hover:bg-surface-bg transition-colors duration-150 active:scale-95" href="/login">
             შესვლა
-          </button>
-          <button className="px-4 py-1.5 rounded-lg text-body-md font-body-md bg-primary-container text-on-primary hover:bg-primary transition-colors duration-150 shadow-sm font-medium active:scale-95 flex items-center gap-1" type="button">
+          </Link>
+          <Link className="px-4 py-1.5 rounded-lg text-body-md font-body-md bg-primary-container text-on-primary hover:bg-primary transition-colors duration-150 shadow-sm font-medium active:scale-95 flex items-center gap-1" href="/register">
             <span>რეგისტრაცია</span>
             <span className="material-symbols-outlined text-sm">arrow_forward</span>
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -147,9 +147,9 @@ export default function LandingPage() {
                 <div>
                   <h2 className="text-headline-sm font-headline-sm text-text-primary flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary-container">search_check</span>
-                    უფასო გადამოწმება ბაზაში
+                    გადამოწმება ბაზაში
                   </h2>
-                  <p className="text-body-sm font-body-sm text-text-muted mt-0.5">შეამოწმეთ დავალიანების სტატუსი მყისიერად</p>
+                  <p className="text-body-sm font-body-sm text-text-muted mt-0.5">შეამოწმეთ დავალიანების სტატუსი რეესტრში</p>
                 </div>
                 <span className="px-2 py-0.5 text-label-sm font-label-sm rounded bg-primary-container/10 text-primary-container uppercase font-semibold">Live DB</span>
               </div>
@@ -163,7 +163,7 @@ export default function LandingPage() {
                 </button>
               </div>
               {/* Search Form */}
-              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); if (searchValue.trim()) setSearchResultVisible(true); }}>
+              <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); setSearchResultVisible(true); }}>
                 <div>
                   <label className="block text-label-md font-label-md text-text-primary mb-1.5" id="input-label">
                     {searchMode === 'personal' ? 'მოქალაქის პირადი ნომერი' : 'კომპანიის საიდენტიფიკაციო კოდი'}
@@ -192,14 +192,33 @@ export default function LandingPage() {
                   <span>გადამოწმება ბაზაში</span>
                 </button>
               </form>
-              {/* Dynamic Result Placeholder for Interaction */}
-              <div className={`${searchResultVisible ? '' : 'hidden'} mt-4 p-3 bg-surface-bg border border-accent-mint/50 rounded-lg`} id="search-result-box">
-                <div className="flex items-center justify-between text-body-sm font-body-sm">
-                  <span className="text-text-muted flex items-center gap-1">
-                    <span className="material-symbols-outlined text-accent-mint text-sm">check_circle</span>
-                    სტატუსი: <strong>დავალიანება არ ფიქსირდება</strong>
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-accent-mint/20 text-text-primary text-label-sm font-label-sm font-bold">Grade A</span>
+              {/* Registration Required Prompt on Search Click */}
+              <div className={`${searchResultVisible ? '' : 'hidden'} mt-4 p-4 bg-amber-50/90 border border-amber-300 rounded-xl space-y-3 animate-in fade-in`} id="search-result-box">
+                <div className="flex items-start gap-2.5">
+                  <span className="material-symbols-outlined text-amber-600 text-xl mt-0.5">lock_person</span>
+                  <div>
+                    <h4 className="text-label-md font-label-md font-bold text-text-primary">
+                      გადამოწმებისთვის საჭიროა რეგისტრაცია
+                    </h4>
+                    <p className="text-body-sm font-body-sm text-text-muted mt-0.5 leading-relaxed">
+                      მონაცემთა ბაზაში სტატუსის სანახავად გთხოვთ გაიაროთ რეგისტრაცია ან შეხვიდეთ სისტემაში.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Link
+                    href="/register"
+                    className="flex-1 py-2 px-3 rounded-lg bg-primary-container hover:bg-primary text-on-primary text-label-md font-label-md font-semibold text-center transition-colors flex items-center justify-center gap-1 shadow-xs"
+                  >
+                    <span>რეგისტრაციის გავლა</span>
+                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="py-2 px-3 rounded-lg bg-white hover:bg-surface-bg border border-border-subtle text-text-primary text-label-md font-label-md font-medium text-center transition-colors"
+                  >
+                    შესვლა
+                  </Link>
                 </div>
               </div>
               {/* Reassurance Trust Badges */}
@@ -354,9 +373,9 @@ export default function LandingPage() {
                 </li>
               </ul>
             </div>
-            <button className="w-full py-2.5 px-4 rounded-lg border border-border-subtle text-primary-container font-body-md text-body-md font-semibold hover:bg-surface-bg transition-colors" type="button">
+            <Link className="w-full py-2.5 px-4 rounded-lg border border-border-subtle text-primary-container font-body-md text-body-md font-semibold hover:bg-surface-bg transition-colors text-center" href="/register">
               დაიწყე უფასოდ
-            </button>
+            </Link>
           </div>
           {/* Card 2: Professional / Standard (Highlighted) */}
           <div className="bg-surface-card rounded-xl border-2 border-primary-container p-7 shadow-md flex flex-col justify-between relative transform md:-translate-y-2">
@@ -403,9 +422,9 @@ export default function LandingPage() {
                 </li>
               </ul>
             </div>
-            <button className="w-full py-3 px-4 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-md text-body-md font-semibold transition-colors shadow-sm cursor-pointer" type="button">
+            <Link className="w-full py-3 px-4 rounded-lg bg-primary-container hover:bg-primary text-on-primary font-body-md text-body-md font-semibold transition-colors shadow-sm cursor-pointer text-center" href="/register">
               პაკეტის არჩევა
-            </button>
+            </Link>
           </div>
           {/* Card 3: Enterprise */}
           <div className="bg-surface-card rounded-xl border border-border-subtle p-7 shadow-sm flex flex-col justify-between hover:border-text-muted transition-all">
@@ -446,9 +465,9 @@ export default function LandingPage() {
                 </li>
               </ul>
             </div>
-            <button className="w-full py-2.5 px-4 rounded-lg border border-border-subtle text-primary-container font-body-md text-body-md font-semibold hover:bg-surface-bg transition-colors" type="button">
+            <Link className="w-full py-2.5 px-4 rounded-lg border border-border-subtle text-primary-container font-body-md text-body-md font-semibold hover:bg-surface-bg transition-colors text-center" href="/contact">
               დაგვიკავშირდით
-            </button>
+            </Link>
           </div>
         </div>
       </div>
@@ -604,8 +623,8 @@ export default function LandingPage() {
             ნავიგაცია &amp; სერვისები
           </h4>
           <ul className="space-y-2 text-body-sm font-body-sm text-text-muted">
-            <li><a className="hover:text-primary-container transition-colors" href="#registry">დებიტორთა რეესტრი</a></li>
-            <li><a className="hover:text-primary-container transition-colors" href="#">საკრედიტო მონიტორინგი</a></li>
+            <li><Link className="hover:text-primary-container transition-colors" href="/">მთავარი გვერდი</Link></li>
+            <li><a className="hover:text-primary-container transition-colors" href="#services">საკრედიტო მონიტორინგი</a></li>
             <li><a className="hover:text-primary-container transition-colors" href="#">API დოკუმენტაცია</a></li>
             <li><a className="hover:text-primary-container transition-colors" href="#pricing">ტარიფები და პაკეტები</a></li>
             <li><a className="hover:text-primary-container transition-colors" href="#blog">სიახლეები და ბლოგი</a></li>

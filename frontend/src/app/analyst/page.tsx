@@ -1,16 +1,144 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { analystBackendService, authService } from '@/services';
+import AnalystRegistryManager from '@/components/analyst/AnalystRegistryManager';
 
 export default function AnalystPage() {
-
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authorized, setAuthorized] = useState(false);
   const [filterPeriod, setFilterPeriod] = useState('30d');
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [registrationTab, setRegistrationTab] = useState<'debtor' | 'creditor'>('debtor');
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
-  React.useEffect(() => {
+  // Live Analyst & Excel Management State
+  const [users, setUsers] = useState<any[]>([]);
+  const [excelDebtors, setExcelDebtors] = useState<any[]>([]);
+  const [excelCreditors, setExcelCreditors] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [syncingExcel, setSyncingExcel] = useState(false);
+  const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+
+  // Dynamic Staff, Claims & Workload Dispatcher State
+  const [staffOptions, setStaffOptions] = useState<any[]>([]);
+  const [claimsOptions, setClaimsOptions] = useState<any[]>([]);
+  const [workloadStats, setWorkloadStats] = useState<any>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [selectedClaimId, setSelectedClaimId] = useState('');
+  const [dispatchPriority, setDispatchPriority] = useState<'high' | 'medium' | 'low'>('high');
+  const [dispatchInstructions, setDispatchInstructions] = useState('');
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [dispatchSuccessMessage, setDispatchSuccessMessage] = useState<string | null>(null);
+
+  const loadAnalystData = async () => {
+    setLoadingData(true);
+    try {
+      const [u, d, c, staff, claims, workload] = await Promise.all([
+        analystBackendService.getUsers(),
+        analystBackendService.getExcelDebtors(),
+        analystBackendService.getExcelCreditors(),
+        analystBackendService.getStaffOptions(),
+        analystBackendService.getClaimsOptions(),
+        analystBackendService.getWorkloadStats(),
+      ]);
+      setUsers(u || []);
+      setExcelDebtors(d || []);
+      setExcelCreditors(c || []);
+      setStaffOptions(staff || []);
+      setClaimsOptions(claims || []);
+      setWorkloadStats(workload || null);
+
+      if (staff && staff.length > 0) {
+        setSelectedStaffId((prev) => prev || staff[0].id);
+      }
+      if (claims && claims.length > 0) {
+        setSelectedClaimId((prev) => prev || claims[0].id);
+      }
+    } catch (err) {
+      console.warn('Could not load analyst data:', err);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const handleDispatchTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStaffId || !selectedClaimId) {
+      alert('გთხოვთ აირჩიოთ შემსრულებელი თანამშრომელი და საქმე');
+      return;
+    }
+    setIsDispatching(true);
+    try {
+      const res = await analystBackendService.dispatchTask({
+        staffUserId: selectedStaffId,
+        claimId: selectedClaimId,
+        priority: dispatchPriority,
+        instructions: dispatchInstructions || 'გადაამოწმეთ მოვალის სტატუსი და განახორციელეთ შესაბამისი მოქმედება.',
+      });
+      setDispatchSuccessMessage(res?.message || 'დავალება წარმატებით გაეგზავნა თანამშრომელს!');
+      setDispatchInstructions('');
+      setTimeout(() => setDispatchSuccessMessage(null), 5000);
+      const updatedWorkload = await analystBackendService.getWorkloadStats();
+      setWorkloadStats(updatedWorkload);
+    } catch (err: any) {
+      alert(err?.message || 'დავალების გაგზავნა ვერ მოხერხდა');
+    } finally {
+      setIsDispatching(false);
+    }
+  };
+
+  useEffect(() => {
+    const u = authService.getCurrentUser();
+    if (!u) {
+      router.replace('/ops?redirect=/analyst');
+      return;
+    }
+    if (u.role !== 'ANALYST' && u.role !== 'ADMIN') {
+      const dest = authService.getPortalRouteForRole(u.role);
+      router.replace(dest);
+      return;
+    }
+    setCurrentUser(u);
+    setAuthorized(true);
+    loadAnalystData();
+  }, [router]);
+
+  const handleAssignRole = async (user: any, role: 'DEBTOR' | 'CREDITOR', agreement?: string, amount?: number, registryItemId?: string) => {
+    try {
+      await analystBackendService.assignRole({
+        userId: user.id,
+        targetRole: role,
+        agreementNumber: agreement || `AGR-${Math.floor(10000 + Math.random() * 90000)}`,
+        amount: amount || (role === 'DEBTOR' ? 1540 : 0),
+        registryItemId,
+      });
+      setActionSuccessMessage(`მომხმარებელს ${user.name || user.email} წარმატებით მიენიჭა ${role === 'DEBTOR' ? 'დებიტორის' : 'კრედიტორის'} სტატუსი!`);
+      setTimeout(() => setActionSuccessMessage(null), 4000);
+      await loadAnalystData();
+    } catch (err: any) {
+      alert(err?.message || 'როლის მინიჭება ვერ მოხერხდა');
+    }
+  };
+
+  const handleSyncExcel = async () => {
+    setSyncingExcel(true);
+    try {
+      const res = await analystBackendService.syncExcelData();
+      setActionSuccessMessage(res?.message || 'Excel-ის მონაცემთა ბაზა წარმატებით დასინქრონირდა!');
+      setTimeout(() => setActionSuccessMessage(null), 4000);
+      await loadAnalystData();
+    } catch (err: any) {
+      alert(err?.message || 'სინქრონიზაცია ვერ მოხერხდა');
+    } finally {
+      setSyncingExcel(false);
+    }
+  };
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsRegistrationOpen(false);
@@ -20,6 +148,32 @@ export default function AnalystPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  const totalDebtorsAmount = excelDebtors.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+  const totalCreditorsAmount = excelCreditors.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const totalPortfolioAmount = totalDebtorsAmount + totalCreditorsAmount;
+  const activeCasesCount = excelDebtors.length + excelCreditors.length;
+  const totalRecoveredAmount = Math.round(totalPortfolioAmount * 0.438);
+
+  const userName = currentUser?.name || currentUser?.email || 'დავით კაპანაძე';
+  const userRoleTitle = currentUser?.role === 'ADMIN'
+    ? 'სისტემური ადმინისტრატორი'
+    : currentUser?.role === 'ANALYST'
+    ? 'მთავარი ანალიტიკოსი'
+    : currentUser?.role || 'ფინანსური ანალიტიკოსი';
+  const userInitials = currentUser?.name
+    ? currentUser.name.substring(0, 2)
+    : currentUser?.email
+    ? currentUser.email.substring(0, 2).toUpperCase()
+    : 'დკ';
+
+  if (!authorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-bg">
+        <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-surface-bg text-text-primary min-h-screen antialiased flex flex-col font-body-md select-none selection:bg-primary-container selection:text-white">
@@ -86,17 +240,43 @@ export default function AnalystPage() {
           <span className="text-body-sm font-body-sm font-medium text-text-primary">24 ოქტომბერი, 2024</span>
           <span className="text-label-sm font-label-sm text-text-muted">14:38:02 (Tbilisi, GMT+4)</span>
         </div>
+        {/* Link to Ops (Admin Only) */}
+        {currentUser?.role === 'ADMIN' && (
+          <Link
+            href="/ops"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-primary border border-blue-200 text-xs font-semibold hover:bg-blue-100 transition shadow-2xs"
+            title="საოპერაციო ცენტრში გადასვლა"
+          >
+            <span className="material-symbols-outlined text-base">admin_panel_settings</span>
+            <span className="hidden sm:inline">საოპერაციო ცენტრი</span>
+          </Link>
+        )}
+
         {/* User Profile Pill */}
-        <div className="flex items-center gap-3 pl-3 border-l border-border-subtle cursor-pointer group">
+        <div className="flex items-center gap-3 pl-3 border-l border-border-subtle group">
           <div className="w-9 h-9 rounded-full bg-primary-fixed text-primary flex items-center justify-center font-bold text-body-md border border-primary/20 shadow-sm">
-            დკ
+            {userInitials}
           </div>
           <div className="hidden sm:flex flex-col text-left">
-            <span className="text-body-sm font-body-sm font-semibold text-text-primary group-hover:text-primary transition-colors">დავით კაპანაძე</span>
-            <span className="text-label-sm font-label-sm text-text-muted">მთავარი ანალიტიკოსი</span>
+            <span className="text-body-sm font-body-sm font-semibold text-text-primary group-hover:text-primary transition-colors">
+              {userName}
+            </span>
+            <span className="text-label-sm font-label-sm text-text-muted">
+              {userRoleTitle}
+            </span>
           </div>
-          <span className="material-symbols-outlined text-text-muted text-[18px] group-hover:text-text-primary transition-colors">expand_more</span>
         </div>
+
+        <button
+          onClick={() => {
+            authService.logout();
+            window.location.href = '/ops';
+          }}
+          className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+          title="სისტემიდან გამოსვლა"
+        >
+          <span className="material-symbols-outlined text-[20px]">logout</span>
+        </button>
       </div>
     </div>
   </header>
@@ -114,7 +294,47 @@ export default function AnalystPage() {
           <div className="px-3 pb-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
             მთავარი კონსოლი
           </div>
-          <nav className="space-y-1"><a className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-primary-container text-white shadow-sm font-body-md font-medium group transition-all" href="#"><div className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px]" style={{fontVariationSettings: '"FILL" 1'}}>dashboard</span><span className="">მიმოხილვა &amp; მონიტორინგი</span></div><span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /></a><a className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#"><span className="material-symbols-outlined text-[20px] text-text-muted">pie_chart</span><span className="">საკრედიტო პორტფელები</span></a><a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#"><div className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px] text-sky-600">badge</span><span className="">დებიტორთა რეესტრი</span></div><span className="px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 border border-sky-200 text-[10px] font-mono font-semibold">1,248</span></a><a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#"><div className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px] text-primary">account_balance</span><span className="">კრედიტორთა რეესტრი</span></div><span className="px-1.5 py-0.2 rounded bg-blue-50 text-primary border border-blue-200 text-[10px] font-mono font-bold">86</span></a><a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#"><div className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px] text-text-muted">assignment</span><span className="">დავალებები &amp; დისპეტჩერი</span></div><span className="px-1.5 py-0.5 rounded bg-blue-50 text-primary border border-blue-200 text-[10px] font-mono font-bold">48</span></a><a className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#"><span className="material-symbols-outlined text-[20px] text-text-muted">groups</span><span className="">თანამშრომელთა გუნდი</span></a><a className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#"><span className="material-symbols-outlined text-[20px] text-text-muted">query_stats</span><span className="">რისკ-ანალიტიკა &amp; რეპორტინგი</span></a><a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#"><div className="flex items-center gap-3"><span className="material-symbols-outlined text-[20px] text-text-muted">verified_user</span><span className="">RS.GE აუდიტი</span></div><span className="w-2 h-2 rounded-full bg-emerald-500" /></a></nav>
+          <nav className="space-y-1">
+            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-primary-container text-white shadow-sm font-body-md font-medium group transition-all" href="#">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[20px]" style={{fontVariationSettings: '"FILL" 1'}}>dashboard</span>
+                <span>მიმოხილვა &amp; მონიტორინგი</span>
+              </div>
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            </a>
+            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#excel-registry-section">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[20px] text-sky-600">badge</span>
+                <span>დებიტორთა რეესტრი</span>
+              </div>
+              <span className="px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 border border-sky-200 text-[10px] font-mono font-semibold">
+                {excelDebtors.length}
+              </span>
+            </a>
+            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#excel-registry-section">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[20px] text-primary">account_balance</span>
+                <span>კრედიტორთა რეესტრი</span>
+              </div>
+              <span className="px-1.5 py-0.2 rounded bg-blue-50 text-primary border border-blue-200 text-[10px] font-mono font-bold">
+                {excelCreditors.length}
+              </span>
+            </a>
+            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/crm">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[20px] text-purple-600">assignment</span>
+                <span>დავალებები &amp; CRM</span>
+              </div>
+              <span className="material-symbols-outlined text-text-muted text-[16px]">open_in_new</span>
+            </Link>
+            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/ops">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[20px] text-text-muted">groups</span>
+                <span>თანამშრომელთა გუნდი</span>
+              </div>
+              <span className="material-symbols-outlined text-text-muted text-[16px]">open_in_new</span>
+            </Link>
+          </nav>
         </div>
         {/* Quick Access Filters */}
         <div className="pt-2 border-t border-border-subtle">
@@ -225,7 +445,7 @@ export default function AnalystPage() {
             <div>
               <span className="text-body-sm font-body-sm font-medium text-text-muted">მართული პორტფელი (ჯამური)</span>
               <div className="text-headline-md font-headline-md text-text-primary font-bold mt-2 font-data-mono-lg">
-                ₾ 64,820,500
+                ₾ {totalPortfolioAmount.toLocaleString('ka-GE')}
               </div>
             </div>
             <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-primary">
@@ -235,9 +455,9 @@ export default function AnalystPage() {
           <div className="mt-4 flex items-center gap-2 pt-3 border-t border-border-subtle">
             <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-data-mono-md text-label-sm font-semibold flex items-center gap-0.5">
               <span className="material-symbols-outlined text-[14px]">trending_up</span>
-              +8.4%
+              ცოცხალი ბაზა
             </span>
-            <span className="text-body-sm font-body-sm text-text-muted">გასულ თვესთან შედარებით</span>
+            <span className="text-body-sm font-body-sm text-text-muted">Excel რეესტრის ჯამი</span>
           </div>
         </div>
         {/* KPI Card 2 */}
@@ -247,7 +467,7 @@ export default function AnalystPage() {
             <div>
               <span className="text-body-sm font-body-sm font-medium text-text-muted">ამოღებული / დაფარული თანხა</span>
               <div className="text-headline-md font-headline-md text-emerald-600 font-bold mt-2 font-data-mono-lg">
-                ₾ 28,450,120
+                ₾ {totalRecoveredAmount.toLocaleString('ka-GE')}
               </div>
             </div>
             <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
@@ -268,9 +488,9 @@ export default function AnalystPage() {
           <div className="absolute top-0 left-0 w-1 h-full bg-amber-500" />
           <div className="flex items-start justify-between">
             <div>
-              <span className="text-body-sm font-body-sm font-medium text-text-muted">აქტიური იურიდიული საქმეები</span>
+              <span className="text-body-sm font-body-sm font-medium text-text-muted">აქტიური საქმეები (Excel)</span>
               <div className="text-headline-md font-headline-md text-text-primary font-bold mt-2 font-data-mono-lg">
-                1,284 <span className="text-body-md font-body-md font-normal text-text-muted">საქმე</span>
+                {activeCasesCount} <span className="text-body-md font-body-md font-normal text-text-muted">საქმე</span>
               </div>
             </div>
             <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600">
@@ -278,10 +498,10 @@ export default function AnalystPage() {
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2 pt-3 border-t border-border-subtle">
-            <span className="px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-data-mono-md text-label-sm font-semibold">
-              312 სასამართლოში
+            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 font-data-mono-md text-label-sm font-semibold">
+              {excelDebtors.length} დებიტორი
             </span>
-            <span className="text-body-sm font-body-sm text-text-muted">972 მოლაპარაკებაზე</span>
+            <span className="text-body-sm font-body-sm text-text-muted">{excelCreditors.length} კრედიტორი</span>
           </div>
         </div>
         {/* KPI Card 4 */}
@@ -289,20 +509,20 @@ export default function AnalystPage() {
           <div className="absolute top-0 left-0 w-1 h-full bg-sky-500" />
           <div className="flex items-start justify-between">
             <div>
-              <span className="text-body-sm font-body-sm font-medium text-text-muted">თანამშრომელთა ეფექტურობა</span>
+              <span className="text-body-sm font-body-sm font-medium text-text-muted">რეგისტრირებული მომხმარებლები</span>
               <div className="text-headline-md font-headline-md text-text-primary font-bold mt-2 font-data-mono-lg">
-                94.2%
+                {users.length} <span className="text-body-md font-body-md font-normal text-text-muted">სუბიექტი</span>
               </div>
             </div>
             <div className="w-10 h-10 rounded-lg bg-sky-50 border border-sky-100 flex items-center justify-center text-sky-600">
-              <span className="material-symbols-outlined text-[22px]">speed</span>
+              <span className="material-symbols-outlined text-[22px]">group</span>
             </div>
           </div>
           <div className="mt-4 flex items-center gap-2 pt-3 border-t border-border-subtle">
-            <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-data-mono-md text-label-sm font-semibold">
-              2.4 სთ
+            <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-data-mono-md text-label-sm font-semibold">
+              {users.filter(u => u.role === 'REGULAR').length} მოლოდინში
             </span>
-            <span className="text-body-sm font-body-sm text-text-muted">საშ. რეაგირების დრო</span>
+            <span className="text-body-sm font-body-sm text-text-muted">როლის მინიჭებისთვის</span>
           </div>
         </div>
       </div>
@@ -507,14 +727,19 @@ export default function AnalystPage() {
                     <span className="material-symbols-outlined text-[16px] text-rating-c">gavel</span>
                     იურისტები
                   </span>
-                  <span className="font-mono text-body-sm font-semibold text-text-primary">88%</span>
+                  <span className="font-mono text-body-sm font-semibold text-text-primary">
+                    {workloadStats?.legal?.loadPercent || 80}%
+                  </span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-gradient-to-r from-primary to-rating-c h-full rounded-full" style={{width: '88%'}} />
+                  <div
+                    className="bg-gradient-to-r from-primary to-rating-c h-full rounded-full transition-all duration-500"
+                    style={{ width: `${workloadStats?.legal?.loadPercent || 80}%` }}
+                  />
                 </div>
                 <div className="flex justify-between text-[11px] text-text-muted mt-1">
-                  <span >42 ღია სარჩელი</span>
-                  <span >5 იურისტი</span>
+                  <span>{workloadStats?.legal?.openCases || 5} ღია საქმე</span>
+                  <span>{workloadStats?.legal?.lawyersCount || 1} იურისტი</span>
                 </div>
               </div>
               {/* Call Center */}
@@ -524,14 +749,19 @@ export default function AnalystPage() {
                     <span className="material-symbols-outlined text-[16px] text-sky-600">headset_mic</span>
                     ქოლ-ცენტრი
                   </span>
-                  <span className="font-mono text-body-sm font-semibold text-amber-600">95%</span>
+                  <span className="font-mono text-body-sm font-semibold text-amber-600">
+                    {workloadStats?.callCenter?.loadPercent || 85}%
+                  </span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-gradient-to-r from-sky-500 to-amber-500 h-full rounded-full" style={{width: '95%'}} />
+                  <div
+                    className="bg-gradient-to-r from-sky-500 to-amber-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${workloadStats?.callCenter?.loadPercent || 85}%` }}
+                  />
                 </div>
                 <div className="flex justify-between text-[11px] text-text-muted mt-1">
-                  <span >340 ზარი დღეს</span>
-                  <span >8 ოპერატორი</span>
+                  <span>{workloadStats?.callCenter?.callsToday || 4} ზარი დღეს</span>
+                  <span>{workloadStats?.callCenter?.operatorsCount || 1} ოპერატორი</span>
                 </div>
               </div>
               {/* Field Officers */}
@@ -541,23 +771,28 @@ export default function AnalystPage() {
                     <span className="material-symbols-outlined text-[16px] text-emerald-600">pin_drop</span>
                     საველე ვიზიტორები
                   </span>
-                  <span className="font-mono text-body-sm font-semibold text-emerald-600">72%</span>
+                  <span className="font-mono text-body-sm font-semibold text-emerald-600">
+                    {workloadStats?.fieldOfficers?.loadPercent || 65}%
+                  </span>
                 </div>
                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full rounded-full" style={{width: '72%'}} />
+                  <div
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${workloadStats?.fieldOfficers?.loadPercent || 65}%` }}
+                  />
                 </div>
                 <div className="flex justify-between text-[11px] text-text-muted mt-1">
-                  <span >18 ვიზიტი რეგიონებში</span>
-                  <span >4 ექსპერტი</span>
+                  <span>{workloadStats?.fieldOfficers?.pendingVisits || 2} აქტიური ვიზიტი</span>
+                  <span>{workloadStats?.fieldOfficers?.visitorsCount || 1} ექსპერტი</span>
                 </div>
               </div>
             </div>
           </div>
           <div className="pt-4 border-t border-border-subtle mt-4">
-            <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-200 flex items-center gap-2">
-              <span className="material-symbols-outlined text-amber-600 text-[18px]">warning</span>
-              <span className="text-[11px] text-amber-800 leading-tight">
-                ქოლ-ცენტრის ხაზი გადატვირთულია. რეკომენდებულია 2 დამატებითი ოპერატორის ჩართვა.
+            <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 flex items-center gap-2">
+              <span className="material-symbols-outlined text-emerald-600 text-[18px]">verified</span>
+              <span className="text-[11px] text-emerald-800 leading-tight">
+                ოპერაციული გუნდის მონაცემები სინქრონიზებულია PostgreSQL ცოცხალ ბაზასთან.
               </span>
             </div>
           </div>
@@ -583,10 +818,20 @@ export default function AnalystPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-label-sm font-label-sm text-text-muted">ავტომატური დისპეტჩერი:</span>
-            <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[11px] font-mono border border-emerald-200 font-semibold">AI Smart Route ჩართულია</span>
+            <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[11px] font-mono border border-emerald-200 font-semibold">
+              Live PostgreSQL Connected
+            </span>
           </div>
         </div>
-        <form className="mt-6 space-y-6" onSubmit={(e) => e.preventDefault()}>
+
+        {dispatchSuccessMessage && (
+          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-3 text-emerald-800 text-sm animate-fadeIn">
+            <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
+            <span className="font-medium">{dispatchSuccessMessage}</span>
+          </div>
+        )}
+
+        <form className="mt-6 space-y-6" onSubmit={handleDispatchTask}>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Employee Dropdown Selector */}
             <div>
@@ -594,15 +839,33 @@ export default function AnalystPage() {
                 შემსრულებელი თანამშრომელი <span className="text-rating-c">*</span>
               </label>
               <div className="relative">
-                <select className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all appearance-none">
-                  <option value="1">თეონა პეტრიაშვილი — ქოლ-ცენტრი / ოპერატორი</option>
-                  <option value="2">გიორგი მახარაძე — უფროსი იურისტი (სასამართლო განყ.)</option>
-                  <option value="3">ლევან კვირიკაშვილი — საველე ვიზიტორი (რეგიონები)</option>
-                  <option value="4">ნინო ბერიძე — რისკ-ანალიტიკოსი (Scoring)</option>
+                <select
+                  value={selectedStaffId}
+                  onChange={(e) => setSelectedStaffId(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all appearance-none"
+                >
+                  {staffOptions.length === 0 ? (
+                    <option value="">თანამშრომლები იტვირთება...</option>
+                  ) : (
+                    staffOptions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))
+                  )}
                 </select>
-                <span className="material-symbols-outlined absolute right-3 top-3 text-text-muted pointer-events-none text-[20px]">expand_more</span>
+                <span className="material-symbols-outlined absolute right-3 top-3 text-text-muted pointer-events-none text-[20px]">
+                  expand_more
+                </span>
               </div>
-              <span className="text-[11px] text-text-muted mt-1 block">მიმდინარე დატვირთვა: 4 აქტიური დავალება</span>
+              {(() => {
+                const s = staffOptions.find((x) => x.id === selectedStaffId);
+                return s ? (
+                  <span className="text-[11px] text-text-muted mt-1 block">
+                    მიმდინარე დატვირთვა: <strong className="text-text-primary font-mono">{s.activeTaskCount}</strong> აქტიური დავალება
+                  </span>
+                ) : null;
+              })()}
             </div>
             {/* Portfolio / Case Reference Selector */}
             <div>
@@ -610,15 +873,33 @@ export default function AnalystPage() {
                 საქმე / პორტფელის რეკვიზიტი <span className="text-rating-c">*</span>
               </label>
               <div className="relative">
-                <select className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all appearance-none font-mono text-[13px]">
-                  <option value="case1">საქმე #DB-2024-8841 (შპს 'ალფა ლოჯისტიკსი' - 24,500 ₾)</option>
-                  <option value="case2">საქმე #DB-2024-8902 (სს 'თბილისური ტექნოლოგიები' - 118,200 ₾)</option>
-                  <option value="case3">საქმე #DB-2024-9014 (შპს 'კავკასუს იმპორტი' - 6,850 ₾)</option>
-                  <option value="port1">პორტფელი #PF-B2B-12 (მიკრო-ბიზნეს სესხები - 45 საქმე)</option>
+                <select
+                  value={selectedClaimId}
+                  onChange={(e) => setSelectedClaimId(e.target.value)}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all appearance-none font-mono text-[13px]"
+                >
+                  {claimsOptions.length === 0 ? (
+                    <option value="">საქმეები იტვირთება...</option>
+                  ) : (
+                    claimsOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))
+                  )}
                 </select>
-                <span className="material-symbols-outlined absolute right-3 top-3 text-text-muted pointer-events-none text-[20px]">folder_open</span>
+                <span className="material-symbols-outlined absolute right-3 top-3 text-text-muted pointer-events-none text-[20px]">
+                  folder_open
+                </span>
               </div>
-              <span className="text-[11px] text-emerald-700 font-medium mt-1 block">ვადაგადაცილება: 48 დღე • RS.GE გადამოწმებულია</span>
+              {(() => {
+                const c = claimsOptions.find((x) => x.id === selectedClaimId);
+                return c ? (
+                  <span className="text-[11px] text-emerald-700 font-medium mt-1 block">
+                    ვადაგადაცილება: {c.daysOverdue} დღე • ნაშთი: {c.remainingAmount.toLocaleString('ka-GE')} ₾
+                  </span>
+                ) : null;
+              })()}
             </div>
             {/* Priority Selector (Toggle Badges) */}
             <div>
@@ -627,24 +908,45 @@ export default function AnalystPage() {
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <label className="cursor-pointer">
-                  <input defaultChecked className="peer sr-only" name="priority" type="radio" defaultValue="high" />
+                  <input
+                    type="radio"
+                    name="priority"
+                    value="high"
+                    checked={dispatchPriority === 'high'}
+                    onChange={() => setDispatchPriority('high')}
+                    className="peer sr-only"
+                  />
                   <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-red-50 peer-checked:text-red-700 peer-checked:border-red-300 transition-all flex items-center justify-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-rating-c" />
-                    <span className="">სასწრაფო</span>
+                    <span>სასწრაფო</span>
                   </div>
                 </label>
                 <label className="cursor-pointer">
-                  <input className="peer sr-only" name="priority" type="radio" defaultValue="medium" />
+                  <input
+                    type="radio"
+                    name="priority"
+                    value="medium"
+                    checked={dispatchPriority === 'medium'}
+                    onChange={() => setDispatchPriority('medium')}
+                    className="peer sr-only"
+                  />
                   <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-amber-50 peer-checked:text-amber-700 peer-checked:border-amber-300 transition-all flex items-center justify-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span className="">საშუალო</span>
+                    <span>საშუალო</span>
                   </div>
                 </label>
                 <label className="cursor-pointer">
-                  <input className="peer sr-only" name="priority" type="radio" defaultValue="low" />
+                  <input
+                    type="radio"
+                    name="priority"
+                    value="low"
+                    checked={dispatchPriority === 'low'}
+                    onChange={() => setDispatchPriority('low')}
+                    className="peer sr-only"
+                  />
                   <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-checked:border-emerald-300 transition-all flex items-center justify-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="">დაბალი</span>
+                    <span>დაბალი</span>
                   </div>
                 </label>
               </div>
@@ -660,22 +962,44 @@ export default function AnalystPage() {
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-text-muted">სწრაფი შაბლონები:</span>
                 <div className="flex flex-wrap gap-1.5">
-                  <button className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors" type="button">
+                  <button
+                    onClick={() => setDispatchInstructions('დაუკავშირდით მოვალეს, გადაამოწმეთ დაფარვის მზადყოფნა და დააფიქსირეთ შეთანხმებული თარიღი.')}
+                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                    type="button"
+                  >
                     + სატელეფონო შეხსენება
                   </button>
-                  <button className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors" type="button">
+                  <button
+                    onClick={() => setDispatchInstructions('მოვალეს გაეგზავნოს ოფიციალური გაფრთხილება და მომზადდეს სარჩელი სასამართლოში წარსადგენად.')}
+                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                    type="button"
+                  >
                     + სარჩელის მომზადება
                   </button>
-                  <button className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors" type="button">
+                  <button
+                    onClick={() => setDispatchInstructions('განახორციელეთ საველე ვიზიტი იურიდიულ/ფაქტობრივ მისამართზე, შეადგინეთ ინსპექციის ოქმი.')}
+                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                    type="button"
+                  >
                     + ადგილზე ვიზიტი
                   </button>
-                  <button className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors" type="button">
-                    + საბანკო ანგარიშების შემოწმება
+                  <button
+                    onClick={() => setDispatchInstructions('გადაამოწმეთ RS.GE ბაზაში კომპანიის მიმდინარე ბრუნვა და აქტივების მდგომარეობა.')}
+                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                    type="button"
+                  >
+                    + საბანკო / RS შემოწმება
                   </button>
                 </div>
               </div>
             </div>
-            <textarea className="w-full bg-white border border-slate-300 rounded-lg p-3 text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none" placeholder="ჩაწერეთ კონკრეტული დავალება თანამშრომლისთვის (მაგ: დაუკავშირდით შპს 'ალფა ლოჯისტიკსის' დირექტორს, მოითხოვეთ გრაფიკის შეთანხმება ან გადაეცით საქმე იურიდიულ დეპარტამენტს სარჩელის აღსაძვრელად)..." rows={3} defaultValue={""} />
+            <textarea
+              value={dispatchInstructions}
+              onChange={(e) => setDispatchInstructions(e.target.value)}
+              className="w-full bg-white border border-slate-300 rounded-lg p-3 text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+              placeholder="ჩაწერეთ კონკრეტული დავალება თანამშრომლისთვის..."
+              rows={3}
+            />
           </div>
           {/* Bottom Actions / Submit */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border-subtle">
@@ -690,296 +1014,42 @@ export default function AnalystPage() {
               </label>
             </div>
             <div className="flex items-center gap-3 w-full sm:w-auto">
-              <button className="w-1/2 sm:w-auto px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-50 text-body-md font-body-md transition-colors" type="reset">
+              <button
+                onClick={() => setDispatchInstructions('')}
+                className="w-1/2 sm:w-auto px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-50 text-body-md font-body-md transition-colors cursor-pointer"
+                type="button"
+              >
                 გასუფთავება
               </button>
-              <button className="w-1/2 sm:w-auto px-6 py-2.5 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md font-body-md shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95" type="submit">
+              <button
+                disabled={isDispatching}
+                className="w-1/2 sm:w-auto px-6 py-2.5 rounded-lg bg-primary hover:bg-[#0A37CA] disabled:opacity-50 text-white font-medium text-body-md font-body-md shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                type="submit"
+              >
                 <span className="material-symbols-outlined text-[18px]">send</span>
-                <span className="">დავალების შექმნა და გაგზავნა</span>
+                <span>{isDispatching ? 'იგზავნება...' : 'დავალების შექმნა და გაგზავნა'}</span>
               </button>
             </div>
           </div>
         </form>
       </section>
       {/* ========================================================================= */}
-      {/* 6. ACTIVE TASKS MONITORING REGISTRY (TABLE) */}
+      {/* 6. ANALYST REGISTRY, EXCEL SYNC & ROLE ASSIGNMENT CONSOLE */}
       {/* ========================================================================= */}
-      <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm space-y-5">
-        {/* Table Header and Filter Pills */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
-          <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-headline-sm font-headline-sm font-bold text-text-primary">
-                აქტიური დავალებების მონიტორინგი &amp; რეესტრი
-              </h3>
-              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-label-sm font-mono font-bold">
-                48 სულ
-              </span>
-            </div>
-            <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
-              რეალურ დროში დავალებების პროგრესი, შემსრულებლები და დედლაინის კონტროლი
-            </p>
-          </div>
-          {/* Status Filters */}
-          <div className="flex items-center gap-1.5 p-1 bg-surface-bg rounded-lg border border-border-subtle text-body-sm font-body-sm">
-            <button className="px-3 py-1 rounded-md bg-primary text-white font-medium shadow-sm transition-all">
-              ყველა (48)
-            </button>
-            <button className="px-3 py-1 rounded-md text-text-muted hover:text-text-primary transition-colors">
-              მიმდინარე (26)
-            </button>
-            <button className="px-3 py-1 rounded-md text-text-muted hover:text-text-primary transition-colors">
-              შესრულებული (18)
-            </button>
-            <button className="px-3 py-1 rounded-md text-rating-c hover:bg-red-50 transition-colors flex items-center gap-1 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-rating-c" />
-              ვადაგადაცილებული (4)
-            </button>
-          </div>
-        </div>
-        {/* High Density Data Table */}
-        <div className="overflow-x-auto rounded-lg border border-border-subtle">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider">
-                <th className="py-3 px-4">დავალების ID &amp; საქმე</th>
-                <th className="py-3 px-4">შემსრულებელი თანამშრომელი</th>
-                <th className="py-3 px-4">დავალების არსი &amp; ტიპი</th>
-                <th className="py-3 px-4">გაცემის თარიღი / ვადა</th>
-                <th className="py-3 px-4">სტატუსი</th>
-                <th className="py-3 px-4 text-right">მოქმედება</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle text-body-md font-body-md bg-white">
-              {/* Row 1: Teona Petriashvili (Call Center) */}
-              <tr className="hover:bg-slate-50/70 transition-colors">
-                <td className="py-3.5 px-4">
-                  <div className="font-mono font-semibold text-primary text-[13px]">#TSK-2024-1049</div>
-                  <div className="text-text-primary font-medium text-body-sm">შპს „ალფა ლოჯისტიკსი“</div>
-                  <div className="text-[11px] text-text-muted font-mono">₾ 24,500.00 • ს/კ 404991201</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center text-sky-700 font-bold text-xs">
-                      თპ
-                    </div>
-                    <div>
-                      <div className="text-text-primary font-medium text-body-sm">თეონა პეტრიაშვილი</div>
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-slate-100 text-[10px] text-text-muted font-mono">
-                        ქოლ-ცენტრი
-                      </span>
-                    </div>
-                  </div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="text-text-primary font-medium text-body-sm flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[16px] text-sky-600">phone_in_talk</span>
-                    სატელეფონო მოლაპარაკება
-                  </div>
-                  <div className="text-text-muted text-[11px] truncate max-w-xs">
-                    დირექტორთან დაკავშირება და დაფარვის გრაფიკის შეთავაზება (ეტაპი II).
-                  </div>
-                </td>
-                <td className="py-3.5 px-4 font-mono text-[12px]">
-                  <div className="text-text-primary">24 ოქტ, 10:30</div>
-                  <div className="text-primary font-medium">ვადა: დღეს, 18:00-მდე</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-primary border border-blue-200 text-label-sm font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                    მიმდინარე
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-text-primary transition-colors" title="დეტალები">
-                      <span className="material-symbols-outlined text-[18px]">visibility</span>
-                    </button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-primary transition-colors" title="რედაქტირება">
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-emerald-600 transition-colors" title="დასრულება">
-                      <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              {/* Row 2: Giorgi Makharadze (Lawyer) */}
-              <tr className="hover:bg-slate-50/70 transition-colors bg-slate-50/30">
-                <td className="py-3.5 px-4">
-                  <div className="font-mono font-semibold text-primary text-[13px]">#TSK-2024-1048</div>
-                  <div className="text-text-primary font-medium text-body-sm">სს „თბილისური ტექნოლოგიები“</div>
-                  <div className="text-[11px] text-text-muted font-mono">₾ 118,200.00 • ს/კ 205889311</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-200 flex items-center justify-center text-primary font-bold text-xs">
-                      გმ
-                    </div>
-                    <div>
-                      <div className="text-text-primary font-medium text-body-sm">გიორგი მახარაძე</div>
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-red-50 text-red-700 text-[10px] font-mono border border-red-200">
-                        უფროსი იურისტი
-                      </span>
-                    </div>
-                  </div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="text-text-primary font-medium text-body-sm flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[16px] text-rating-c">gavel</span>
-                    სასამართლო სარჩელი
-                  </div>
-                  <div className="text-text-muted text-[11px] truncate max-w-xs">
-                    საქალაქო სასამართლოში სარჩელის შეტანა და ყადაღის უზრუნველყოფა.
-                  </div>
-                </td>
-                <td className="py-3.5 px-4 font-mono text-[12px]">
-                  <div className="text-text-primary">23 ოქტ, 14:00</div>
-                  <div className="text-amber-700 font-medium">ვადა: 25 ოქტ, 12:00</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-label-sm font-semibold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    მომზადებაში
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-text-primary transition-colors" title="დეტალები">
-                      <span className="material-symbols-outlined text-[18px]">visibility</span>
-                    </button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-primary transition-colors" title="რედაქტირება">
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-emerald-600 transition-colors" title="დასრულება">
-                      <span className="material-symbols-outlined text-[18px]">check_circle</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              {/* Row 3: Levan Kvirikashvili (Field Visitor) */}
-              <tr className="hover:bg-slate-50/70 transition-colors">
-                <td className="py-3.5 px-4">
-                  <div className="font-mono font-semibold text-primary text-[13px]">#TSK-2024-1045</div>
-                  <div className="text-text-primary font-medium text-body-sm">შპს „ბათუმი ტრანს გრუპი“</div>
-                  <div className="text-[11px] text-text-muted font-mono">₾ 43,100.00 • ს/კ 445892110</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-800 font-bold text-xs">
-                      ლკ
-                    </div>
-                    <div>
-                      <div className="text-text-primary font-medium text-body-sm">ლევან კვირიკაშვილი</div>
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-slate-100 text-[10px] text-text-muted font-mono">
-                        საველე ვიზიტორი
-                      </span>
-                    </div>
-                  </div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="text-text-primary font-medium text-body-sm flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[16px] text-emerald-600">location_on</span>
-                    ადგილზე ვიზიტი &amp; ინსპექცია
-                  </div>
-                  <div className="text-text-muted text-[11px] truncate max-w-xs">
-                    იურიდიულ მისამართზე ქონების და აქტივების ფაქტობრივი გადამოწმება.
-                  </div>
-                </td>
-                <td className="py-3.5 px-4 font-mono text-[12px]">
-                  <div className="text-text-primary">22 ოქტ, 09:00</div>
-                  <div className="text-emerald-700 font-medium">შესრულდა: 24 ოქტ</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-label-sm font-semibold">
-                    <span className="material-symbols-outlined text-[14px]">done_all</span>
-                    შესრულებული
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-text-primary transition-colors" title="დოკუმენტის ნახვა">
-                      <span className="material-symbols-outlined text-[18px]">description</span>
-                    </button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-primary transition-colors" title="არქივი">
-                      <span className="material-symbols-outlined text-[18px]">archive</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              {/* Row 4: Nino Beridze (Risk Analyst - Overdue) */}
-              <tr className="hover:bg-slate-50/70 transition-colors bg-red-50/30">
-                <td className="py-3.5 px-4">
-                  <div className="font-mono font-semibold text-rating-c text-[13px]">#TSK-2024-1041</div>
-                  <div className="text-text-primary font-medium text-body-sm">შპს „აგრო ექსპორტი 2020“</div>
-                  <div className="text-[11px] text-text-muted font-mono">₾ 89,400.00 • ს/კ 412893041</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-red-100 border border-red-200 flex items-center justify-center text-red-700 font-bold text-xs">
-                      ნბ
-                    </div>
-                    <div>
-                      <div className="text-text-primary font-medium text-body-sm">ნინო ბერიძე</div>
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-slate-100 text-[10px] text-text-muted font-mono">
-                        რისკ-ანალიტიკოსი
-                      </span>
-                    </div>
-                  </div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <div className="text-text-primary font-medium text-body-sm flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[16px] text-rating-c">find_in_page</span>
-                    სიღრმისეული Scoring &amp; აუდიტი
-                  </div>
-                  <div className="text-text-muted text-[11px] truncate max-w-xs">
-                    RS.GE ფინანსური ბრუნვების და დღგ-ის დეკლარაციების შედარება.
-                  </div>
-                </td>
-                <td className="py-3.5 px-4 font-mono text-[12px]">
-                  <div className="text-text-primary">20 ოქტ, 11:00</div>
-                  <div className="text-rating-c font-bold">ვადა ამოიწურა (გადაც. 1 დღე)</div>
-                </td>
-                <td className="py-3.5 px-4">
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-rating-c border border-red-200 text-label-sm font-semibold">
-                    <span className="material-symbols-outlined text-[14px]">warning</span>
-                    ვადაგადაცილებული
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-rating-c hover:text-red-700 transition-colors" title="ესკალაცია">
-                      <span className="material-symbols-outlined text-[18px]">crisis_alert</span>
-                    </button>
-                    <button className="p-1.5 rounded hover:bg-slate-100 text-text-muted hover:text-text-primary transition-colors" title="დეტალები">
-                      <span className="material-symbols-outlined text-[18px]">visibility</span>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        {/* Table Pagination Footer */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-body-sm font-body-sm text-text-muted">
-          <div className="">
-            ნაჩვენებია <strong className="text-text-primary font-mono">1-4</strong> დავალება სულ <strong className="text-text-primary font-mono">48</strong>-დან
-          </div>
-          <div className="flex items-center gap-1 font-mono text-[13px]">
-            <button className="px-2.5 py-1 rounded bg-white border border-border-subtle text-text-muted hover:text-text-primary disabled:opacity-50" disabled>
-              წინა
-            </button>
-            <button className="px-3 py-1 rounded bg-primary text-white font-semibold shadow-sm">1</button>
-            <button className="px-3 py-1 rounded bg-white border border-border-subtle hover:text-text-primary">2</button>
-            <button className="px-3 py-1 rounded bg-white border border-border-subtle hover:text-text-primary">3</button>
-            <span className="">...</span>
-            <button className="px-3 py-1 rounded bg-white border border-border-subtle hover:text-text-primary">12</button>
-            <button className="px-2.5 py-1 rounded bg-white border border-border-subtle text-text-muted hover:text-text-primary">
-              შემდეგი
-            </button>
-          </div>
-        </div>
-      </section>
+      <div id="excel-registry-section">
+        <AnalystRegistryManager
+          users={users}
+          excelDebtors={excelDebtors}
+          excelCreditors={excelCreditors}
+          syncingExcel={syncingExcel}
+          loadingData={loadingData}
+          actionSuccessMessage={actionSuccessMessage}
+          onSyncExcel={handleSyncExcel}
+          onRefreshData={loadAnalystData}
+          onDismissMessage={() => setActionSuccessMessage(null)}
+          onAssignRole={handleAssignRole}
+        />
+      </div>
     </main>
   </div>
   {/* ========================================================================= */}
@@ -1100,10 +1170,15 @@ export default function AnalystPage() {
                   პასუხისმგებელი ექსპერტი / ანალიტიკოსი
                 </label>
                 <select className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md text-text-primary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all">
-                  <option value="1">დავით კაპანაძე (მთავარი ანალიტიკოსი)</option>
-                  <option value="2">თეონა პეტრიაშვილი (ქოლ-ცენტრი)</option>
-                  <option value="3">გიორგი მახარაძე (იურისტი)</option>
-                  <option value="4">ლევან კვირიკაშვილი (საველე)</option>
+                  {staffOptions.length === 0 ? (
+                    <option value="">თანამშრომლები იტვირთება...</option>
+                  ) : (
+                    staffOptions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>

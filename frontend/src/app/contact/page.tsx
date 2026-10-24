@@ -27,12 +27,12 @@ export default function ContactPage() {
       </div>
       {/* Navigation Links (Desktop) */}
       <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">სერვისები</a>
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">რეესტრი</a>
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">ტარიფები</a>
-        <a className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="#">ბლოგი</a>
-        {/* Active link: კონტაქტი (JSON exact label match) */}
-        <a className="text-primary dark:text-inverse-primary font-label-md text-label-md border-b-2 border-primary dark:border-inverse-primary pb-1 font-semibold" href="#">კონტაქტი</a>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/">მთავარი გვერდი</Link>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/#services">სერვისები</Link>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/#pricing">ტარიფები</Link>
+        <Link className="text-text-muted dark:text-outline-variant font-label-md text-label-md hover:text-primary dark:hover:text-inverse-primary transition-colors duration-150" href="/#blog">ბლოგი</Link>
+        {/* Active link: კონტაქტი */}
+        <Link className="text-primary dark:text-inverse-primary font-label-md text-label-md border-b-2 border-primary dark:border-inverse-primary pb-1 font-semibold" href="/contact">კონტაქტი</Link>
       </nav>
       {/* Trailing Action Cluster */}
       <div className="flex items-center space-x-3">
@@ -42,13 +42,13 @@ export default function ContactPage() {
           <span className="font-data-mono-md text-data-mono-md">GE</span>
         </button>
         {/* Secondary: შესვლა */}
-        <a className="hidden sm:inline-flex items-center px-4 py-2 rounded-lg text-primary text-body-md font-medium hover:bg-surface-container-low transition-colors duration-150 active:scale-95" href="#">
+        <Link className="hidden sm:inline-flex items-center px-4 py-2 rounded-lg text-primary text-body-md font-medium hover:bg-surface-container-low transition-colors duration-150 active:scale-95" href="/login">
           შესვლა
-        </a>
+        </Link>
         {/* Primary: რეგისტრაცია */}
-        <a className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary-container text-on-primary text-body-md font-medium shadow-sm hover:bg-primary transition-all duration-150 active:scale-95" href="#">
+        <Link className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-primary-container text-on-primary text-body-md font-medium shadow-sm hover:bg-primary transition-all duration-150 active:scale-95" href="/register">
           რეგისტრაცია
-        </a>
+        </Link>
       </div>
     </div>
   </header>

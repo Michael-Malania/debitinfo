@@ -20,11 +20,11 @@ export default function Header() {
   const pathname = usePathname();
 
   const navLinks = [
-    { href: '/', label: 'მთავარი' },
+    { href: '/', label: 'მთავარი გვერდი' },
+    { href: '/#services', label: 'სერვისები' },
     { href: '/about', label: 'ჩვენს შესახებ' },
     { href: '/contact', label: 'კონტაქტი' },
-    { href: '/creditor', label: 'კრედიტორებს' },
-    { href: '/debtor', label: 'მოვალეთა კაბინეტი' },
+    { href: '/dashboard', label: 'პირადი კაბინეტი' },
   ];
 
   return (
@@ -89,7 +89,7 @@ export default function Header() {
 
           {/* Quick Login / Register */}
           <Link
-            href="/debtor"
+            href="/login"
             className="px-3 py-1.5 rounded-lg text-sm font-medium text-text-primary hover:bg-slate-100 transition-colors"
           >
             შესვლა
@@ -132,7 +132,7 @@ export default function Header() {
           </nav>
           <div className="pt-3 border-t border-border-subtle flex flex-col gap-2">
             <Link
-              href="/debtor"
+              href="/login"
               onClick={() => setMobileMenuOpen(false)}
               className="w-full text-center py-2 rounded-lg border border-border-subtle text-sm font-medium text-text-primary hover:bg-slate-50"
             >

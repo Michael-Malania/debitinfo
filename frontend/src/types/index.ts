@@ -113,6 +113,99 @@ export interface LegalCase {
   documentsCount: number;
 }
 
+export interface DetailedLegalCase {
+  id: string;
+  caseNumber: string;
+  claimId: string;
+  claimCaseNumber?: string;
+  agreementNumber?: string;
+  stage: string; // OFFICIAL_WARNING, LAWSUIT_PREPARATION, COURT_PROCEEDINGS, SETTLEMENT, ENFORCEMENT, CLOSED
+  priority: string; // HIGH, MEDIUM, LOW
+  status: string;
+  courtInstance: string;
+  courtCaseNumber?: string;
+  judgeName?: string;
+  enforcementOfficer?: string;
+  courtDutyFee?: number | null;
+  hasSequestration: boolean;
+  settlementTerms?: string;
+  nextHearingDate?: string | null;
+  deadlineDate?: string | null;
+  executionSheetNumber?: string | null;
+  legalOpinion?: string | null;
+  checklistWarningSent: boolean;
+  checklistLawsuitDrafted: boolean;
+  checklistDutyPaid: boolean;
+  documentsCount: number;
+  createdAt: string;
+  updatedAt: string;
+  debtor: {
+    id?: string;
+    name: string;
+    identification: string;
+    isCompany: boolean;
+    legalAddress: string;
+    actualAddress: string;
+    directorName?: string;
+    phone?: string;
+    email?: string;
+    hasMortgage?: boolean;
+    hasSequestration?: boolean;
+  };
+  amounts: {
+    totalClaim: number;
+    principalAmount: number;
+    penaltyAmount: number;
+    daysOverdue: number;
+    riskRating: string;
+    riskScore: number;
+    currency: string;
+  };
+  documents: Array<{
+    id: string;
+    title: string;
+    documentType: string;
+    fileUrl: string;
+    fileSize?: string;
+    isVerified: boolean;
+    createdAt: string;
+  }>;
+  timelineEvents: Array<{
+    id: string;
+    department: string;
+    authorRoleTitle: string;
+    actionType: string;
+    description: string;
+    createdAt: string;
+    author?: {
+      id: string;
+      name: string;
+      role: string;
+    };
+  }>;
+  assignedLawyer?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
+export interface LegalStats {
+  activeCases: number;
+  totalDisputedAmount: number;
+  successfulSettlementRate: number;
+  urgentDeadlinesCount: number;
+  countsByStage: {
+    all: number;
+    court: number;
+    lawsuit: number;
+    settlement: number;
+    enforcement: number;
+    warning: number;
+    closed: number;
+  };
+}
+
 // ==========================================
 // 5. CRM OPERATOR TYPES
 // ==========================================
@@ -160,6 +253,16 @@ export interface FieldVisitTask {
 // 7. HR & ADMIN TYPES
 // ==========================================
 
+export interface ContactPersonInfo {
+  id?: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  relationType?: string;
+}
+
 export interface Employee {
   id: string;
   fullName: string;
@@ -172,6 +275,7 @@ export interface Employee {
   phone: string;
   joinedDate: string;
   lastActive: string;
+  contactPerson?: ContactPersonInfo | null;
 }
 
 export interface SystemPermission {
@@ -200,4 +304,25 @@ export interface FaqItem {
   question: string;
   answer: string;
   category: 'registry' | 'payments' | 'disputes' | 'legal';
+}
+
+// ==========================================
+// 9. BLOG & NEWS CMS TYPES (CRM PUBLISHING)
+// ==========================================
+
+export interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  category: 'financial_literacy' | 'credit_risks' | 'tax_updates' | 'legal_mediation' | 'news';
+  categoryKa: string;
+  excerpt: string;
+  content: string;
+  coverImage?: string;
+  authorName: string;
+  authorRole: string;
+  published: boolean;
+  publishedAt: string;
+  viewsCount: number;
+  tags: string[];
 }

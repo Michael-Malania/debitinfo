@@ -1,34 +1,46 @@
 /**
- * API Client configuration
- *
- * When a separate backend (e.g. FastAPI, Express, NestJS, Go) is deployed,
- * set NEXT_PUBLIC_API_URL in .env.local (e.g. http://localhost:8000/api/v1).
- * If NEXT_PUBLIC_API_URL is omitted, requests hit the Next.js internal API routes.
+ * Debitinfo API Client
+ * Connects Next.js Frontend with NestJS + Fastify Backend
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
   
-  const headers = {
+  let token: string | null = null;
+  if (typeof window !== 'undefined') {
+    token = localStorage.getItem('debitinfo_access_token');
+  }
+
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options?.headers || {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...((options?.headers as Record<string, string>) || {}),
   };
 
   try {
     const res = await fetch(url, {
+      credentials: 'include',
       ...options,
       headers,
     });
 
+    const json = await res.json().catch(() => null);
+
     if (!res.ok) {
-      throw new Error(`API error: ${res.status} ${res.statusText}`);
+      const message = json?.message || json?.error || `API error: ${res.status} ${res.statusText}`;
+      throw new Error(Array.isArray(message) ? message.join(', ') : message);
     }
 
-    return await res.json();
+    // Unpack transform interceptor envelope { success: true, data: T }
+    if (json && typeof json === 'object' && 'data' in json && 'success' in json) {
+      return json.data as T;
+    }
+
+    return json as T;
   } catch (error) {
-    console.warn(`[apiFetch] Fallback/Error on ${url}:`, error);
+    console.warn(`[apiFetch] Request to ${url} failed:`, error);
     throw error;
   }
 }

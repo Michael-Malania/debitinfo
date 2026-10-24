@@ -1,38 +1,99 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { authService, creditorBackendService, AuthUser } from '@/services';
 
-export default function DebtorPage() {
+interface CreditorDashboardViewProps {
+  user: AuthUser;
+}
 
+export default function CreditorDashboardView({ user }: CreditorDashboardViewProps) {
+  const router = useRouter();
+  const [claimsData, setClaimsData] = useState<any>(null);
+  const [loadingData, setLoadingData] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
+  useEffect(() => {
+    let isMounted = true;
+    async function loadClaims() {
+      try {
+        const data = await creditorBackendService.getMyClaims();
+        if (isMounted && data) {
+          setClaimsData(data);
+        }
+      } catch (e) {
+        console.warn('Could not fetch creditor claims:', e);
+      } finally {
+        if (isMounted) setLoadingData(false);
+      }
+    }
+    loadClaims();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await authService.logout();
+    router.push('/login');
+  };
+
+  if (loadingData && !claimsData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-bg">
+        <div className="p-8 rounded-2xl bg-surface-card border border-border-subtle shadow-xl flex flex-col items-center gap-4 text-center max-w-sm">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined text-2xl animate-spin">sync</span>
+          </div>
+          <div>
+            <h3 className="font-headline-sm text-body-md font-semibold text-text-primary">მონაცემების ჩატვირთვა...</h3>
+            <p className="text-body-sm text-text-muted mt-1">მიმდინარეობს თქვენი ორგანიზაციის მოთხოვნების უსაფრთხო ჩატვირთვა</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Real Dynamic Values from Authenticated User & Database
+  const companyName = user?.companyProfile?.companyName || (user?.entityType === 'PHYSICAL' ? `${user.individualProfile?.firstName || ''} ${user.individualProfile?.lastName || ''}`.trim() : null) || user?.email || 'შპს ჯეო ტრეიდინგი';
+  const companyInitials = companyName ? companyName.replace(/შპს|სს|ა\(ა\)იპ|"|„|“/g, '').trim().slice(0, 2).toUpperCase() : 'კრ';
+  const taxId = user?.personalId || user?.companyProfile?.taxId || '405123456';
+
+  const kpis = claimsData?.kpis || {
+    totalPrincipal: 1540,
+    totalRecovered: 650,
+    recoveryRate: 42.2,
+    activeClaimsCount: 1,
+    activeDebtorsCount: 1,
+  };
+
   return (
-    <div className="bg-surface-bg text-text-primary antialiased font-body-md text-body-md min-h-screen flex flex-col">
-<div>
-  {/* ========================================================================= */}
-  {/* TopNavBar (Shared Component JSON Blueprint + Active Dashboard Context)   */}
+    <div className="bg-surface-bg text-text-primary antialiased font-body-md text-body-md min-h-screen flex flex-col" suppressHydrationWarning>
+      {/* ========================================================================= */}
+  {/* TopNavBar (Creditor Dashboard Context)                                   */}
   {/* ========================================================================= */}
   <header className="bg-surface-card sticky top-0 z-50 shadow-sm border-b border-border-subtle">
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo + Segment Indicator */}
       <div className="flex items-center gap-6">
-        <a className="flex items-center gap-2 group" href="/">
+        <Link className="flex items-center gap-2 group" href="/">
           <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
             <span className="material-symbols-outlined text-[20px]" data-icon="account_balance">account_balance</span>
           </div>
           <div className="flex flex-col">
             <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight">Debitinfo.GE</span>
-            <span className="text-[9px] font-label-sm font-semibold tracking-wider text-text-muted uppercase">Fintech Registry Portal</span>
+            <span className="text-[9px] font-label-sm font-semibold tracking-wider text-text-muted uppercase">კრედიტორის კაბინეტი</span>
           </div>
-        </a>
-        {/* Global Navigation Links from JSON (Reესტრი active) */}
+        </Link>
+        {/* Global Navigation Links */}
         <nav className="hidden md:flex items-center space-x-6 ml-4">
-          <a className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="#">სერვისები</a>
-          <a className="text-primary font-label-md text-label-md border-b-2 border-primary pb-1 font-semibold" href="#">რეესტრი</a>
-          <a className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="#">ტარიფები</a>
-          <a className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="#">ბლოგი</a>
-          <a className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="#">კონტაქტი</a>
+          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/#services">სერვისები</Link>
+          <span className="text-primary font-label-md text-label-md border-b-2 border-primary pb-1 font-semibold cursor-pointer">პორტფელი &amp; რეესტრი</span>
+          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/#pricing">ტარიფები</Link>
+          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/#blog">ბლოგი</Link>
+          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/contact">კონტაქტი</Link>
         </nav>
       </div>
       {/* Header Actions: Quick Search, Notifications & Organization Profile */}
@@ -40,10 +101,10 @@ export default function DebtorPage() {
         {/* Live Search Field in Header */}
         <div className="hidden xl:flex items-center relative w-72">
           <span className="material-symbols-outlined absolute left-3 text-text-muted text-[18px]" data-icon="search">search</span>
-          <input className="w-full pl-9 pr-3 py-1.5 bg-surface-bg border border-border-subtle rounded-lg text-body-sm font-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 transition-all" placeholder="პ/ნ (11 ნიშნა), ს/კ (9 ნიშნა) ან სახელი..." type="text" />
+          <input className="w-full pl-9 pr-3 py-1.5 bg-surface-bg border border-border-subtle rounded-lg text-body-sm font-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 transition-all" placeholder="დებიტორის პ/ნ ან ს/კ..." type="text" />
         </div>
         {/* Notification Center with Pulse Indicator */}
-        <button className="relative p-2 rounded-lg hover:bg-surface-container-high/40 text-text-muted hover:text-text-primary transition-colors">
+        <button className="relative p-2 rounded-lg hover:bg-surface-container-high/40 text-text-muted hover:text-text-primary transition-colors" title="შეტყობინებები">
           <span className="material-symbols-outlined text-[22px]" data-icon="notifications">notifications</span>
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rating-c ring-2 ring-white animate-pulse" />
         </button>
@@ -52,20 +113,23 @@ export default function DebtorPage() {
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           <span>RS.GE სინქრონიზაცია</span>
         </div>
-        {/* Language Action from JSON */}
+        {/* Language Action */}
         <button className="p-2 text-text-muted hover:text-primary rounded-lg transition-colors hidden sm:block" title="ენა">
           <span className="material-symbols-outlined text-[20px]" data-icon="language">language</span>
         </button>
         <div className="h-6 w-px bg-border-subtle hidden sm:block" />
         {/* Client Profile Badge */}
         <div className="flex items-center gap-2 pl-1">
-          <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-body-sm">
-            ჯტ
+          <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-body-sm uppercase">
+            <span>{companyInitials}</span>
           </div>
           <div className="hidden lg:flex flex-col text-left">
-            <span className="text-body-sm font-semibold text-text-primary leading-tight">შპს ჯეო ტრეიდინგი</span>
-            <span className="text-[10px] text-text-muted font-label-sm">ს/კ 405123456</span>
+            <span className="text-body-sm font-semibold text-text-primary leading-tight truncate max-w-[180px]">{companyName}</span>
+            <span className="text-[10px] text-text-muted font-label-sm">ს/კ {taxId}</span>
           </div>
+          <button onClick={handleLogout} className="p-1.5 ml-1 rounded-lg text-text-muted hover:text-error hover:bg-error-container/20 transition-colors active:scale-95 cursor-pointer" title="გამოსვლა" type="button">
+            <span className="material-symbols-outlined text-[18px]">logout</span>
+          </button>
         </div>
       </div>
     </div>
@@ -83,28 +147,28 @@ export default function DebtorPage() {
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-headline-md font-headline-md font-bold text-text-primary">შპს „ჯეო ტრეიდინგ გრუპი“</h1>
+              <h1 className="text-headline-md font-headline-md font-bold text-text-primary">{companyName}</h1>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-800 text-[11px] font-semibold border border-emerald-500/20">
                 <span className="material-symbols-outlined text-[14px]" data-icon="verified">verified</span>
-                აქტიური — ვერიფიცირებული RS.GE-ით
+                {user?.isRsVerified ? 'აქტიური — ვერიფიცირებული RS.GE-ით' : 'RS.GE ვერიფიკაცია მოლოდინში'}
               </span>
             </div>
             <div className="flex items-center gap-4 mt-1 text-body-sm text-text-muted flex-wrap">
-              <span>საიდენტიფიკაციო კოდი: <strong className="font-data-mono-md text-text-primary">405123456</strong></span>
+              <span>საიდენტიფიკაციო კოდი: <strong className="font-data-mono-md text-text-primary">{taxId}</strong></span>
               <span className="hidden sm:inline">•</span>
-              <span>სისტემური როლი: <span className="font-medium text-text-primary">დებიტორი / დამკვეთი</span></span>
+              <span>სისტემური როლი: <span className="font-semibold text-primary">კრედიტორი / დამკვეთი (გამსესხებელი)</span></span>
               <span className="hidden sm:inline">•</span>
-              <span>ხელშეკრულება: <span className="font-data-mono-md text-text-primary">#DB-2024-890</span></span>
+              <span>სტატუსი: <span className="font-data-mono-md text-emerald-600 font-semibold">{user?.status || 'ACTIVE'}</span></span>
             </div>
           </div>
         </div>
         {/* High-Priority Operations / Actions */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <button className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border-subtle bg-surface-card hover:bg-surface-bg text-text-primary font-medium text-body-sm shadow-sm transition-all active:scale-95">
+          <button className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border-subtle bg-surface-card hover:bg-surface-bg text-text-primary font-medium text-body-sm shadow-sm transition-all active:scale-95 cursor-pointer">
             <span className="material-symbols-outlined text-[18px] text-text-muted" data-icon="file_download">file_download</span>
             <span>რეესტრის ექსპორტი (CSV/XLS)</span>
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container hover:bg-on-primary-fixed-variant text-white font-medium text-body-sm shadow-sm transition-all active:scale-95">
+          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container hover:bg-on-primary-fixed-variant text-white font-medium text-body-sm shadow-sm transition-all active:scale-95 cursor-pointer">
             <span className="material-symbols-outlined text-[18px]" data-icon="upload_file">upload_file</span>
             <span>Excel რეესტრის ატვირთვა</span>
           </button>
@@ -128,13 +192,13 @@ export default function DebtorPage() {
         </div>
         <div className="mt-3">
           <div className="text-headline-lg font-headline-lg font-bold text-text-primary font-data-mono-lg tracking-tight">
-            ₾ 150,000.00
+            ₾ {kpis.totalPrincipal.toLocaleString()}
           </div>
           <div className="flex items-center gap-1.5 mt-2 text-body-sm text-text-muted">
             <span className="inline-flex items-center text-emerald-600 font-semibold text-[11px] bg-emerald-50 px-1.5 py-0.5 rounded">
-              <span className="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> +12%
+              <span className="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span> რეალური ბაზა
             </span>
-            <span>სულ 24 მოვალე რეესტრში</span>
+            <span>სულ {kpis.activeDebtorsCount} დებიტორი რეესტრში</span>
           </div>
         </div>
       </div>
@@ -149,12 +213,12 @@ export default function DebtorPage() {
         </div>
         <div className="mt-3">
           <div className="text-headline-lg font-headline-lg font-bold text-emerald-800 font-data-mono-lg tracking-tight flex items-center gap-2">
-            ₾ 62,450.00
-            <span className="text-xs px-2 py-0.5 rounded-full bg-accent-mint/20 text-emerald-900 font-bold border border-accent-mint/40">41.6%</span>
+            ₾ {kpis.totalRecovered.toLocaleString()}
+            <span className="text-xs px-2 py-0.5 rounded-full bg-accent-mint/20 text-emerald-900 font-bold border border-accent-mint/40">{kpis.recoveryRate}%</span>
           </div>
           {/* Progress Bar */}
           <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden border border-border-subtle">
-            <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{width: '41.6%'}} />
+            <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{width: `${kpis.recoveryRate}%`}} />
           </div>
         </div>
       </div>
@@ -168,11 +232,11 @@ export default function DebtorPage() {
         </div>
         <div className="mt-3">
           <div className="text-headline-lg font-headline-lg font-bold text-amber-600 font-data-mono-lg tracking-tight">
-            ₾ 87,550.00
+            ₾ {Math.max(0, kpis.totalPrincipal - kpis.totalRecovered).toLocaleString()}
           </div>
           <div className="flex items-center gap-1.5 mt-2 text-body-sm text-text-muted">
             <span className="inline-flex items-center text-amber-700 font-semibold text-[11px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-              <span className="material-symbols-outlined text-[13px] mr-0.5" data-icon="warning">warning</span> 9 ვადაგადაცილებული
+              <span className="material-symbols-outlined text-[13px] mr-0.5" data-icon="warning">warning</span> {kpis.activeClaimsCount} აქტიური საქმე
             </span>
             <span>აქტიური მონიტორინგი</span>
           </div>
@@ -199,15 +263,13 @@ export default function DebtorPage() {
     </section>
     {/* 2. Dual Workspace: Master Data Table + Live Debtor Inspector Drawer */}
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* ========================================================================= */}
-      {/* Left/Center Column: Master Debtors Registry (7 Cols on desktop)           */}
-      {/* ========================================================================= */}
+      {/* Left/Center Column: Master Debtors Registry (7 Cols on desktop) */}
       <div className="lg:col-span-7 bg-surface-card rounded-xl border border-border-subtle shadow-sm flex flex-col">
         {/* Table Header & Controls */}
         <div className="p-5 border-b border-border-subtle flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h2 className="text-headline-sm font-headline-sm font-bold text-text-primary flex items-center gap-2">
-              მევალეთა სრული რეესტრი
+              დებიტორთა (მოვალეთა) სრული რეესტრი
               <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold font-data-mono-md">24</span>
             </h2>
             <p className="text-body-sm text-text-muted mt-0.5">მონაცემები ავტომატურად განახლებულია სამოქალაქო რეესტრიდან</p>
@@ -221,7 +283,7 @@ export default function DebtorPage() {
         {/* Filter Tabs */}
         <div className="px-5 pt-3 border-b border-border-subtle flex items-center space-x-2 overflow-x-auto">
           <button className="px-3 py-2 text-body-sm font-semibold text-primary border-b-2 border-primary whitespace-nowrap">
-            ყველა მოვალე (24)
+            ყველა დებიტორი (24)
           </button>
           <button className="px-3 py-2 text-body-sm text-text-muted hover:text-text-primary whitespace-nowrap">
             ვადაგადაცილებული (9)
@@ -238,7 +300,7 @@ export default function DebtorPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-border-subtle text-text-muted text-[11px] uppercase tracking-wider font-semibold">
-                <th className="py-3 px-4">მოვალე / საიდენტ.</th>
+                <th className="py-3 px-4">დებიტორი (მოვალე) / საიდენტ.</th>
                 <th className="py-3 px-4 text-right">საწყისი ვალი</th>
                 <th className="py-3 px-4 text-right">დარჩენილი</th>
                 <th className="py-3 px-3 text-center">რისკი</th>
@@ -274,7 +336,7 @@ export default function DebtorPage() {
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="დეტალები">
+                  <button className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer" title="დეტალები">
                     <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
                   </button>
                 </td>
@@ -303,7 +365,7 @@ export default function DebtorPage() {
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors" title="დეტალები">
+                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
                     <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
                   </button>
                 </td>
@@ -332,7 +394,7 @@ export default function DebtorPage() {
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors" title="დეტალები">
+                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
                     <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
                   </button>
                 </td>
@@ -361,7 +423,7 @@ export default function DebtorPage() {
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors" title="დეტალები">
+                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
                     <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
                   </button>
                 </td>
@@ -390,7 +452,7 @@ export default function DebtorPage() {
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors" title="დეტალები">
+                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
                     <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
                   </button>
                 </td>
@@ -414,9 +476,7 @@ export default function DebtorPage() {
           </div>
         </div>
       </div>
-      {/* ========================================================================= */}
-      {/* Right Column: Debtor Detail Card & Real-Time Settlement Ledger            */}
-      {/* ========================================================================= */}
+      {/* Right Column: Debtor Detail Card & Real-Time Settlement Ledger */}
       <div className="lg:col-span-5 bg-surface-card rounded-xl border border-border-subtle shadow-sm flex flex-col space-y-6 p-6">
         {/* Inspector Header: Identity & Contact Coordinates */}
         <div>
@@ -432,7 +492,7 @@ export default function DebtorPage() {
                     Grade B (ზომიერი რისკი)
                   </span>
                 </div>
-                <div className="font-data-mono-md text-body-sm text-text-muted mt-0.5">პ/ნ: 01019012345</div>
+                <div className="font-data-mono-md text-body-sm text-text-muted mt-0.5">პ/ნ: 01019012345 (დებიტორი)</div>
               </div>
             </div>
             {/* Detail Action Menu */}
@@ -544,17 +604,17 @@ export default function DebtorPage() {
         </div>
         {/* Debtor Quick Interventions */}
         <div className="pt-2 border-t border-border-subtle flex flex-col gap-2">
-          <span className="text-body-sm font-medium text-text-muted">ოპერატიული მოქმედებები:</span>
+          <span className="text-body-sm font-medium text-text-muted">ოპერატიული მოქმედებები დებიტორზე:</span>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-text-primary text-body-sm font-medium transition-colors">
+            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-text-primary text-body-sm font-medium transition-colors cursor-pointer">
               <span className="material-symbols-outlined text-[18px] text-blue-600" data-icon="sms">sms</span>
               <span>SMS შეტყობინება</span>
             </button>
-            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-text-primary text-body-sm font-medium transition-colors">
+            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-text-primary text-body-sm font-medium transition-colors cursor-pointer">
               <span className="material-symbols-outlined text-[18px] text-rose-600" data-icon="picture_as_pdf">picture_as_pdf</span>
               <span>ამონაწერი PDF</span>
             </button>
-            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-rose-700 hover:border-rose-200 text-body-sm font-medium transition-colors">
+            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-rose-700 hover:border-rose-200 text-body-sm font-medium transition-colors cursor-pointer">
               <span className="material-symbols-outlined text-[18px]" data-icon="gavel">gavel</span>
               <span>იურისტს გადაცემა</span>
             </button>
@@ -579,7 +639,7 @@ export default function DebtorPage() {
         </div>
         <div>
           <h4 className="font-semibold text-text-primary text-body-md">256-bit საბანკო დაშიფვრა</h4>
-          <p className="text-body-sm text-text-muted mt-1">დამკვეთის მონაცემთა ბაზა დაცულია საერთაშორისო საბანკო PCI-DSS სტანდარტების შესაბამისად.</p>
+          <p className="text-body-sm text-text-muted mt-1">კრედიტორის მონაცემთა ბაზა დაცულია საერთაშორისო საბანკო PCI-DSS სტანდარტების შესაბამისად.</p>
         </div>
       </div>
       <div className="bg-surface-card p-5 rounded-xl border border-border-subtle shadow-sm flex items-start gap-4">
@@ -587,15 +647,13 @@ export default function DebtorPage() {
           <span className="material-symbols-outlined text-[24px]" data-icon="schedule">schedule</span>
         </div>
         <div>
-          <h4 className="font-semibold text-text-primary text-body-md">ავტომატური SMS/Email შეხსენებები</h4>
+          <h4 className="font-semibold text-text-primary text-body-md">ავტომატური შეხსენებები</h4>
           <p className="text-body-sm text-text-muted mt-1">ვადაგადაცილების შემთხვევაში სისტემა გრაფიკის მიხედვით აგზავნის ოფიციალურ შეტყობინებებს.</p>
         </div>
       </div>
     </section>
   </main>
-  {/* ========================================================================= */}
-  {/* Footer (Shared Component JSON Blueprint)                                  */}
-  {/* ========================================================================= */}
+  {/* Footer */}
   <footer className="bg-surface-card border-t border-border-subtle mt-12">
     <div className="w-full max-w-7xl mx-auto px-4 lg:px-8 py-12 flex flex-col gap-8">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-border-subtle">
@@ -605,7 +663,6 @@ export default function DebtorPage() {
           </div>
           <span className="text-headline-sm font-headline-sm font-bold text-primary">Debitinfo.GE</span>
         </div>
-        {/* Links Exact from JSON Blueprint */}
         <nav className="flex flex-wrap items-center gap-6">
           <a className="text-text-muted text-body-sm font-body-sm hover:text-primary transition-colors duration-150 hover:underline" href="#">კონფიდენციალურობის პოლიტიკა</a>
           <a className="text-text-muted text-body-sm font-body-sm hover:text-primary transition-colors duration-150 hover:underline" href="#">მომსახურების პირობები</a>
@@ -614,7 +671,6 @@ export default function DebtorPage() {
           <a className="text-text-muted text-body-sm font-body-sm hover:text-primary transition-colors duration-150 hover:underline" href="#">საკონტაქტო პირი</a>
         </nav>
       </div>
-      {/* Copyright text verbatim from JSON */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-body-sm font-body-sm text-text-muted">
         <p>© 2024 Debitinfo.GE. ყველა უფლება დაცულია. ინტეგრირებულია RS.GE სისტემასთან.</p>
         <div className="flex items-center gap-3 text-label-sm font-label-sm">
@@ -627,8 +683,6 @@ export default function DebtorPage() {
       </div>
     </div>
   </footer>
-</div>
-
     </div>
   );
 }

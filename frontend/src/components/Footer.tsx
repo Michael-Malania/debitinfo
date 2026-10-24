@@ -30,8 +30,7 @@ export default function Footer() {
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-white uppercase tracking-wider">მოდულები</h4>
             <ul className="space-y-2 text-xs">
-              <li><Link href="/creditor" className="hover:text-white transition-colors">კრედიტორის კაბინეტი</Link></li>
-              <li><Link href="/debtor" className="hover:text-white transition-colors">მოვალის კაბინეტი & დავები</Link></li>
+              <li><Link href="/dashboard" className="hover:text-white transition-colors">პირადი კაბინეტი (Dashboard)</Link></li>
               <li><Link href="/profile" className="hover:text-white transition-colors">სუფთა საკრედიტო პროფილი (A)</Link></li>
               <li><Link href="/analyst" className="hover:text-white transition-colors">რისკების ანალიტიკოსის კონსოლი</Link></li>
               <li><Link href="/legal" className="hover:text-white transition-colors">იურიდიული საქმისწარმოება</Link></li>
