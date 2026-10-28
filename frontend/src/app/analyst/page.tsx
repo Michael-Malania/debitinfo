@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
 import AnalystRegistryManager from '@/components/analyst/AnalystRegistryManager';
+import { downloadDebtorTemplateXLSX, parseDebtorExcelFile } from '@/utils/excel';
 
 export default function AnalystPage() {
   const router = useRouter();
@@ -86,60 +87,7 @@ export default function AnalystPage() {
   };
 
   const handleDownloadDebtorTemplate = () => {
-    const headers = [
-      'სუბიექტის ტიპი (LEGAL / PHYSICAL)',
-      'საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა)',
-      'პირადი ნომერი (პ/ნ 11 ნიშნა)',
-      'სრული დასახელება / სახელი და გვარი',
-      'ტელეფონი',
-      'ელ-ფოსტა',
-      'იურიდიული მისამართი',
-      'ფაქტობრივი მისამართი',
-      'საწყისი დავალიანება (GEL)',
-      'ვადაგადაცილების დღეები',
-      'ხელშეკრულების №',
-    ];
-    const sampleRows = [
-      [
-        'LEGAL',
-        '405118492',
-        '01019012345',
-        'შპს კავკასუს ტრანს სერვისი',
-        '+995 591 442299',
-        'info@cts-georgia.ge',
-        'ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა',
-        'ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა',
-        '48500.00',
-        '65',
-        'AGR-8841',
-      ],
-      [
-        'PHYSICAL',
-        '',
-        '01024089123',
-        'დავით კვირიკაშვილი',
-        '+995 599 112233',
-        'davit.k@gmail.com',
-        'ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12',
-        'ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12',
-        '3200.00',
-        '42',
-        'AGR-7714',
-      ],
-    ];
-    const csvContent = '\uFEFF' + [
-      headers.join(','),
-      ...sampleRows.map((r) => r.map((c) => `"${c}"`).join(',')),
-    ].join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'debitinfo_debtors_import_template.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadDebtorTemplateXLSX();
   };
 
   const handleVerifyDebtor = async (id: string) => {
@@ -160,46 +108,23 @@ export default function AnalystPage() {
   const handleAnalystImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const text = evt.target?.result as string;
-        const lines = text.split(/\r?\n/).filter(Boolean);
-        const newDebtors: any[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(',').map((c) => c.replace(/^"|"$/g, '').trim());
-          if (cols.length >= 4) {
-            newDebtors.push({
-              entityType: cols[0] || 'PHYSICAL',
-              taxId: cols[1] || '',
-              personalId: cols[2] || cols[1] || `0101${Math.floor(1000000 + Math.random() * 9000000)}`,
-              name: cols[3] || 'დებიტორი',
-              phone: cols[4] || '+995 599 00 00 00',
-              email: cols[5] || '',
-              legalAddress: cols[6] || '',
-              actualAddress: cols[7] || cols[6] || '',
-              amount: parseFloat(cols[8]) || 1500,
-              overdueDays: parseInt(cols[9]) || 30,
-              agreementNumber: cols[10] || `AGR-${Date.now().toString().slice(-5)}`,
-              status: 'VERIFIED',
-              sourceFile: file.name,
-            });
-          }
-        }
-        if (newDebtors.length > 0) {
-          await analystBackendService.syncExcelData(newDebtors);
-          setActionSuccessMessage(`Excel-დან წარმატებით ჩაიტვირთა ${newDebtors.length} დებიტორი!`);
-          setTimeout(() => setActionSuccessMessage(null), 5000);
-          await loadAnalystData();
-        } else {
-          alert('ფაილში მონაცემები ვერ მოიძებნა. გთხოვთ გამოიყენოთ შაბლონი.');
-        }
-      } catch (err) {
-        alert('ფაილის წაკითხვა ვერ მოხერხდა. გადაამოწმეთ ფაილის ფორმატი.');
+    try {
+      const parsed = await parseDebtorExcelFile(file);
+      const newDebtors = parsed.map((d) => ({ ...d, status: 'VERIFIED' }));
+      if (newDebtors.length > 0) {
+        await analystBackendService.syncExcelData(newDebtors);
+        setActionSuccessMessage(`Excel (.xlsx) ფაილიდან წარმატებით ჩაიტვირთა ${newDebtors.length} დებიტორი!`);
+        setTimeout(() => setActionSuccessMessage(null), 5000);
+        await loadAnalystData();
+      } else {
+        alert('ფაილში მონაცემები ვერ მოიძებნა. გთხოვთ გამოიყენოთ შაბლონი (.xlsx).');
       }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+    } catch (err) {
+      console.error('Analyst import error:', err);
+      alert('ფაილის წაკითხვა ვერ მოხერხდა. გადაამოწმეთ ფაილის ფორმატი (.xlsx / .xls).');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const handleDispatchTask = async (e: React.FormEvent) => {
@@ -1791,18 +1716,18 @@ export default function AnalystPage() {
               type="button"
               onClick={handleDownloadDebtorTemplate}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-[#0A37CA] bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-              title="შაბლონის ჩამოტვირთვა"
+              title="შაბლონის ჩამოტვირთვა (.xlsx)"
             >
               <span className="material-symbols-outlined text-[16px] text-emerald-600">download</span>
-              <span>შაბლონის ჩამოტვირთვა (.xlsx / .csv)</span>
+              <span>შაბლონის ჩამოტვირთვა (.xlsx)</span>
             </button>
 
             <label className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-primary bg-white border border-border-subtle px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
               <span className="material-symbols-outlined text-[16px] text-emerald-600">upload_file</span>
-              <span>Excel ფაილის იმპორტი</span>
+              <span>Excel ფაილის იმპორტი (.xlsx / .xls)</span>
               <input
                 type="file"
-                accept=".csv, .xlsx, .xls"
+                accept=".xlsx, .xls, .csv"
                 className="hidden"
                 onChange={handleAnalystImportExcel}
               />
