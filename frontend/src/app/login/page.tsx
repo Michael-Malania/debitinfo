@@ -12,7 +12,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [rsLoading, setRsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,25 +52,6 @@ export default function LoginPage() {
       setPassword('Debitinfo2024!');
     }
     setError('');
-  };
-
-  const handleRsGeSSO = async () => {
-    setRsLoading(true);
-    setError('');
-    try {
-      // In sandbox mode, simulates RS.GE Single Sign-On authorization key
-      const mockKey = `rs-sso-${entityType === 'legal' ? '405123456' : '01019012345'}`;
-      const res = await authService.rsGeVerify(
-        mockKey,
-        entityType === 'legal' ? 'CREDITOR' : 'DEBTOR'
-      );
-      const target = authService.getPortalRouteForRole(res.user.role);
-      router.push(target);
-    } catch (err: any) {
-      setError(err?.message || 'RS.GE სინქრონიზაცია ვერ მოხერხდა');
-    } finally {
-      setRsLoading(false);
-    }
   };
 
   return (
@@ -171,7 +151,7 @@ export default function LoginPage() {
                 className="px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold hover:bg-emerald-100 transition shadow-2xs text-[11px] truncate"
                 title="ჩვეულებრივი იურიდიული პირი (შპს ბათუმი თრეიდი)"
               >
-                🏢 კომპანია (A)
+                🏢 იურიდიული პირი
               </button>
               <button
                 type="button"
@@ -288,23 +268,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* RS.GE SSO Button */}
-          <div className="mt-4 pt-4 border-t border-border-subtle">
-            <button
-              type="button"
-              onClick={handleRsGeSSO}
-              disabled={rsLoading}
-              className="w-full py-2.5 px-3 rounded-lg border border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer shadow-2xs"
-            >
-              {rsLoading ? (
-                <span className="w-3.5 h-3.5 border-2 border-slate-400 border-t-slate-800 rounded-full animate-spin" />
-              ) : (
-                <span className="material-symbols-outlined text-primary-container text-base">verified_user</span>
-              )}
-              <span>RS.GE Single Sign-On ავტორიზაცია (Sandbox)</span>
-            </button>
-          </div>
 
           {/* Register CTA */}
           <div className="mt-4 pt-4 border-t border-border-subtle text-center">
