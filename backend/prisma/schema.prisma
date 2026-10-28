@@ -387,6 +387,20 @@ model PaymentReceipt {
   @@index([status])
 }
 
+model ClaimStatusConfig {
+  code        String    @id // e.g. "ACTIVE", "OVERDUE", "IN_LITIGATION", "SETTLED", "CLEAN", "DISPUTED", "RESTRUCTURED"
+  label       String    // Georgian label e.g. "აქტიური"
+  bgClass     String    // Tailwind class e.g. "bg-emerald-100"
+  textClass   String    // Tailwind class e.g. "text-emerald-800"
+  borderClass String    // Tailwind class e.g. "border-emerald-200"
+  badgeClass  String    // Combined badge class e.g. "bg-emerald-100 text-emerald-800 border-emerald-200"
+  colorHex    String    // Hex color code e.g. "#059669"
+  description String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
 model Dispute {
   id              String          @id @default(uuid())
   claimId         String

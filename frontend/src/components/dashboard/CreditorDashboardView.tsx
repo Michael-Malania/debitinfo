@@ -3,7 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { authService, creditorBackendService, paymentsService, PaymentReceiptItem, AuthUser } from '@/services';
+import {
+  authService,
+  creditorBackendService,
+  paymentsService,
+  PaymentReceiptItem,
+  AuthUser,
+  getClaimStatusBadge,
+  ClaimStatusConfigItem,
+} from '@/services';
 
 interface CreditorDashboardViewProps {
   user: AuthUser;
@@ -287,11 +295,7 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         <div className="flex items-center gap-2.5 shrink-0">
           <button className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border-subtle bg-surface-card hover:bg-surface-bg text-text-primary font-medium text-body-sm shadow-sm transition-all active:scale-95 cursor-pointer">
             <span className="material-symbols-outlined text-[18px] text-text-muted" data-icon="file_download">file_download</span>
-            <span>რეესტრის ექსპორტი (CSV/XLS)</span>
-          </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container hover:bg-on-primary-fixed-variant text-white font-medium text-body-sm shadow-sm transition-all active:scale-95 cursor-pointer">
-            <span className="material-symbols-outlined text-[18px]" data-icon="upload_file">upload_file</span>
-            <span>Excel რეესტრის ატვირთვა</span>
+            <span>დებიტორთა რეესტრის ექსპორტი</span>
           </button>
         </div>
       </div>
@@ -357,9 +361,8 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
           </div>
           <div className="flex items-center gap-1.5 mt-2 text-body-sm text-text-muted">
             <span className="inline-flex items-center text-amber-700 font-semibold text-[11px] bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-              <span className="material-symbols-outlined text-[13px] mr-0.5" data-icon="warning">warning</span> {kpis.activeClaimsCount} აქტიური საქმე
+              <span className="material-symbols-outlined text-[13px] mr-0.5" data-icon="warning">warning</span> აქტიური მონიტორინგი
             </span>
-            <span>აქტიური მონიტორინგი</span>
           </div>
         </div>
       </div>
@@ -452,8 +455,8 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-800">
-                    გრაფიკი
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).badgeClass}`}>
+                    {getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).label}
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
@@ -481,8 +484,8 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-medium bg-rose-100 text-rose-800">
-                    სამართლებრივი
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).badgeClass}`}>
+                    {getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).label}
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
@@ -510,8 +513,8 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-100 text-emerald-800">
-                    აქტიური
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
+                    {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
@@ -539,8 +542,8 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700">
-                    დაფარული
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).badgeClass}`}>
+                    {getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).label}
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">
@@ -568,8 +571,8 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-medium bg-blue-100 text-blue-800">
-                    აქტიური
+                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
+                    {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
                   </span>
                 </td>
                 <td className="py-3.5 px-3 text-right">

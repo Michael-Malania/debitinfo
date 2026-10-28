@@ -108,6 +108,25 @@ export class ClaimsService {
 
     const recoveryRate = totalPrincipal > 0 ? (totalRecovered / totalPrincipal) * 100 : 0;
 
+    const dbConfigs = await this.prisma.claimStatusConfig.findMany();
+    const statusConfigsMap: Record<string, any> = {};
+    dbConfigs.forEach((cfg) => {
+      statusConfigsMap[cfg.code] = cfg;
+    });
+
+    const enrichedClaims = claims.map((c) => ({
+      ...c,
+      statusConfig: statusConfigsMap[c.status] || {
+        code: c.status,
+        label: c.status,
+        bgClass: 'bg-emerald-100',
+        textClass: 'text-emerald-800',
+        borderClass: 'border-emerald-200',
+        badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        colorHex: '#059669',
+      },
+    }));
+
     return {
       kpis: {
         totalPrincipal,
@@ -116,8 +135,18 @@ export class ClaimsService {
         activeClaimsCount: claims.length,
         activeDebtorsCount: activeDebtorsCount.size,
       },
-      claims,
+      statusConfigs: statusConfigsMap,
+      claims: enrichedClaims,
     };
+  }
+
+  /**
+   * Get all database-driven claim status configurations
+   */
+  async getStatusConfigs() {
+    return this.prisma.claimStatusConfig.findMany({
+      orderBy: { code: 'asc' },
+    });
   }
 
   /**

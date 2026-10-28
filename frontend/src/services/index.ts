@@ -616,6 +616,113 @@ export const debtorBackendService = {
   }
 };
 
+export interface ClaimStatusConfigItem {
+  code: string;
+  label: string;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+  badgeClass: string;
+  colorHex: string;
+  description?: string;
+}
+
+export const CLAIM_STATUS_CONFIGS: Record<string, ClaimStatusConfigItem> = {
+  ACTIVE: {
+    code: 'ACTIVE',
+    label: 'აქტიური',
+    bgClass: 'bg-emerald-100',
+    textClass: 'text-emerald-800',
+    borderClass: 'border-emerald-200',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    colorHex: '#059669',
+  },
+  OVERDUE: {
+    code: 'OVERDUE',
+    label: 'ვადაგადაცილებული',
+    bgClass: 'bg-amber-100',
+    textClass: 'text-amber-800',
+    borderClass: 'border-amber-200',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+    colorHex: '#d97706',
+  },
+  IN_LITIGATION: {
+    code: 'IN_LITIGATION',
+    label: 'სამართლებრივი',
+    bgClass: 'bg-rose-100',
+    textClass: 'text-rose-800',
+    borderClass: 'border-rose-200',
+    badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+    colorHex: '#e11d48',
+  },
+  SETTLED: {
+    code: 'SETTLED',
+    label: 'დაფარული',
+    bgClass: 'bg-slate-100',
+    textClass: 'text-slate-700',
+    borderClass: 'border-slate-200',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    colorHex: '#64748b',
+  },
+  CLEAN: {
+    code: 'CLEAN',
+    label: 'სუფთა',
+    bgClass: 'bg-emerald-50',
+    textClass: 'text-emerald-700',
+    borderClass: 'border-emerald-300',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+    colorHex: '#10b981',
+  },
+  DISPUTED: {
+    code: 'DISPUTED',
+    label: 'სადავო',
+    bgClass: 'bg-purple-100',
+    textClass: 'text-purple-800',
+    borderClass: 'border-purple-200',
+    badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+    colorHex: '#7c3aed',
+  },
+  RESTRUCTURED: {
+    code: 'RESTRUCTURED',
+    label: 'გრაფიკი',
+    bgClass: 'bg-blue-100',
+    textClass: 'text-blue-800',
+    borderClass: 'border-blue-200',
+    badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+    colorHex: '#2563eb',
+  },
+};
+
+export function getClaimStatusBadge(
+  statusCode: string,
+  dynamicConfigs?: Record<string, ClaimStatusConfigItem>
+): ClaimStatusConfigItem {
+  const normalized = statusCode?.toUpperCase();
+  if (dynamicConfigs && dynamicConfigs[normalized]) {
+    return dynamicConfigs[normalized];
+  }
+  if (CLAIM_STATUS_CONFIGS[normalized]) {
+    return CLAIM_STATUS_CONFIGS[normalized];
+  }
+  // Fallback for custom or Georgian text labels
+  if (statusCode === 'აქტიური') return CLAIM_STATUS_CONFIGS.ACTIVE;
+  if (statusCode === 'ვადაგადაცილებული') return CLAIM_STATUS_CONFIGS.OVERDUE;
+  if (statusCode === 'სამართლებრივი') return CLAIM_STATUS_CONFIGS.IN_LITIGATION;
+  if (statusCode === 'დაფარული') return CLAIM_STATUS_CONFIGS.SETTLED;
+  if (statusCode === 'გრაფიკი') return CLAIM_STATUS_CONFIGS.RESTRUCTURED;
+  if (statusCode === 'სადავო') return CLAIM_STATUS_CONFIGS.DISPUTED;
+
+  return {
+    code: statusCode,
+    label: statusCode,
+    bgClass: 'bg-slate-100',
+    textClass: 'text-slate-700',
+    borderClass: 'border-slate-200',
+    badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+    colorHex: '#64748b',
+  };
+}
+
 export const creditorBackendService = {
   async getMyClaims(): Promise<{
     kpis: {
@@ -625,10 +732,15 @@ export const creditorBackendService = {
       activeClaimsCount: number;
       activeDebtorsCount: number;
     };
+    statusConfigs?: Record<string, ClaimStatusConfigItem>;
     claims: any[];
   }> {
     return await apiFetch('/api/v1/creditor/my-claims');
-  }
+  },
+
+  async getStatusConfigs(): Promise<ClaimStatusConfigItem[]> {
+    return await apiFetch('/api/v1/claims/status-configs');
+  },
 };
 
 export const analystBackendService = {

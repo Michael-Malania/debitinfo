@@ -30,6 +30,11 @@ export class ClaimsController {
     return this.claimsService.getCreditorClaims(user.id);
   }
 
+  @Get('claims/status-configs')
+  async getStatusConfigs() {
+    return this.claimsService.getStatusConfigs();
+  }
+
   @Post('debtor/claims/:id/dispute')
   @Roles(UserRole.DEBTOR, UserRole.ADMIN)
   async openDispute(

@@ -1060,6 +1060,89 @@ async function main() {
   });
   console.log('✅ Real CRM Call Logs provisioned for operator@debitinfo.ge');
 
+  // 13. Seed Claim Status Configurations (Single Source of Truth for Status Colors)
+  const statusConfigs = [
+    {
+      code: 'ACTIVE',
+      label: 'აქტიური',
+      bgClass: 'bg-emerald-100',
+      textClass: 'text-emerald-800',
+      borderClass: 'border-emerald-200',
+      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      colorHex: '#059669',
+      description: 'აქტიური საქმე რეგულარული მონიტორინგის ქვეშ',
+    },
+    {
+      code: 'OVERDUE',
+      label: 'ვადაგადაცილებული',
+      bgClass: 'bg-amber-100',
+      textClass: 'text-amber-800',
+      borderClass: 'border-amber-200',
+      badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+      colorHex: '#d97706',
+      description: 'დავალიანების ვადაგადაცილებული სტატუსი',
+    },
+    {
+      code: 'IN_LITIGATION',
+      label: 'სამართლებრივი',
+      bgClass: 'bg-rose-100',
+      textClass: 'text-rose-800',
+      borderClass: 'border-rose-200',
+      badgeClass: 'bg-rose-100 text-rose-800 border-rose-200',
+      colorHex: '#e11d48',
+      description: 'სასამართლო ან სააღსრულებო წარმოებაში გადაცემული საქმე',
+    },
+    {
+      code: 'SETTLED',
+      label: 'დაფარული',
+      bgClass: 'bg-slate-100',
+      textClass: 'text-slate-700',
+      borderClass: 'border-slate-200',
+      badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
+      colorHex: '#64748b',
+      description: 'სრულად დაფარული და დახურული საქმე',
+    },
+    {
+      code: 'CLEAN',
+      label: 'სუფთა',
+      bgClass: 'bg-emerald-50',
+      textClass: 'text-emerald-700',
+      borderClass: 'border-emerald-300',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-300',
+      colorHex: '#10b981',
+      description: 'დავალიანების გარეშე სუფთა პროფილი',
+    },
+    {
+      code: 'DISPUTED',
+      label: 'სადავო',
+      bgClass: 'bg-purple-100',
+      textClass: 'text-purple-800',
+      borderClass: 'border-purple-200',
+      badgeClass: 'bg-purple-100 text-purple-800 border-purple-200',
+      colorHex: '#7c3aed',
+      description: 'დებიტორის ან კრედიტორის მიერ გახსნილი დავის სტატუსი',
+    },
+    {
+      code: 'RESTRUCTURED',
+      label: 'გრაფიკი',
+      bgClass: 'bg-blue-100',
+      textClass: 'text-blue-800',
+      borderClass: 'border-blue-200',
+      badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+      colorHex: '#2563eb',
+      description: 'რესტრუქტურიზებული გადანაწილებული გადახდის გრაფიკი',
+    },
+  ];
+
+  for (const cfg of statusConfigs) {
+    await prisma.claimStatusConfig.upsert({
+      where: { code: cfg.code },
+      update: cfg,
+      create: cfg,
+    });
+  }
+  console.log('✅ Claim Status Configurations seeded in Database!');
+
   console.log('🎉 Seeding successfully completed! Default password for all seed accounts: Debitinfo2024!');
 }
 
