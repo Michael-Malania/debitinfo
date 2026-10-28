@@ -10,6 +10,7 @@ import { OpsModule } from './modules/ops/ops.module';
 import { LegalModule } from './modules/legal/legal.module';
 import { VisitsModule } from './modules/visits/visits.module';
 import { CrmModule } from './modules/crm/crm.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
@@ -30,6 +31,7 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
     LegalModule,
     VisitsModule,
     CrmModule,
+    PaymentsModule,
   ],
   providers: [
     {

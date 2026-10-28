@@ -17,7 +17,8 @@ import {
   PhoneCall, 
   Users, 
   X,
-  Layers
+  Layers,
+  ReceiptText
 } from 'lucide-react';
 
 interface PortalLink {
@@ -37,6 +38,7 @@ const PORTALS: PortalLink[] = [
   { href: '/crm', nameKa: 'CRM ოპერატორის საკოლცენტრე', badge: 'CRM', icon: <Headphones className="w-4 h-4" /> },
   { href: '/profile', nameKa: 'სუფთა საკრედიტო პროფილი (A)', badge: 'Prime', icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
   { href: '/field-officer', nameKa: 'საველე ოფიცრის სამუშაო პანელი', badge: 'Field Ops', icon: <MapPin className="w-4 h-4" /> },
+  { href: '/accountant', nameKa: 'ბუღალტრის სამუშაო კაბინეტი (გადახდები & დასტური)', badge: 'Finance', icon: <ReceiptText className="w-4 h-4 text-amber-400" /> },
   { href: '/about', nameKa: 'ჩვენს შესახებ & მედიაცია', badge: 'About', icon: <Info className="w-4 h-4" /> },
   { href: '/contact', nameKa: 'კონტაქტი & ცხელი ხაზი', badge: 'Contact', icon: <PhoneCall className="w-4 h-4" /> },
   { href: '/hr', nameKa: 'HR & სისტემური ადმინისტრატორი', badge: 'Admin', icon: <Users className="w-4 h-4" /> },

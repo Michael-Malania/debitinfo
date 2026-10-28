@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { authService, creditorBackendService, AuthUser } from '@/services';
+import { authService, creditorBackendService, paymentsService, PaymentReceiptItem, AuthUser } from '@/services';
 
 interface CreditorDashboardViewProps {
   user: AuthUser;
@@ -14,6 +14,14 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
   const [claimsData, setClaimsData] = useState<any>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Payment receipts & confirmation states
+  const [receipts, setReceipts] = useState<PaymentReceiptItem[]>([]);
+  const [pendingReceipts, setPendingReceipts] = useState<PaymentReceiptItem[]>([]);
+  const [selectedReceiptForConfirm, setSelectedReceiptForConfirm] = useState<PaymentReceiptItem | null>(null);
+  const [confirmFile, setConfirmFile] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [confirmSuccess, setConfirmSuccess] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -29,11 +37,124 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         if (isMounted) setLoadingData(false);
       }
     }
+
+    async function loadReceipts() {
+      try {
+        const res = await paymentsService.getCreditorPayments();
+        if (isMounted && res) {
+          setReceipts(res.receipts);
+          setPendingReceipts(res.receipts.filter(r => r.status === 'PENDING_CONFIRMATION'));
+        }
+      } catch (err) {
+        console.warn('Could not load creditor receipts:', err);
+      }
+    }
+
     loadClaims();
+    loadReceipts();
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const handleConfirmByCreditor = async () => {
+    if (!selectedReceiptForConfirm) return;
+    setConfirming(true);
+    try {
+      const updated = await paymentsService.confirmByCreditor(
+        selectedReceiptForConfirm.id,
+        confirmFile ? `/receipts/${confirmFile}` : undefined,
+      );
+      setReceipts(prev => prev.map(r => r.id === updated.id ? updated : r));
+      setPendingReceipts(prev => prev.filter(r => r.id !== updated.id));
+      setConfirmSuccess(true);
+      setTimeout(() => {
+        setConfirmSuccess(false);
+        setSelectedReceiptForConfirm(null);
+        setConfirmFile('');
+      }, 1500);
+    } catch (err: any) {
+      alert(err?.message || 'დადასტურება ვერ მოხერხდა');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const openOfficialDocument = (receipt: PaymentReceiptItem) => {
+    const isAccountant = receipt.status === 'CONFIRMED_BY_ACCOUNTANT';
+    const docWindow = window.open('', '_blank');
+    if (!docWindow) return;
+
+    docWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="ka">
+      <head>
+        <meta charset="utf-8">
+        <title>${isAccountant ? 'ბუღალტრის დასტურის ბრძანება' : 'თანხის მიღების დადასტურების ქვითარი'} - #${receipt.receiptNumber}</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #0f172a; line-height: 1.6; max-width: 800px; margin: 0 auto; }
+          .header { border-bottom: 2px solid ${isAccountant ? '#b45309' : '#002984'}; padding-bottom: 20px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+          .brand { font-size: 22px; font-weight: bold; color: ${isAccountant ? '#b45309' : '#002984'}; }
+          .badge { background: ${isAccountant ? '#fef3c7' : '#ecfdf5'}; color: ${isAccountant ? '#92400e' : '#065f46'}; border: 1px solid ${isAccountant ? '#fde68a' : '#a7f3d0'}; padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: bold; }
+          .title { font-size: 20px; font-weight: bold; text-align: center; margin: 25px 0 8px; color: #0f172a; }
+          .subtitle { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 25px; }
+          .table { width: 100%; border-collapse: collapse; margin: 25px 0; }
+          .table th, .table td { border: 1px solid #e2e8f0; padding: 12px 16px; text-align: left; font-size: 14px; }
+          .table th { background: #f8fafc; font-weight: 600; width: 38%; color: #475569; }
+          .amount-tag { font-size: 18px; font-weight: bold; color: #059669; }
+          .stamp-box { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+          .stamp { border: 2px dashed ${isAccountant ? '#b45309' : '#002984'}; padding: 15px 25px; border-radius: 8px; text-align: center; color: ${isAccountant ? '#b45309' : '#002984'}; font-weight: bold; font-size: 13px; line-height: 1.5; }
+          .qr-box { font-size: 12px; color: #64748b; text-align: right; line-height: 1.5; }
+          @media print { .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="brand">Debitinfo.GE • ფინანსური მოდული</div>
+          <div class="badge">${isAccountant ? '✓ ბუღალტრის დასტური (#' + (receipt.accountantOrderNumber || '') + ')' : '✓ კრედიტორის ოფიციალური დასტური'}</div>
+        </div>
+        <div class="title">${isAccountant ? 'ბუღალტრული დასტურის ბრძანება' : 'თანხის მიღების დადასტურების ქვითარი'}</div>
+        <div class="subtitle">ვალდებულების ნაწილობრივი/სრული დაფარვის აღრიცხვის აქტი</div>
+        
+        <table class="table">
+          <tr><th>ქვითრის / ტრანზაქციის #</th><td><strong>#${receipt.receiptNumber}</strong></td></tr>
+          <tr><th>დებიტორი (გადამხდელი)</th><td>${receipt.debtorName}</td></tr>
+          <tr><th>კრედიტორი (მიმღები)</th><td>${receipt.creditorName}</td></tr>
+          <tr><th>გადახდილი თანხა</th><td class="amount-tag">${Number(receipt.amount).toLocaleString('ka-GE')} ₾</td></tr>
+          <tr><th>გადახდის თარიღი</th><td>${new Date(receipt.paymentDate).toLocaleDateString('ka-GE')}</td></tr>
+          <tr><th>დადასტურების სტატუსი</th><td><strong style="color: #059669;">${isAccountant ? 'დადასტურებულია ბუღალტრის მიერ' : 'დადასტურებულია კრედიტორის მიერ'}</strong></td></tr>
+          <tr><th>დამადასტურებელი პირი</th><td>${receipt.confirmedByUserName || 'ავტორიზებული პირი'}</td></tr>
+          ${isAccountant ? `<tr><th>ბუღალტრის ბრძანების #</th><td><strong>${receipt.accountantOrderNumber || 'ACC-ORD-2026'}</strong></td></tr>` : ''}
+          ${isAccountant && receipt.accountantOrderNotes ? `<tr><th>ბუღალტრის საფუძველი</th><td>${receipt.accountantOrderNotes}</td></tr>` : ''}
+          ${receipt.debtorNotes ? `<tr><th>დებიტორის დანიშნულება</th><td>${receipt.debtorNotes}</td></tr>` : ''}
+          <tr><th>დადასტურების თარიღი</th><td>${receipt.confirmedAt ? new Date(receipt.confirmedAt).toLocaleString('ka-GE') : new Date().toLocaleString('ka-GE')}</td></tr>
+        </table>
+
+        <p style="font-size: 13px; color: #475569; margin-top: 20px;">
+          დოკუმენტი ადასტურებს, რომ დებიტორის მიერ განხორციელებული გადარიცხვის ქვითარი შემოწმებულია და თანხის მიღება ოფიციალურად ასახულია Debitinfo.GE-ის ერთიან რეესტრში.
+        </p>
+
+        <div class="stamp-box">
+          <div class="stamp">
+            DEBITINFO.GE<br>
+            ${isAccountant ? 'ფინანსური & ბუღალტრული განყოფილება<br>✓ ბრძანება ძალაშია' : 'კრედიტორის დასტური<br>✓ გადახდა მიღებულია'}
+          </div>
+          <div class="qr-box">
+            დოკუმენტის უნიკალური ID: ${receipt.id}<br>
+            გენერირებულია სისტემიდან: ${new Date().toLocaleDateString('ka-GE')}
+          </div>
+        </div>
+
+        <div class="no-print" style="margin-top: 35px; text-align: center;">
+          <button onclick="window.print()" style="padding: 12px 28px; background: ${isAccountant ? '#b45309' : '#002984'}; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer;">
+            🖨️ ბეჭდვა / PDF შენახვა
+          </button>
+        </div>
+      </body>
+      </html>
+    `);
+    docWindow.document.close();
+  };
 
   const handleLogout = async () => {
     await authService.logout();
@@ -542,116 +663,216 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
             </div>
           </div>
         </div>
-        {/* Chronological Settlement Ledger */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-body-md font-semibold text-text-primary flex items-center gap-1.5">
+        {/* 2.2 Payment Receipts & Pending Verifications (Point 3, 4, 8) */}
+        <div className="space-y-4 pt-1">
+          {/* Real-time Notification Banner when debtor submits receipt */}
+          {pendingReceipts.length > 0 && (
+            <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-50/70 to-amber-500/10 border-2 border-dashed border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[22px]">notifications_active</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-body-md text-text-primary flex items-center gap-2">
+                    <span>შეტყობინება გადახდის შესახებ</span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">
+                      {pendingReceipts.length} ახალი ქვითარი
+                    </span>
+                  </h4>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    დებიტორმა განახორციელა თანხის შემოტანა და ატვირთა ქვითარი. გთხოვთ გადაამოწმოთ და დაადასტუროთ თანხის მიღება.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedReceiptForConfirm(pendingReceipts[0])}
+                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all self-start sm:self-auto cursor-pointer"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-sm">verified</span>
+                <span>მიღების დადასტურება</span>
+              </button>
+            </div>
+          )}
+
+          {/* Pending Submissions Queue */}
+          {pendingReceipts.length > 0 && (
+            <div className="p-4 rounded-xl bg-blue-50/40 border border-blue-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                  დასადასტურებელი გადახდები (მოლოდინშია)
+                </span>
+                <span className="text-xs font-data-mono-md text-text-muted">
+                  {pendingReceipts.length} განაცხადი
+                </span>
+              </div>
+              <div className="space-y-2">
+                {pendingReceipts.map((pr) => (
+                  <div
+                    key={pr.id}
+                    className="p-3 rounded-lg bg-white border border-border-subtle hover:border-primary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-base">receipt</span>
+                      </div>
+                      <div>
+                        <div className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
+                          <span>{pr.debtorName}</span>
+                          <span className="font-data-mono-md font-bold text-emerald-700">+{Number(pr.amount).toLocaleString('ka-GE')} ₾</span>
+                        </div>
+                        <div className="text-[11px] text-text-muted font-data-mono-md">
+                          #{pr.receiptNumber} • {new Date(pr.paymentDate).toLocaleDateString('ka-GE')} • {pr.debtorNotes || 'ქვითარი ატვირთულია'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <button
+                        onClick={() => setSelectedReceiptForConfirm(pr)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                        type="button"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                        <span>თანხის მიღების დადასტურება</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Historical Payments Log (Clean Neutral - Point 8) */}
+          <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+            <h4 className="font-semibold text-text-primary text-body-sm flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[18px] text-primary" data-icon="history">history</span>
-              გადახდების ქრონოლოგიური ისტორია
+              გადახდების ქრონოლოგიური ისტორია &amp; დადასტურებები
             </h4>
-            <span className="text-[11px] font-label-sm text-text-muted">სულ 3 ტრანზაქცია</span>
+            <span className="text-[11px] font-label-sm text-text-muted">
+              სულ {receipts.length} ტრანზაქცია
+            </span>
           </div>
+
           <div className="space-y-2.5">
-            {/* Payment 1 */}
-            <div className="p-3 rounded-lg bg-surface-card border border-border-subtle hover:border-slate-300 transition-all flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[18px]" data-icon="add_card">add_card</span>
-                </div>
-                <div>
-                  <div className="text-body-sm font-semibold text-text-primary">საბანკო გადარიცხვა TBC Bank</div>
-                  <div className="text-[11px] text-text-muted font-label-sm">10 თებერვალი, 2025 • ტრანზაქცია #TX-9023</div>
-                </div>
+            {receipts.length === 0 ? (
+              <div className="p-4 rounded-lg bg-slate-50 text-center text-xs text-text-muted">
+                გადახდების ისტორია ჯერ არ ფიქსირდება
               </div>
-              <div className="text-right">
-                <div className="font-data-mono-md font-bold text-emerald-600 text-body-sm">+1,000.00 ₾</div>
-                <div className="text-[10px] text-text-muted font-data-mono-md">ნაშთი: 2,200.00 ₾</div>
-              </div>
-            </div>
-            {/* Payment 2 */}
-            <div className="p-3 rounded-lg bg-surface-card border border-border-subtle hover:border-slate-300 transition-all flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[18px]" data-icon="account_balance">account_balance</span>
-                </div>
-                <div>
-                  <div className="text-body-sm font-semibold text-text-primary">საბანკო გადარიცხვა BOG</div>
-                  <div className="text-[11px] text-text-muted font-label-sm">25 იანვარი, 2025 • ტრანზაქცია #TX-8812</div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-data-mono-md font-bold text-emerald-600 text-body-sm">+800.00 ₾</div>
-                <div className="text-[10px] text-text-muted font-data-mono-md">ნაშთი: 3,200.00 ₾</div>
-              </div>
-            </div>
-            {/* Payment 3 */}
-            <div className="p-3 rounded-lg bg-surface-card border border-border-subtle hover:border-slate-300 transition-all flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[18px]" data-icon="paid">paid</span>
-                </div>
-                <div>
-                  <div className="text-body-sm font-semibold text-text-primary">პირველი შენატანი (შეთანხმება)</div>
-                  <div className="text-[11px] text-text-muted font-label-sm">10 იანვარი, 2025 • ტრანზაქცია #TX-8401</div>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-data-mono-md font-bold text-emerald-600 text-body-sm">+1,000.00 ₾</div>
-                <div className="text-[10px] text-text-muted font-data-mono-md">ნაშთი: 4,000.00 ₾</div>
-              </div>
-            </div>
+            ) : (
+              receipts.map((r) => {
+                const isConfirmedCreditor = r.status === 'CONFIRMED_BY_CREDITOR';
+                const isConfirmedAccountant = r.status === 'CONFIRMED_BY_ACCOUNTANT';
+                const isPending = r.status === 'PENDING_CONFIRMATION';
+
+                return (
+                  <div
+                    key={r.id}
+                    className="p-3.5 rounded-xl bg-surface-card border border-border-subtle hover:border-slate-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                          isPending
+                            ? 'bg-amber-100 text-amber-800'
+                            : isConfirmedAccountant
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {isPending ? 'schedule' : isConfirmedAccountant ? 'account_balance' : 'verified'}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="text-body-sm font-semibold text-text-primary flex items-center gap-2 flex-wrap">
+                          <span>{r.debtorName}</span>
+                          <span className="text-xs text-text-muted font-data-mono-md">
+                            • {new Date(r.paymentDate).toLocaleDateString('ka-GE')}
+                          </span>
+                          <span className="text-xs text-text-muted font-data-mono-md">
+                            • ტრანზაქცია #{r.receiptNumber}
+                          </span>
+                        </div>
+                        {/* Who confirmed (Point 8) */}
+                        <div className="text-xs mt-1">
+                          {isPending && (
+                            <span className="text-amber-700 font-medium flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              მოლოდინშია (დასადასტურებელია თქვენს ან ბუღალტრის მიერ)
+                            </span>
+                          )}
+                          {isConfirmedCreditor && (
+                            <span className="text-emerald-700 font-medium flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">check_circle</span>
+                              დადასტურებულია თქვენს (კრედიტორის) მიერ
+                            </span>
+                          )}
+                          {isConfirmedAccountant && (
+                            <span className="text-blue-700 font-medium flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">verified</span>
+                              დადასტურებულია ბუღალტრის მიერ (ბრძანება #{r.accountantOrderNumber || 'ACC-ORD'})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 self-end sm:self-center">
+                      <div className="text-right">
+                        <div className="font-data-mono-md font-bold text-emerald-600 text-body-sm">
+                          +{Number(r.amount).toLocaleString('ka-GE')} ₾
+                        </div>
+                      </div>
+                      {!isPending && (
+                        <button
+                          onClick={() => openOfficialDocument(r)}
+                          className="px-2.5 py-1.5 rounded-lg border border-border-subtle hover:bg-slate-50 text-primary text-xs font-medium flex items-center gap-1 shadow-2xs cursor-pointer"
+                          type="button"
+                          title={isConfirmedAccountant ? 'ბუღალტრის დასტურის ბრძანება (PDF)' : 'ქვითრის ჩამოტვირთვა'}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">
+                            {isConfirmedAccountant ? 'picture_as_pdf' : 'download'}
+                          </span>
+                          <span className="hidden md:inline">
+                            {isConfirmedAccountant ? 'ბრძანება (PDF)' : 'ქვითარი'}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
-        {/* Debtor Quick Interventions */}
-        <div className="pt-2 border-t border-border-subtle flex flex-col gap-2">
-          <span className="text-body-sm font-medium text-text-muted">ოპერატიული მოქმედებები დებიტორზე:</span>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-text-primary text-body-sm font-medium transition-colors cursor-pointer">
-              <span className="material-symbols-outlined text-[18px] text-blue-600" data-icon="sms">sms</span>
-              <span>SMS შეტყობინება</span>
-            </button>
-            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-text-primary text-body-sm font-medium transition-colors cursor-pointer">
+
+        {/* Debtor Quick Interventions (SMS & Lawyer buttons removed as requested) */}
+        <div className="pt-2 border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span className="text-body-sm font-medium text-text-muted">ოპერატიული დოკუმენტები:</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => alert('სრული ამონაწერი (PDF) მომზადდა წარმატებით!')}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-text-primary text-body-sm font-medium transition-colors cursor-pointer"
+              type="button"
+            >
               <span className="material-symbols-outlined text-[18px] text-rose-600" data-icon="picture_as_pdf">picture_as_pdf</span>
               <span>ამონაწერი PDF</span>
             </button>
-            <button className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border-subtle hover:bg-slate-50 text-rose-700 hover:border-rose-200 text-body-sm font-medium transition-colors cursor-pointer">
-              <span className="material-symbols-outlined text-[18px]" data-icon="gavel">gavel</span>
-              <span>იურისტს გადაცემა</span>
-            </button>
+            {pendingReceipts.length > 0 && (
+              <button
+                onClick={() => setSelectedReceiptForConfirm(pendingReceipts[0])}
+                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-body-sm font-medium transition-colors cursor-pointer"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-[18px]">verified</span>
+                <span>თანხის მიღების დადასტურება</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
     </div>
-    {/* 3. Risk Intelligence & Analytics Overview */}
-    <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-      <div className="bg-surface-card p-5 rounded-xl border border-border-subtle shadow-sm flex items-start gap-4">
-        <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-600 shrink-0">
-          <span className="material-symbols-outlined text-[24px]" data-icon="security_update_good">security_update_good</span>
-        </div>
-        <div>
-          <h4 className="font-semibold text-text-primary text-body-md">ავტომატური RS.GE სინქრონიზაცია</h4>
-          <p className="text-body-sm text-text-muted mt-1">ყველა საგადასახადო ინვოისი და ელექტრონული სასაქონლო ზედნადები მოწმდება რეალურ დროში.</p>
-        </div>
-      </div>
-      <div className="bg-surface-card p-5 rounded-xl border border-border-subtle shadow-sm flex items-start gap-4">
-        <div className="p-3 rounded-lg bg-primary/10 text-primary shrink-0">
-          <span className="material-symbols-outlined text-[24px]" data-icon="shield">shield</span>
-        </div>
-        <div>
-          <h4 className="font-semibold text-text-primary text-body-md">256-bit საბანკო დაშიფვრა</h4>
-          <p className="text-body-sm text-text-muted mt-1">კრედიტორის მონაცემთა ბაზა დაცულია საერთაშორისო საბანკო PCI-DSS სტანდარტების შესაბამისად.</p>
-        </div>
-      </div>
-      <div className="bg-surface-card p-5 rounded-xl border border-border-subtle shadow-sm flex items-start gap-4">
-        <div className="p-3 rounded-lg bg-amber-500/10 text-amber-600 shrink-0">
-          <span className="material-symbols-outlined text-[24px]" data-icon="schedule">schedule</span>
-        </div>
-        <div>
-          <h4 className="font-semibold text-text-primary text-body-md">ავტომატური შეხსენებები</h4>
-          <p className="text-body-sm text-text-muted mt-1">ვადაგადაცილების შემთხვევაში სისტემა გრაფიკის მიხედვით აგზავნის ოფიციალურ შეტყობინებებს.</p>
-        </div>
-      </div>
-    </section>
   </main>
   {/* Footer */}
   <footer className="bg-surface-card border-t border-border-subtle mt-12">
@@ -683,6 +904,127 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
       </div>
     </div>
   </footer>
+
+  {/* ================= Creditor Payment Confirmation Modal ================= */}
+  {selectedReceiptForConfirm && (
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-surface-card rounded-2xl max-w-lg w-full p-6 border border-border-subtle shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+        <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <span className="material-symbols-outlined text-2xl">verified</span>
+            <h3 className="font-bold text-headline-sm text-text-primary">თანხის მიღების დადასტურება</h3>
+          </div>
+          <button
+            onClick={() => {
+              setSelectedReceiptForConfirm(null);
+              setConfirmFile('');
+            }}
+            className="p-1 rounded-lg hover:bg-slate-100 text-text-muted cursor-pointer"
+            type="button"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        {confirmSuccess ? (
+          <div className="p-6 text-center space-y-2">
+            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+              <span className="material-symbols-outlined text-2xl">check</span>
+            </div>
+            <h4 className="font-bold text-text-primary">გადახდა წარმატებით დადასტურდა!</h4>
+            <p className="text-body-sm text-text-muted">მონაცემები განახლდა დებიტორის, კრედიტორისა და ბუღალტრის ერთიან რეესტრში.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-body-sm text-text-muted">
+              გადაამოწმეთ დებიტორის მიერ გადმორიცხული თანხა და ატვირთეთ თქვენი დადასტურების ქვითარი ან საბანკო ამონაწერი.
+            </p>
+
+            {/* Debtor Submission Summary */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-border-subtle space-y-2 text-body-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">დებიტორი:</span>
+                <span className="font-semibold text-text-primary">{selectedReceiptForConfirm.debtorName}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">გადახდილი თანხა:</span>
+                <span className="font-bold font-data-mono-md text-emerald-700 text-body-md">
+                  +{Number(selectedReceiptForConfirm.amount).toLocaleString('ka-GE')} ₾
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-muted">თარიღი &amp; ქვითარი:</span>
+                <span className="font-data-mono-md text-text-primary">
+                  #{selectedReceiptForConfirm.receiptNumber} • {new Date(selectedReceiptForConfirm.paymentDate).toLocaleDateString('ka-GE')}
+                </span>
+              </div>
+              {selectedReceiptForConfirm.debtorNotes && (
+                <div className="pt-1 text-xs text-text-muted italic border-t border-slate-200">
+                  „{selectedReceiptForConfirm.debtorNotes}“
+                </div>
+              )}
+            </div>
+
+            {/* Confirmation proof upload */}
+            <div className="space-y-1.5">
+              <label className="block text-body-sm font-semibold text-text-primary">
+                დადასტურების ქვითარი / საბანკო ამონაწერი (PDF, JPG)
+              </label>
+              <div className="border-2 border-dashed border-border-subtle hover:border-emerald-500 rounded-xl p-3 text-center bg-white cursor-pointer relative">
+                <input
+                  type="file"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) setConfirmFile(file.name);
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                />
+                <div className="flex flex-col items-center gap-1">
+                  <span className="material-symbols-outlined text-xl text-emerald-600">upload_file</span>
+                  <span className="text-xs font-medium text-text-primary">
+                    {confirmFile ? `არჩეულია: ${confirmFile}` : 'დააჭირეთ ან ჩააგდეთ დადასტურების ფაილი'}
+                  </span>
+                  <span className="text-[10px] text-text-muted">საბანკო ამონაწერი ან ჩარიცხვის სქრინშოტი</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-border-subtle">
+              <button
+                onClick={() => {
+                  setSelectedReceiptForConfirm(null);
+                  setConfirmFile('');
+                }}
+                className="px-4 py-2 rounded-lg border border-border-subtle text-text-primary hover:bg-slate-50 text-body-sm font-medium transition-colors cursor-pointer"
+                type="button"
+              >
+                გაუქმება
+              </button>
+              <button
+                onClick={handleConfirmByCreditor}
+                disabled={confirming}
+                className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-body-sm font-semibold transition-all shadow-md active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-75"
+                type="button"
+              >
+                {confirming ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>მოწმდება...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">verified</span>
+                    <span>თანხის მიღების დადასტურება</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )}
     </div>
   );
 }

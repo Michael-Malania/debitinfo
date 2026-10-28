@@ -254,6 +254,34 @@ async function main() {
   });
   console.log('✅ Field Visitor provisioned:', visitor.email);
 
+  // 7.2.1 Chief Accountant (Financial Accounting & Payment Orders: მარიამ წიკლაური)
+  const accountant = await prisma.user.upsert({
+    where: { email: 'accountant@debitinfo.ge' },
+    update: {},
+    create: {
+      email: 'accountant@debitinfo.ge',
+      passwordHash,
+      personalId: '01019044556',
+      entityType: EntityType.PHYSICAL,
+      role: UserRole.ACCOUNTANT,
+      phone: '+995 32 2 100 208',
+      isRsVerified: true,
+      status: 'ACTIVE',
+      staffProfile: {
+        create: {
+          fullName: 'მარიამ წიკლაური',
+          firstName: 'მარიამ',
+          lastName: 'წიკლაური',
+          department: 'Financial & Accounting',
+          internalExt: '108',
+          legalAddress: 'ქ. თბილისი, ჭავჭავაძის გამზ. 42',
+          actualAddress: 'ქ. თბილისი, ჭავჭავაძის გამზ. 42',
+        },
+      },
+    },
+  });
+  console.log('✅ Accountant provisioned:', accountant.email);
+
   // 7.3 Real Debtor 1 - შპს "ორიონ ტექნოლოჯი" (LTD, Tax ID: 405128991)
   const debtorOrion = await prisma.user.upsert({
     where: { email: 'orion@tech.ge' },
@@ -519,6 +547,73 @@ async function main() {
     }
   });
   console.log('✅ Real Debt Claim provisioned:', claim.caseNumber, '(Remaining: 890.00 GEL)');
+
+  // 9.1 Seed Payment Receipts (Point 8: Creditor & Accountant manual confirmations)
+  await prisma.paymentReceipt.upsert({
+    where: { receiptNumber: 'REC-2025-09023' },
+    update: {},
+    create: {
+      claimId: claim.id,
+      debtorId: debtor.id,
+      debtorName: 'გიორგი ბერიძე',
+      creditorId: creditor.id,
+      creditorName: 'შპს ჯეო ტრეიდინგი',
+      amount: 1000.00,
+      paymentDate: new Date('2025-02-10T11:30:00Z'),
+      receiptNumber: 'REC-2025-09023',
+      receiptFileUrl: '/receipts/sample_transfer_receipt_9023.pdf',
+      debtorNotes: 'იანვარ-თებერვლის ნაწილობრივი გადახდა (1,000 ₾)',
+      status: 'CONFIRMED_BY_CREDITOR',
+      confirmedByRole: UserRole.CREDITOR,
+      confirmedByUserId: creditor.id,
+      confirmedByUserName: 'შპს ჯეო ტრეიდინგი (კრედიტორი)',
+      confirmationReceiptUrl: '/receipts/creditor_confirmation_proof_9023.pdf',
+      confirmedAt: new Date('2025-02-10T14:45:00Z'),
+    },
+  });
+
+  await prisma.paymentReceipt.upsert({
+    where: { receiptNumber: 'REC-2025-08812' },
+    update: {},
+    create: {
+      claimId: claim.id,
+      debtorId: debtor.id,
+      debtorName: 'გიორგი ბერიძე',
+      creditorId: creditor.id,
+      creditorName: 'შპს ჯეო ტრეიდინგი',
+      amount: 800.00,
+      paymentDate: new Date('2025-01-25T15:20:00Z'),
+      receiptNumber: 'REC-2025-08812',
+      receiptFileUrl: '/receipts/sample_transfer_receipt_8812.pdf',
+      debtorNotes: 'იანვრის შენატანი 800 ₾',
+      status: 'CONFIRMED_BY_ACCOUNTANT',
+      confirmedByRole: UserRole.ACCOUNTANT,
+      confirmedByUserId: accountant.id,
+      confirmedByUserName: 'მარიამ წიკლაური (მთავარი ბუღალტერი)',
+      accountantOrderNumber: 'ACC-ORD-2025-0142',
+      accountantOrderNotes: 'დადასტურებულია კრედიტორის სატელეფონო დასტურის საფუძველზე',
+      confirmedAt: new Date('2025-01-26T10:15:00Z'),
+    },
+  });
+
+  await prisma.paymentReceipt.upsert({
+    where: { receiptNumber: 'REC-2026-0041' },
+    update: {},
+    create: {
+      claimId: claim.id,
+      debtorId: debtor.id,
+      debtorName: 'გიორგი ბერიძე',
+      creditorId: creditor.id,
+      creditorName: 'შპს ჯეო ტრეიდინგი',
+      amount: 300.00,
+      paymentDate: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
+      receiptNumber: 'REC-2026-0041',
+      receiptFileUrl: '/receipts/debtor_transfer_receipt_300.pdf',
+      debtorNotes: 'ოქტომბრის მიმდინარე გადახდა 300 ₾, გთხოვთ დაადასტუროთ მიღება.',
+      status: 'PENDING_CONFIRMATION',
+    },
+  });
+  console.log('✅ Payment Receipts provisioned with pending & confirmed states');
 
   // 10. Provision 5 Production-Grade Relational Legal Cases & Dossiers
   // Case 1: #LEG-2025-084 (Orion Technology)

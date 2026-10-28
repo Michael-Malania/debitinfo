@@ -13,6 +13,8 @@ function getTargetRouteByRole(role?: string): string {
       return '/crm';
     case 'FIELD_OFFICER':
       return '/field-officer';
+    case 'ACCOUNTANT':
+      return '/accountant';
     case 'CREDITOR':
     case 'DEBTOR':
     case 'REGULAR':
@@ -107,7 +109,20 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 7. Client Dashboard (/dashboard) - Regular Users, Debtors, Creditors & Admin
+  // 7. Accountant Console (/accountant) - Accountants & Admins only
+  if (pathname === '/accountant' || pathname.startsWith('/accountant/')) {
+    if (!accessToken) {
+      const opsUrl = new URL('/ops', request.url);
+      opsUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(opsUrl);
+    }
+    if (userRole && userRole !== 'ACCOUNTANT' && userRole !== 'ADMIN') {
+      return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // 8. Client Dashboard (/dashboard) - Regular Users, Debtors, Creditors & Admin
   if (pathname === '/dashboard' || pathname.startsWith('/dashboard/')) {
     if (!accessToken) {
       const loginUrl = new URL('/login', request.url);
@@ -115,7 +130,7 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     // Staff members should not view customer debt claims cabinet; send them to staff portal
-    if (userRole && ['LEGAL', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER'].includes(userRole)) {
+    if (userRole && ['LEGAL', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'ACCOUNTANT'].includes(userRole)) {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
     }
     return NextResponse.next();

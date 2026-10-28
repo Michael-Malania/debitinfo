@@ -24,7 +24,7 @@ export default function UnifiedDashboardPage() {
           return;
         }
         // If staff member accidentally hits client dashboard, redirect to their specialized console
-        if (['LEGAL', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER'].includes(currentUser.role)) {
+        if (['LEGAL', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'ACCOUNTANT'].includes(currentUser.role)) {
           const dest = authService.getPortalRouteForRole(currentUser.role);
           router.replace(dest);
           return;

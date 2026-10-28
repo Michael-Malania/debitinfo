@@ -443,7 +443,7 @@ export interface AuthUser {
   email: string;
   personalId: string;
   entityType: 'PHYSICAL' | 'LEGAL';
-  role: 'ADMIN' | 'CREDITOR' | 'DEBTOR' | 'ANALYST' | 'LEGAL' | 'OPERATOR' | 'FIELD_OFFICER' | 'REGULAR';
+  role: 'ADMIN' | 'CREDITOR' | 'DEBTOR' | 'ANALYST' | 'LEGAL' | 'OPERATOR' | 'FIELD_OFFICER' | 'ACCOUNTANT' | 'REGULAR';
   status?: string;
   phone?: string;
   isRsVerified: boolean;
@@ -578,6 +578,8 @@ export const authService = {
         return '/crm';
       case 'FIELD_OFFICER':
         return '/field-officer';
+      case 'ACCOUNTANT':
+        return '/accountant';
       case 'CREDITOR':
       case 'DEBTOR':
       case 'REGULAR':
@@ -774,7 +776,7 @@ export const opsBackendService = {
     personalId: string;
     legalAddress?: string;
     actualAddress?: string;
-    role: 'ADMIN' | 'ANALYST' | 'OPERATOR' | 'FIELD_OFFICER' | 'LEGAL';
+    role: 'ADMIN' | 'ANALYST' | 'OPERATOR' | 'FIELD_OFFICER' | 'LEGAL' | 'ACCOUNTANT';
     department?: string;
     phone?: string;
     password?: string;
@@ -812,5 +814,93 @@ export const opsBackendService = {
 
   async getStats(): Promise<any> {
     return await apiFetch('/api/v1/ops/stats');
+  },
+};
+
+// ==========================================
+// PAYMENTS & RECEIPT VERIFICATION SERVICE
+// ==========================================
+export interface PaymentReceiptItem {
+  id: string;
+  claimId: string;
+  debtorId: string;
+  debtorName: string;
+  creditorId: string;
+  creditorName: string;
+  amount: number;
+  currency: string;
+  paymentDate: string;
+  receiptNumber: string;
+  receiptFileUrl?: string;
+  debtorNotes?: string;
+  status: 'PENDING_CONFIRMATION' | 'CONFIRMED_BY_CREDITOR' | 'CONFIRMED_BY_ACCOUNTANT' | 'REJECTED';
+  confirmedByRole?: 'CREDITOR' | 'ACCOUNTANT';
+  confirmedByUserId?: string;
+  confirmedByUserName?: string;
+  confirmationReceiptUrl?: string;
+  accountantOrderNumber?: string;
+  accountantOrderNotes?: string;
+  confirmedAt?: string;
+  createdAt: string;
+  claim?: {
+    caseNumber?: string;
+    remainingAmount?: number;
+    initialAmount?: number;
+  };
+}
+
+export const paymentsService = {
+  async submitDebtorReceipt(data: {
+    amount: number;
+    paymentDate?: string;
+    receiptFileUrl?: string;
+    debtorNotes?: string;
+    claimId?: string;
+  }): Promise<PaymentReceiptItem> {
+    return await apiFetch<PaymentReceiptItem>('/api/v1/payments/submit-receipt', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async getDebtorPayments(): Promise<PaymentReceiptItem[]> {
+    return await apiFetch<PaymentReceiptItem[]>('/api/v1/payments/debtor');
+  },
+
+  async getCreditorPayments(): Promise<{
+    receipts: PaymentReceiptItem[];
+    metrics: { totalReceipts: number; pendingCount: number; confirmedCount: number };
+  }> {
+    return await apiFetch<{
+      receipts: PaymentReceiptItem[];
+      metrics: { totalReceipts: number; pendingCount: number; confirmedCount: number };
+    }>('/api/v1/payments/creditor');
+  },
+
+  async confirmByCreditor(receiptId: string, confirmationReceiptUrl?: string): Promise<PaymentReceiptItem> {
+    return await apiFetch<PaymentReceiptItem>(`/api/v1/payments/${receiptId}/confirm-creditor`, {
+      method: 'POST',
+      body: JSON.stringify({ confirmationReceiptUrl }),
+    });
+  },
+
+  async getAccountantPayments(): Promise<{
+    receipts: PaymentReceiptItem[];
+    metrics: {
+      totalCount: number;
+      pendingCount: number;
+      confirmedByCreditorCount: number;
+      confirmedByAccountantCount: number;
+      totalConfirmedGEL: number;
+    };
+  }> {
+    return await apiFetch<any>('/api/v1/payments/accountant');
+  },
+
+  async confirmByAccountant(receiptId: string, notes?: string): Promise<PaymentReceiptItem> {
+    return await apiFetch<PaymentReceiptItem>(`/api/v1/payments/${receiptId}/confirm-accountant`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    });
   },
 };

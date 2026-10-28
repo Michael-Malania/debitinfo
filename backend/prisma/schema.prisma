@@ -19,6 +19,7 @@ enum UserRole {
   LEGAL
   OPERATOR
   FIELD_OFFICER
+  ACCOUNTANT
   REGULAR
 }
 
@@ -53,6 +54,13 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+enum PaymentReceiptStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED_BY_CREDITOR
+  CONFIRMED_BY_ACCOUNTANT
+  REJECTED
 }
 
 enum DisputeStatus {
@@ -274,6 +282,7 @@ model DebtClaim {
   scheduleType    ScheduleType    @default(STANDARD)
   schedules       RepaymentSchedule[]
   payments        PaymentTransaction[]
+  paymentReceipts PaymentReceipt[]
   disputes        Dispute[]
   legalCases      LegalCase[]
   crmLogs         CrmCallLog[]
@@ -342,6 +351,40 @@ model PaymentTransaction {
   updatedAt          DateTime              @updatedAt
 
   @@index([transactionRef])
+}
+
+model PaymentReceipt {
+  id                      String                @id @default(uuid())
+  claimId                 String
+  claim                   DebtClaim             @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  debtorId                String
+  debtorName              String
+  creditorId              String
+  creditorName            String
+  amount                  Decimal               @db.Decimal(12, 2)
+  currency                String                @default("GEL")
+  paymentDate             DateTime              @default(now())
+  receiptNumber           String                @unique // e.g. "REC-2026-001"
+  receiptFileUrl          String?               // Debtor uploaded receipt image/pdf
+  debtorNotes             String?
+  status                  PaymentReceiptStatus  @default(PENDING_CONFIRMATION)
+  
+  // Confirmation details
+  confirmedByRole         UserRole?             // CREDITOR or ACCOUNTANT
+  confirmedByUserId       String?
+  confirmedByUserName     String?
+  confirmationReceiptUrl  String?               // Creditor confirmation receipt upload
+  accountantOrderNumber   String?               // e.g. "ACC-ORD-2026-0042"
+  accountantOrderNotes    String?               // Accountant confirmation notes
+  confirmedAt             DateTime?
+
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  @@index([claimId])
+  @@index([debtorId])
+  @@index([creditorId])
+  @@index([status])
 }
 
 model Dispute {

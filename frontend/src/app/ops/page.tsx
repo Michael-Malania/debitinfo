@@ -27,6 +27,11 @@ const STAFF_ROLE_OPTIONS = [
     label: '⚖️ იურისტი — იურიდიული დეპარტამენტი & სააღსრულებო (Legal & Enforcement)',
   },
   {
+    role: 'ACCOUNTANT',
+    department: 'ფინანსური აღრიცხვა & ბუღალტერია',
+    label: '💼 მთავარი ბუღალტერი — ფინანსური აღრიცხვა & გადახდების დასტური (Finance & Accounting)',
+  },
+  {
     role: 'ADMIN',
     department: 'მენეჯმენტი & IT ადმინისტრირება',
     label: '🛡️ სისტემური ადმინისტრატორი — მენეჯმენტი & IT (Management & IT)',
@@ -63,7 +68,7 @@ export default function OpsPage() {
   const [newLegalAddress, setNewLegalAddress] = useState('');
   const [newActualAddress, setNewActualAddress] = useState('');
   const [isSameAddress, setIsSameAddress] = useState(true);
-  const [newRole, setNewRole] = useState<'ANALYST' | 'OPERATOR' | 'FIELD_OFFICER' | 'LEGAL' | 'ADMIN'>('FIELD_OFFICER');
+  const [newRole, setNewRole] = useState<'ANALYST' | 'OPERATOR' | 'FIELD_OFFICER' | 'LEGAL' | 'ACCOUNTANT' | 'ADMIN'>('FIELD_OFFICER');
   const [newDepartment, setNewDepartment] = useState('საველე მონიტორინგი & ინსპექცია');
   const [newPassword, setNewPassword] = useState('Debitinfo2024!');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -148,7 +153,7 @@ export default function OpsPage() {
       const res = await authService.login(loginIdentifier, loginPassword);
       const user = res.user;
 
-      if (!['ADMIN', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'LEGAL'].includes(user.role)) {
+      if (!['ADMIN', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'LEGAL', 'ACCOUNTANT'].includes(user.role)) {
         authService.logout();
         setLoginError('🚫 წვდომა შეზღუდულია: თქვენი ანგარიში არ წარმოადგენს საოპერაციო პერსონალს. გამოიყენეთ საჯარო შესვლა /login გვერდზე.');
         setLoginLoading(false);
@@ -974,6 +979,13 @@ export default function OpsPage() {
                           <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-xs font-semibold inline-flex items-center gap-1">
                             <span className="material-symbols-outlined text-[13px]">gavel</span>
                             იურისტი
+                          </span>
+                        );
+                      } else if (staff.role === 'ACCOUNTANT') {
+                        roleBadge = (
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold inline-flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px]">account_balance_wallet</span>
+                            მთავარი ბუღალტერი
                           </span>
                         );
                       }
