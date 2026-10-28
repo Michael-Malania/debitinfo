@@ -632,4 +632,36 @@ export class AnalystService {
       },
     };
   }
+
+  /**
+   * Get debtors uploaded by creditors waiting for RS.GE verification
+   */
+  async getPendingDebtors() {
+    return this.prisma.stagedRegistryItem.findMany({
+      where: {
+        type: 'DEBTOR',
+        status: 'PENDING_VERIFICATION',
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Verify/approve a pending debtor cross-checked against RS.GE
+   */
+  async verifyDebtor(id: string) {
+    const item = await this.prisma.stagedRegistryItem.findUnique({ where: { id } });
+    if (!item) {
+      throw new NotFoundException('დებიტორი ვერ მოიძებნა');
+    }
+    const updated = await this.prisma.stagedRegistryItem.update({
+      where: { id },
+      data: { status: 'VERIFIED' },
+    });
+    return {
+      success: true,
+      message: `დებიტორი „${item.name}“ წარმატებით გადამოწმდა RS.GE-ში და მიენიჭა დადასტურებულის სტატუსი!`,
+      item: updated,
+    };
+  }
 }

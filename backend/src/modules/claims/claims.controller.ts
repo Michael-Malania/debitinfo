@@ -30,6 +30,21 @@ export class ClaimsController {
     return this.claimsService.getCreditorClaims(user.id);
   }
 
+  @Post('creditor/debtors/import-batch')
+  @Roles(UserRole.CREDITOR, UserRole.ADMIN)
+  async importCreditorDebtors(
+    @CurrentUser() user: User,
+    @Body('debtors') debtors: any[],
+  ) {
+    return this.claimsService.importCreditorDebtors(user.id, debtors || []);
+  }
+
+  @Get('creditor/uploaded-debtors')
+  @Roles(UserRole.CREDITOR, UserRole.ADMIN)
+  async getCreditorUploadedDebtors(@CurrentUser() user: User) {
+    return this.claimsService.getCreditorUploadedDebtors(user.id);
+  }
+
   @Get('claims/status-configs')
   async getStatusConfigs() {
     return this.claimsService.getStatusConfigs();

@@ -180,4 +180,54 @@ export class ClaimsService {
 
     return dispute;
   }
+
+  /**
+   * Creditor imports debtors batch (via Excel template or manual modal)
+   * These arrive with status 'PENDING_VERIFICATION' for the Analyst to cross-check in RS.GE
+   */
+  async importCreditorDebtors(creditorUserId: string, debtors: any[]) {
+    const creditor = await this.prisma.user.findUnique({
+      where: { id: creditorUserId },
+      include: { companyProfile: true },
+    });
+    const creditorName = creditor?.companyProfile?.companyName || creditor?.email || 'კრედიტორი';
+
+    const createdItems = [];
+    for (const d of debtors) {
+      const item = await this.prisma.stagedRegistryItem.create({
+        data: {
+          type: 'DEBTOR',
+          personalId: d.personalId || d.taxId || '01019012345',
+          name: d.name || d.fullName || 'ახალი დებიტორი',
+          companyOrPerson: d.entityType === 'LEGAL' ? 'იურიდიული პირი' : 'ფიზიკური პირი',
+          agreementNumber: d.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
+          amount: Number(d.amount) || 0,
+          creditorName,
+          overdueDays: Number(d.overdueDays) || 0,
+          status: 'PENDING_VERIFICATION',
+          sourceFile: d.sourceFile || 'creditor_upload.xlsx',
+        },
+      });
+      createdItems.push(item);
+    }
+    return { success: true, count: createdItems.length, items: createdItems };
+  }
+
+  /**
+   * Get all debtors uploaded by this creditor (including PENDING_VERIFICATION and VERIFIED)
+   */
+  async getCreditorUploadedDebtors(creditorUserId: string) {
+    const creditor = await this.prisma.user.findUnique({
+      where: { id: creditorUserId },
+      include: { companyProfile: true },
+    });
+    const creditorName = creditor?.companyProfile?.companyName || creditor?.email;
+    return this.prisma.stagedRegistryItem.findMany({
+      where: {
+        type: 'DEBTOR',
+        creditorName: creditorName,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }

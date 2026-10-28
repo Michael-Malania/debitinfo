@@ -741,6 +741,17 @@ export const creditorBackendService = {
   async getStatusConfigs(): Promise<ClaimStatusConfigItem[]> {
     return await apiFetch('/api/v1/claims/status-configs');
   },
+
+  async importDebtorsBatch(debtors: any[]): Promise<any> {
+    return await apiFetch('/api/v1/creditor/debtors/import-batch', {
+      method: 'POST',
+      body: JSON.stringify({ debtors }),
+    });
+  },
+
+  async getUploadedDebtors(): Promise<any[]> {
+    return await apiFetch('/api/v1/creditor/uploaded-debtors');
+  },
 };
 
 export const analystBackendService = {
@@ -799,6 +810,16 @@ export const analystBackendService = {
     return await apiFetch('/api/v1/analyst/dispatch-task', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  async getPendingDebtors(): Promise<any[]> {
+    return await apiFetch('/api/v1/analyst/pending-debtors');
+  },
+
+  async verifyDebtor(id: string): Promise<any> {
+    return await apiFetch(`/api/v1/analyst/verify-debtor/${id}`, {
+      method: 'POST',
     });
   },
 };

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { AnalystService, AssignRoleDto, DispatchTaskDto } from './analyst.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -58,5 +58,15 @@ export class AnalystController {
     @CurrentUser() user: any,
   ) {
     return await this.analystService.dispatchTask(dto, user);
+  }
+
+  @Get('pending-debtors')
+  async getPendingDebtors() {
+    return await this.analystService.getPendingDebtors();
+  }
+
+  @Post('verify-debtor/:id')
+  async verifyDebtor(@Param('id') id: string) {
+    return await this.analystService.verifyDebtor(id);
   }
 }
