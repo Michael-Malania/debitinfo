@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 
 export interface ParsedDebtorRow {
@@ -17,80 +18,260 @@ export interface ParsedDebtorRow {
 }
 
 /**
- * Generates and triggers download of a formatted Microsoft Excel (.xlsx) template for Debtor import
+ * Generates and triggers download of a beautifully styled Microsoft Excel (.xlsx) template
+ * with a native dropdown menu for Subject Type, frozen headers, and instructions.
  */
-export function downloadDebtorTemplateXLSX(): void {
-  const headers = [
-    'სუბიექტის ტიპი (LEGAL / PHYSICAL)',
-    'საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა)',
-    'პირადი ნომერი (პ/ნ 11 ნიშნა)',
-    'სრული დასახელება / სახელი და გვარი',
-    'ტელეფონი',
-    'ელ-ფოსტა',
-    'იურიდიული მისამართი',
-    'ფაქტობრივი მისამართი',
-    'საწყისი დავალიანება (GEL)',
-    'ვადაგადაცილების დღეები',
-    'ხელშეკრულების №',
+export async function downloadDebtorTemplateXLSX(): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Debitinfo.GE';
+  wb.created = new Date();
+
+  // ==========================================
+  // SHEET 1: დებიტორების რეესტრი (მთავარი შაბლონი)
+  // ==========================================
+  const ws = wb.addWorksheet('დებიტორები', {
+    views: [{ state: 'frozen', ySplit: 1, showGridLines: true }],
+  });
+
+  ws.columns = [
+    { header: 'სუბიექტის ტიპი', key: 'entityType', width: 34 },
+    { header: 'საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა)', key: 'taxId', width: 34 },
+    { header: 'პირადი ნომერი (პ/ნ 11 ნიშნა)', key: 'personalId', width: 30 },
+    { header: 'სრული დასახელება / სახელი და გვარი', key: 'name', width: 38 },
+    { header: 'ტელეფონი', key: 'phone', width: 22 },
+    { header: 'ელ-ფოსტა', key: 'email', width: 28 },
+    { header: 'იურიდიული მისამართი', key: 'legalAddress', width: 40 },
+    { header: 'ფაქტობრივი მისამართი', key: 'actualAddress', width: 40 },
+    { header: 'საწყისი დავალიანება (GEL)', key: 'amount', width: 26 },
+    { header: 'ვადაგადაცილების დღეები', key: 'overdueDays', width: 24 },
+    { header: 'ხელშეკრულების №', key: 'agreementNumber', width: 24 },
   ];
 
-  const sampleRows = [
-    [
-      'LEGAL',
-      '405118492',
-      '01019012345',
-      'შპს კავკასუს ტრანს სერვისი',
-      '+995 591 442299',
-      'info@cts-georgia.ge',
-      'ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა',
-      'ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა',
-      48500.0,
-      65,
-      'AGR-8841',
-    ],
-    [
-      'PHYSICAL',
-      '',
-      '01024089123',
-      'დავით კვირიკაშვილი',
-      '+995 599 112233',
-      'davit.k@gmail.com',
-      'ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12',
-      'ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12',
-      3200.0,
-      42,
-      'AGR-7714',
-    ],
+  // Header Styling (Debitinfo Deep Royal Navy Blue)
+  const headerRow = ws.getRow(1);
+  headerRow.height = 42;
+  headerRow.eachCell((cell) => {
+    cell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E3A8A' }, // Primary Royal Navy
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF3B82F6' } },
+      left: { style: 'thin', color: { argb: 'FF3B82F6' } },
+      bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+      right: { style: 'thin', color: { argb: 'FF3B82F6' } },
+    };
+  });
+
+  // Dropdown Data Validation on Column A (A2:A1000)
+  (ws as any).dataValidations.add('A2:A1000', {
+    type: 'list',
+    allowBlank: false,
+    formulae: ['"იურიდიული პირი (LEGAL),ფიზიკური პირი (PHYSICAL)"'],
+    showErrorMessage: true,
+    errorTitle: 'სუბიექტის ტიპის არჩევა',
+    error: 'გთხოვთ აირჩიოთ ჩამოსაშლელი სიიდან: „იურიდიული პირი (LEGAL)“ ან „ფიზიკური პირი (PHYSICAL)“',
+    showInputMessage: true,
+    promptTitle: 'სუბიექტის ტიპი',
+    prompt: 'აირჩიეთ ჩამოსაშლელი სიიდან: იურიდიული პირი (LEGAL) ან ფიზიკური პირი (PHYSICAL)',
+  });
+
+  // Sample Row 1: Legal Entity
+  const row2 = ws.addRow({
+    entityType: 'იურიდიული პირი (LEGAL)',
+    taxId: '405118492',
+    personalId: '01019012345',
+    name: 'შპს კავკასუს ტრანს სერვისი',
+    phone: '+995 591 442299',
+    email: 'info@cts-georgia.ge',
+    legalAddress: 'ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა',
+    actualAddress: 'ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა',
+    amount: 48500.0,
+    overdueDays: 65,
+    agreementNumber: 'AGR-8841',
+  });
+  row2.height = 28;
+
+  // Sample Row 2: Physical Person
+  const row3 = ws.addRow({
+    entityType: 'ფიზიკური პირი (PHYSICAL)',
+    taxId: '',
+    personalId: '01024089123',
+    name: 'დავით კვირიკაშვილი',
+    phone: '+995 599 112233',
+    email: 'davit.k@gmail.com',
+    legalAddress: 'ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12',
+    actualAddress: 'ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12',
+    amount: 3200.0,
+    overdueDays: 42,
+    agreementNumber: 'AGR-7714',
+  });
+  row3.height = 28;
+
+  // Data row styling & number/text formats
+  [row2, row3].forEach((row, idx) => {
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      cell.font = { name: 'Segoe UI', size: 10 };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: colNumber === 9 || colNumber === 10 ? 'right' : colNumber === 1 ? 'center' : 'left',
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      if (idx === 0) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFF0F9FF' }, // Soft sky blue highlight for sample 1
+        };
+      }
+      if (colNumber === 2 || colNumber === 3) {
+        cell.numFmt = '@'; // Force text format to preserve leading zero
+      }
+      if (colNumber === 9) {
+        cell.numFmt = '#,##0.00';
+      }
+    });
+  });
+
+  // ==========================================
+  // SHEET 2: ინსტრუქცია და ველების განმარტება
+  // ==========================================
+  const wsGuide = wb.addWorksheet('ინსტრუქცია & წესები', {
+    views: [{ showGridLines: true }],
+  });
+
+  wsGuide.columns = [
+    { header: '№', key: 'colNum', width: 8 },
+    { header: 'ველის დასახელება', key: 'colName', width: 34 },
+    { header: 'სავალდებულოა', key: 'required', width: 22 },
+    { header: 'ფორმატი / მაგალითი', key: 'format', width: 36 },
+    { header: 'დეტალური განმარტება', key: 'desc', width: 58 },
   ];
 
-  const data = [headers, ...sampleRows];
-  const ws = XLSX.utils.aoa_to_sheet(data);
+  const guideHeader = wsGuide.getRow(1);
+  guideHeader.height = 38;
+  guideHeader.eachCell((cell) => {
+    cell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F172A' }, // Dark Slate Navy
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF475569' } },
+      left: { style: 'thin', color: { argb: 'FF475569' } },
+      bottom: { style: 'medium', color: { argb: 'FF020617' } },
+      right: { style: 'thin', color: { argb: 'FF475569' } },
+    };
+  });
 
-  // Mark ID cells explicitly as text so leading zeros are preserved in Excel
-  if (ws['B2']) ws['B2'].t = 's';
-  if (ws['C2']) ws['C2'].t = 's';
-  if (ws['C3']) ws['C3'].t = 's';
-
-  // Set column widths in characters for optimal display in Excel
-  ws['!cols'] = [
-    { wch: 34 }, // სუბიექტის ტიპი
-    { wch: 34 }, // ს/კ
-    { wch: 30 }, // პ/ნ
-    { wch: 38 }, // დასახელება
-    { wch: 22 }, // ტელეფონი
-    { wch: 28 }, // ელ-ფოსტა
-    { wch: 40 }, // იურიდიული მისამართი
-    { wch: 40 }, // ფაქტობრივი მისამართი
-    { wch: 26 }, // თანხა
-    { wch: 24 }, // ვადაგადაცილება
-    { wch: 24 }, // ხელშეკრულების №
+  const guideRules = [
+    {
+      colNum: 1,
+      colName: 'სუბიექტის ტიპი',
+      required: 'კი (სავალდებულო)',
+      format: 'ჩამოსაშლელი სია (Dropdown)',
+      desc: 'აირჩიეთ „იურიდიული პირი (LEGAL)“ ან „ფიზიკური პირი (PHYSICAL)“',
+    },
+    {
+      colNum: 2,
+      colName: 'საიდენტიფიკაციო კოდი (ს/კ)',
+      required: 'იურიდიულისთვის სავალდებულოა',
+      format: '9 ნიშნა რიცხვი (მაგ. 405118492)',
+      desc: 'ორგანიზაციის/კომპანიის საგადასახადო საიდენტიფიკაციო ნომერი RS.GE-სთვის',
+    },
+    {
+      colNum: 3,
+      colName: 'პირადი ნომერი (პ/ნ)',
+      required: 'ფიზიკურისთვის სავალდებულოა',
+      format: '11 ნიშნა (მაგ. 01019012345)',
+      desc: 'დებიტორის პირადი ნომერი (ან იურიდიული პირის დირექტორის პ/ნ)',
+    },
+    {
+      colNum: 4,
+      colName: 'სრული დასახელება / სახელი გვარი',
+      required: 'კი (სავალდებულო)',
+      format: 'ტექსტი',
+      desc: 'კომპანიის ოფიციალური სახელი ან მოქალაქის სახელი და გვარი',
+    },
+    {
+      colNum: 5,
+      colName: 'ტელეფონი',
+      required: 'რეკომენდებული',
+      format: '+995 599 000000',
+      desc: 'საკონტაქტო მობილური ან ქალაქის ტელეფონი შეტყობინებებისთვის',
+    },
+    {
+      colNum: 6,
+      colName: 'ელ-ფოსტა',
+      required: 'არასავალდებულო',
+      format: 'example@domain.ge',
+      desc: 'დებიტორის ელექტრონული ფოსტის მისამართი',
+    },
+    {
+      colNum: 7,
+      colName: 'იურიდიული მისამართი',
+      required: 'რეკომენდებული',
+      format: 'ქ. თბილისი, ...',
+      desc: 'რეგისტრირებული იურიდიული მისამართი',
+    },
+    {
+      colNum: 8,
+      colName: 'ფაქტობრივი მისამართი',
+      required: 'არასავალდებულო',
+      format: 'ქ. თბილისი, ...',
+      desc: 'ფაქტობრივი საცხოვრებელი ან ოფისის მისამართი (თუ განსხვავდება იურიდიულისგან)',
+    },
+    {
+      colNum: 9,
+      colName: 'საწყისი დავალიანება (GEL)',
+      required: 'კი (სავალდებულო)',
+      format: 'რიცხვი (მაგ. 48500.00)',
+      desc: 'დავალიანების ძირი თანხა ლარში (GEL)',
+    },
+    {
+      colNum: 10,
+      colName: 'ვადაგადაცილების დღეები',
+      required: 'არასავალდებულო',
+      format: 'მთელი რიცხვი (მაგ. 65)',
+      desc: 'ვადაგადაცილებული დღეების რაოდენობა',
+    },
+    {
+      colNum: 11,
+      colName: 'ხელშეკრულების №',
+      required: 'რეკომენდებული',
+      format: 'მაგ. AGR-8841',
+      desc: 'სასესხო ან მომსახურების ხელშეკრულების ოფიციალური ნომერი',
+    },
   ];
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'დებიტორების შაბლონი');
+  guideRules.forEach((rule) => {
+    const row = wsGuide.addRow(rule);
+    row.height = 24;
+    row.eachCell({ includeEmpty: true }, (cell, cIdx) => {
+      cell.font = { name: 'Segoe UI', size: 9.5 };
+      cell.alignment = { vertical: 'middle', horizontal: cIdx === 1 ? 'center' : 'left' };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+    });
+  });
 
-  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-  const blob = new Blob([wbout], {
+  // Write and trigger download in browser
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
 
@@ -119,10 +300,14 @@ export async function parseDebtorExcelFile(file: File): Promise<ParsedDebtorRow[
     wb = XLSX.read(buffer, { type: 'array', raw: false });
   }
 
-  const sheetName = wb.SheetNames[0];
-  if (!sheetName) return [];
+  // Find 'დებიტორები' sheet if multiple sheets exist, otherwise use first sheet
+  const targetSheetName =
+    wb.SheetNames.find((s) => s.includes('დებიტორ') || s.toLowerCase().includes('debtor')) ||
+    wb.SheetNames[0];
 
-  const ws = wb.Sheets[sheetName];
+  if (!targetSheetName) return [];
+
+  const ws = wb.Sheets[targetSheetName];
   if (!ws) return [];
 
   const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
@@ -179,6 +364,7 @@ export async function parseDebtorExcelFile(file: File): Promise<ParsedDebtorRow[
       continue;
     }
 
+    // Recognize LEGAL whether it says "LEGAL", "იურიდიული პირი", or "იურიდიული პირი (LEGAL)"
     const isLegal =
       rawType.toUpperCase().includes('LEGAL') ||
       rawType.includes('იურიდიულ') ||

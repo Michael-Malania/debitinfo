@@ -98,8 +98,13 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
     };
   }, []);
 
-  const handleDownloadDebtorTemplate = () => {
-    downloadDebtorTemplateXLSX();
+  const handleDownloadDebtorTemplate = async () => {
+    try {
+      await downloadDebtorTemplateXLSX();
+    } catch (err) {
+      console.error('Failed to download template:', err);
+      alert('შაბლონის ჩამოტვირთვა ვერ მოხერხდა.');
+    }
   };
 
   const handleCreditorImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
