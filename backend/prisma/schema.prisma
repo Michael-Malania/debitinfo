@@ -283,6 +283,7 @@ model DebtClaim {
   schedules       RepaymentSchedule[]
   payments        PaymentTransaction[]
   paymentReceipts PaymentReceipt[]
+  supportingDocuments Json?         // Array of verified proof documents: invoices, waybills, turnover cards, contracts
   disputes        Dispute[]
   legalCases      LegalCase[]
   crmLogs         CrmCallLog[]

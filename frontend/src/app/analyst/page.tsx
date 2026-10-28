@@ -1267,6 +1267,58 @@ export default function AnalystPage() {
                 </div>
               </div>
             </div>
+            {/* დავალიანების დამადასტურებელი დოკუმენტაცია (Proof of Debt Attachment) */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-text-primary text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base text-primary">attach_file</span>
+                  დავალიანების დამადასტურებელი დოკუმენტები (სავალდებულო):
+                </span>
+                <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
+                  RS.GE / საბუღალტრო დასტური
+                </span>
+              </div>
+              <p className="text-xs text-text-muted">
+                მიამაგრეთ დოკუმენტები, რაც დაადასტურებს დებიტორული დავალიანების რეალურ არსებობას (სასაქონლო ზედნადები, ბრუნვითი ბარათი ან ხელშეკრულება).
+              </p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {/* Document 1: Waybill */}
+                <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-text-primary flex items-center gap-1">
+                      <span className="material-symbols-outlined text-rose-600 text-[16px]">description</span>
+                      სასაქონლო ზედნადები (PDF)
+                    </span>
+                    <span className="text-emerald-700 text-[11px] font-semibold">მიბმულია</span>
+                  </div>
+                  <input
+                    type="text"
+                    defaultValue="rs_waybill_8841.pdf (RS.GE #WAYBILL-8841)"
+                    className="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-slate-700 focus:outline-none"
+                    placeholder="ზედნადების ფაილი..."
+                  />
+                </div>
+
+                {/* Document 2: Turnover Card */}
+                <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-text-primary flex items-center gap-1">
+                      <span className="material-symbols-outlined text-emerald-600 text-[16px]">table_view</span>
+                      ბრუნვითი ბარათი (Excel/XLSX)
+                    </span>
+                    <span className="text-emerald-700 text-[11px] font-semibold">მიბმულია</span>
+                  </div>
+                  <input
+                    type="text"
+                    defaultValue="brunviti_barati_2024.xlsx (480 KB)"
+                    className="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-slate-700 focus:outline-none"
+                    placeholder="ბრუნვითი ბარათის ფაილი..."
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="pt-2 p-3 bg-blue-50/70 border border-blue-200 rounded-lg flex items-center justify-between text-xs">
               <span className="text-primary font-medium flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-[16px]">account_balance_wallet</span>

@@ -93,7 +93,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
     }
   };
 
-  const openOfficialDocument = (receipt: PaymentReceiptItem) => {
+  const openOfficialDocument = (receipt: any) => {
     const isAccountant = receipt.status === 'CONFIRMED_BY_ACCOUNTANT';
     const docWindow = window.open('', '_blank');
     if (!docWindow) return;
@@ -238,6 +238,298 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
 
   const creditorCompanyName = primaryClaim?.creditor?.companyProfile?.companyName || 'შპს ჯეო ტრეიდინგი';
   const caseNumber = primaryClaim?.caseNumber || 'DB-2024-8841';
+
+  const schedule = primaryClaim?.schedules?.[0];
+  const scheduleType = primaryClaim?.scheduleType || 'STANDARD';
+  const isNonStandard = scheduleType === 'NON_STANDARD';
+
+  // Supporting proof of debt documents from database
+  const supportingDocs = (primaryClaim?.supportingDocuments as any[]) || [
+    {
+      id: 'doc-01',
+      title: 'სასაქონლო ზედნადები (RS.GE #WAYBILL-8841)',
+      docType: 'WAYBILL',
+      fileName: 'rs_waybill_8841.pdf',
+      fileUrl: '/documents/rs_waybill_8841.pdf',
+      fileSize: '1.2 MB',
+      uploadedAt: '2024-03-01T10:00:00Z',
+      description: 'საქონლის მიწოდების ოფიციალური საგადასახადო ზედნადები',
+    },
+    {
+      id: 'doc-02',
+      title: 'ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი',
+      docType: 'ACCOUNT_TURNOVER',
+      fileName: 'brunviti_barati_2024.xlsx',
+      fileUrl: '/documents/brunviti_barati_2024.xlsx',
+      fileSize: '480 KB',
+      uploadedAt: '2024-03-01T10:05:00Z',
+      description: 'ურთიერთშედარების აქტი და ბრუნვის ამონაწერი Excel ფორმატში',
+    },
+    {
+      id: 'doc-03',
+      title: 'ხელშეკრულება & მიღება-ჩაბარების აქტი #AGR-8841',
+      docType: 'CONTRACT',
+      fileName: 'khelshekruleba_8841.pdf',
+      fileUrl: '/documents/khelshekruleba_8841.pdf',
+      fileSize: '2.4 MB',
+      uploadedAt: '2024-03-01T10:10:00Z',
+      description: 'მხარეთა შორის გაფორმებული საკრედიტო ხელშეკრულება',
+    },
+  ];
+
+  // Dynamic installments from DB
+  const rawInstallments = schedule?.installments || [];
+  const allInstallments = rawInstallments.length > 0
+    ? rawInstallments.map((inst: any, idx: number) => {
+        const num = inst.installmentNo || idx + 1;
+        const formattedNo = num.toString().padStart(2, '0');
+        const d = new Date(inst.dueDate);
+        const monthsGe = ['იან', 'თებ', 'მარ', 'აპრ', 'მაის', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+        const dateStr = `${d.getDate()} ${monthsGe[d.getMonth()]}, ${d.getFullYear()}`;
+        const amount = Number(inst.amount) || 300;
+        const principal = Math.round((amount * 0.92) * 100) / 100;
+        const interest = Math.round((amount - principal) * 100) / 100;
+        const isPaid = inst.isPaid;
+        const initialDebt = Number(primaryClaim?.initialAmount) || 5000;
+        const remainingBalance = Math.max(0, initialDebt - (num * amount));
+        const isNextDue = !isPaid && (idx === 0 || rawInstallments[idx - 1]?.isPaid);
+
+        return {
+          id: inst.id || `inst-${num}`,
+          installmentNo: formattedNo,
+          num,
+          dueDate: dateStr,
+          principal: `${principal.toFixed(2)} ₾`,
+          interest: `${interest.toFixed(2)} ₾`,
+          amount: `${amount.toFixed(2)} ₾`,
+          remaining: `${remainingBalance.toLocaleString()}.00 ₾`,
+          isPaid,
+          isNextDue,
+          receiptNumber: isPaid ? `REC-8841-${formattedNo}` : null,
+        };
+      })
+    : [
+        { id: '1', installmentNo: '01', num: 1, dueDate: '25 მარ, 2024', principal: '260.00 ₾', interest: '40.00 ₾', amount: '300.00 ₾', remaining: '4,700.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-01' },
+        { id: '2', installmentNo: '02', num: 2, dueDate: '25 აპრ, 2024', principal: '263.00 ₾', interest: '37.00 ₾', amount: '300.00 ₾', remaining: '4,400.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-02' },
+        { id: '3', installmentNo: '03', num: 3, dueDate: '25 მაის, 2024', principal: '266.00 ₾', interest: '34.00 ₾', amount: '300.00 ₾', remaining: '4,100.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-03' },
+        { id: '4', installmentNo: '04', num: 4, dueDate: '25 ივნ, 2024', principal: '269.00 ₾', interest: '31.00 ₾', amount: '300.00 ₾', remaining: '3,800.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-04' },
+        { id: '5', installmentNo: '05', num: 5, dueDate: '25 ივლ, 2024', principal: '272.00 ₾', interest: '28.00 ₾', amount: '300.00 ₾', remaining: '3,500.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-05' },
+        { id: '6', installmentNo: '06', num: 6, dueDate: '25 აგვ, 2024', principal: '275.00 ₾', interest: '25.00 ₾', amount: '300.00 ₾', remaining: '3,200.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-06' },
+        { id: '7', installmentNo: '07', num: 7, dueDate: '25 სექ, 2024', principal: '278.00 ₾', interest: '22.00 ₾', amount: '300.00 ₾', remaining: '2,900.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-07' },
+        { id: '8', installmentNo: '08', num: 8, dueDate: '25 ოქტ, 2024', principal: '281.00 ₾', interest: '19.00 ₾', amount: '300.00 ₾', remaining: '2,600.00 ₾', isPaid: false, isNextDue: true, receiptNumber: null },
+        { id: '9', installmentNo: '09', num: 9, dueDate: '25 ნოე, 2024', principal: '284.00 ₾', interest: '16.00 ₾', amount: '300.00 ₾', remaining: '2,300.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+        { id: '10', installmentNo: '10', num: 10, dueDate: '25 დეკ, 2024', principal: '287.00 ₾', interest: '13.00 ₾', amount: '300.00 ₾', remaining: '2,000.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+        { id: '11', installmentNo: '11', num: 11, dueDate: '25 იან, 2025', principal: '290.00 ₾', interest: '10.00 ₾', amount: '300.00 ₾', remaining: '1,700.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+        { id: '12', installmentNo: '12', num: 12, dueDate: '25 თებ, 2025', principal: '293.00 ₾', interest: '7.00 ₾', amount: '300.00 ₾', remaining: '1,400.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+      ];
+
+  const paidPeriodsCount = allInstallments.filter((i: any) => i.isPaid).length;
+  const totalPeriodsCount = allInstallments.length;
+
+  const handleDownloadSchedulePdf = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="ka">
+      <head>
+        <meta charset="utf-8">
+        <title>დაფარვის ოფიციალური გრაფიკი - ${caseNumber}</title>
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; max-width: 900px; margin: 0 auto; }
+          .header { border-bottom: 2px solid #002984; padding-bottom: 20px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+          .brand { font-size: 24px; font-weight: bold; color: #002984; }
+          .title { font-size: 20px; font-weight: bold; margin: 20px 0 6px; color: #0f172a; text-align: center; }
+          .subtitle { font-size: 13px; color: #64748b; text-align: center; margin-bottom: 25px; }
+          .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; margin-bottom: 25px; font-size: 13px; }
+          .meta-item strong { color: #0f172a; }
+          .table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+          .table th, .table td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; }
+          .table th { background: #002984; color: white; font-weight: 600; text-align: center; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .badge-paid { background: #dcfce7; color: #166534; font-weight: bold; padding: 3px 8px; border-radius: 9999px; font-size: 11px; }
+          .badge-due { background: #dbeafe; color: #1e40af; font-weight: bold; padding: 3px 8px; border-radius: 9999px; font-size: 11px; }
+          .badge-plan { background: #f1f5f9; color: #64748b; padding: 3px 8px; border-radius: 9999px; font-size: 11px; }
+          .footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 20px; border-top: 1px solid #cbd5e1; font-size: 12px; }
+          .stamp { border: 2px dashed #002984; padding: 12px 20px; border-radius: 8px; color: #002984; font-weight: bold; text-align: center; }
+          @media print { .no-print { display: none; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="brand">Debitinfo.GE</div>
+            <div style="font-size: 11px; color: #64748b; font-family: monospace;">FINTECH REGISTRY • REPAYMENT SCHEDULE</div>
+          </div>
+          <div style="text-align: right; font-size: 12px; color: #64748b;">
+            თარიღი: ${new Date().toLocaleDateString('ka-GE')}<br>
+            საქმის №: <strong>${caseNumber}</strong>
+          </div>
+        </div>
+
+        <div class="title">დაფარვის ოფიციალური გრაფიკი</div>
+        <div class="subtitle">სასესხო ვალდებულების რესტრუქტურიზაციის დამტკიცებული გეგმა</div>
+
+        <div class="meta-grid">
+          <div class="meta-item">დებიტორი: <strong>${debtorFullName}</strong> (პ/ნ: ${debtorPersonalId})</div>
+          <div class="meta-item">კრედიტორი: <strong>${creditorCompanyName}</strong></div>
+          <div class="meta-item">საწყისი ვალი: <strong>₾ ${(Number(primaryClaim?.initialAmount) || 5000).toLocaleString()}</strong></div>
+          <div class="meta-item">დარჩენილი ბალანსი: <strong>₾ ${(Number(primaryClaim?.remainingAmount) || 2900).toLocaleString()}</strong></div>
+        </div>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>გადახდის ვადა</th>
+              <th>ძირი თანხა</th>
+              <th>პროცენტი</th>
+              <th>ჯამური შენატანი</th>
+              <th>დარჩენილი ბალანსი</th>
+              <th>სტატუსი</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allInstallments.map((i: any) => `
+              <tr>
+                <td class="text-center font-mono">${i.installmentNo}</td>
+                <td>${i.dueDate}</td>
+                <td class="text-right">${i.principal}</td>
+                <td class="text-right">${i.interest}</td>
+                <td class="text-right"><strong>${i.amount}</strong></td>
+                <td class="text-right">${i.remaining}</td>
+                <td class="text-center">
+                  <span class="${i.isPaid ? 'badge-paid' : i.isNextDue ? 'badge-due' : 'badge-plan'}">
+                    ${i.isPaid ? 'გადახდილი' : i.isNextDue ? 'მომდევნო' : 'დაგეგმილი'}
+                  </span>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <div>
+            დამოწმებულია ელექტრონულად სადებიტო რეესტრის მიერ.<br>
+            ვერიფიკაციის კოდი: <code>${caseNumber}-SCHED-VERIFIED</code>
+          </div>
+          <div class="stamp">
+            DEBITINFO.GE<br>
+            დამოწმებულია • VERIFIED
+          </div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); }, 500);
+          }
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const handleDownloadScheduleExcel = () => {
+    const headers = ['№', 'გადახდის ვადა', 'ძირი თანხა (GEL)', 'პროცენტი (GEL)', 'ჯამური შენატანი (GEL)', 'დარჩენილი ბალანსი (GEL)', 'სტატუსი'];
+    const rows = allInstallments.map((i: any) => [
+      i.installmentNo,
+      i.dueDate,
+      i.principal.replace(' ₾', ''),
+      i.interest.replace(' ₾', ''),
+      i.amount.replace(' ₾', ''),
+      i.remaining.replace(' ₾', '').replace(',', ''),
+      i.isPaid ? 'გადახდილი' : i.isNextDue ? 'მომდევნო გადასახდელი' : 'დაგეგმილი',
+    ]);
+
+    const csvContent = '\uFEFF' + [
+      headers.join(','),
+      ...rows.map((r: any) => r.map((c: any) => `"${c}"`).join(',')),
+    ].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `dafarvis_grafiki_${caseNumber}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOpenSupportingDoc = (doc: any) => {
+    if (doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx')) {
+      const headers = ['თარიღი', 'ოპერაციის დასახელება', 'დებეტი (₾)', 'კრედიტი (₾)', 'ნაშთი (₾)', 'დოკუმენტის №'];
+      const rows = [
+        ['2024-01-15', 'საქონლის მიწოდება ხელშეკრულებით', '5000.00', '0.00', '5000.00', 'INV-2024-01'],
+        ['2024-03-25', 'შენატანი 01 (საბანკო გადარიცხვა)', '0.00', '300.00', '4700.00', 'REC-8841-01'],
+        ['2024-04-25', 'შენატანი 02 (საბანკო გადარიცხვა)', '0.00', '300.00', '4400.00', 'REC-8841-02'],
+        ['2024-05-25', 'შენატანი 03 (საბანკო გადარიცხვა)', '0.00', '300.00', '4100.00', 'REC-8841-03'],
+        ['2024-06-25', 'შენატანი 04 (საბანკო გადარიცხვა)', '0.00', '300.00', '3800.00', 'REC-8841-04'],
+        ['2024-07-25', 'შენატანი 05 (საბანკო გადარიცხვა)', '0.00', '300.00', '3500.00', 'REC-8841-05'],
+        ['2024-08-25', 'შენატანი 06 (საბანკო გადარიცხვა)', '0.00', '300.00', '3200.00', 'REC-8841-06'],
+        ['2024-09-25', 'შენატანი 07 (საბანკო გადარიცხვა)', '0.00', '300.00', '2900.00', 'REC-8841-07'],
+      ];
+      const csvContent = '\uFEFF' + [
+        headers.join(','),
+        ...rows.map((r) => r.map((c) => `"${c}"`).join(',')),
+      ].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', doc.fileName || 'brunviti_barati_2024.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      const w = window.open('', '_blank');
+      if (!w) return;
+      w.document.write(`
+        <!DOCTYPE html>
+        <html lang="ka">
+        <head>
+          <meta charset="utf-8">
+          <title>${doc.title}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+            .header { border-bottom: 2px solid #002984; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+            .badge { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: bold; }
+            .table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
+            .table th, .table td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
+            .table th { background: #f8fafc; font-weight: 600; width: 35%; }
+            .stamp { border: 2px dashed #002984; padding: 12px 20px; border-radius: 8px; color: #002984; font-weight: bold; text-align: center; display: inline-block; margin-top: 30px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div style="font-size: 20px; font-weight: bold; color: #002984;">Debitinfo.GE • დამოწმებული დოკუმენტი</div>
+            <div class="badge">დამოწმებულია RS.GE</div>
+          </div>
+          <h2 style="margin: 0 0 10px;">${doc.title}</h2>
+          <p style="color: #64748b; font-size: 13px; margin: 0 0 20px;">დავალიანების წარმოშობისა და ვალდებულების არსებობის ოფიციალური საფუძველი</p>
+          <table class="table">
+            <tr><th>დოკუმენტის ტიპი</th><td>${doc.docType}</td></tr>
+            <tr><th>ფაილის დასახელება</th><td>${doc.fileName}</td></tr>
+            <tr><th>საქმის ნომერი</th><td><strong>${caseNumber}</strong></td></tr>
+            <tr><th>დებიტორი სუბიექტი</th><td>${debtorFullName} (პ/ნ: ${debtorPersonalId})</td></tr>
+            <tr><th>კრედიტორი სუბიექტი</th><td>${creditorCompanyName}</td></tr>
+            <tr><th>სტატუსი</th><td style="color: #059669; font-weight: bold;">დამოწმებულია / აქტიურია</td></tr>
+            <tr><th>აღწერა</th><td>${doc.description || 'ოფიციალური დოკუმენტაცია'}</td></tr>
+          </table>
+          <div class="stamp">
+            RS.GE / DEBITINFO.GE<br>
+            დამოწმებულია ელექტრონულად
+          </div>
+        </body>
+        </html>
+      `);
+      w.document.close();
+    }
+  };
 
   return (
     <div className="min-h-full flex flex-col font-body-md text-text-primary bg-surface-bg antialiased selection:bg-primary-container selection:text-white" suppressHydrationWarning>
@@ -403,6 +695,66 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
           </button>
         </div>
       </div>
+
+      {/* Supporting Proof of Debt Documents (Point 6) */}
+      <div className="w-full pt-4 mt-4 border-t border-border-subtle">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-primary">verified_user</span>
+            <h4 className="text-body-sm font-bold text-text-primary">
+              დავალიანების დამადასტურებელი დოკუმენტაცია
+            </h4>
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
+              დამოწმებულია ანალიტიკოსის მიერ
+            </span>
+          </div>
+          <span className="text-xs text-text-muted">
+            საფუძველი: ხელშეკრულება &amp; RS.GE სასაქონლო ზედნადებები
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {supportingDocs.map((doc: any) => {
+            const isExcel = doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx');
+            return (
+              <div
+                key={doc.id}
+                className="p-3.5 rounded-xl bg-surface-bg border border-border-subtle hover:border-primary/40 transition-all flex flex-col justify-between gap-3 shadow-2xs group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+                    isExcel 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
+                    <span className="material-symbols-outlined text-[20px]">
+                      {isExcel ? 'table_view' : 'description'}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h5 className="text-body-sm font-semibold text-text-primary truncate" title={doc.title}>
+                      {doc.title}
+                    </h5>
+                    <p className="text-[11px] text-text-muted font-data-mono-md mt-0.5">
+                      {doc.fileName} • {doc.fileSize}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleOpenSupportingDoc(doc)}
+                  className="w-full py-1.5 px-3 rounded-lg border border-border-subtle hover:border-primary hover:bg-white text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[15px]">
+                    {isExcel ? 'download' : 'visibility'}
+                  </span>
+                  <span>{isExcel ? 'Excel ჩამოტვირთვა' : 'დოკუმენტის ნახვა (PDF)'}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </section>
     {/* ================= 3. საკრედიტო რეიტინგის დიდი ვიზუალური ბარათი (Gauge Card) ================= */}
     <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm overflow-hidden relative">
@@ -464,7 +816,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-primary text-body-sm font-medium mb-3">
               <span className="material-symbols-outlined text-[16px]">verified</span>
-              ოფიციალური შეფასება სადებიტო რეესტრის მიხედვით
+              ოფიციალური შეფასება Debitinfo-ს მიხედვით
             </div>
             <h3 className="text-headline-sm font-headline-sm text-text-primary mb-2">
               დებიტორის სანდოობის ანალიზი და რეკომენდაციები
@@ -608,35 +960,47 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
               </h2>
               <p className="text-body-sm text-text-muted mt-0.5">ინდივიდუალური რესტრუქტურიზაციის მიმდინარე ეტაპი</p>
             </div>
-            {/* Export Buttons */}
+            {/* Export Buttons (Point 5) */}
             <div className="flex items-center gap-2">
-              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-surface-bg hover:bg-surface-card text-text-primary text-body-sm font-medium transition-colors shadow-sm active:scale-95 cursor-pointer" type="button">
+              <button
+                type="button"
+                onClick={handleDownloadSchedulePdf}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-surface-bg hover:bg-surface-card text-text-primary text-body-sm font-medium transition-colors shadow-sm active:scale-95 cursor-pointer"
+                title="ოფიციალური PDF გრაფიკის გენერირება და ჩამოტვირთვა"
+              >
                 <span className="material-symbols-outlined text-[16px] text-error">picture_as_pdf</span>
                 <span>PDF ჩამოტვირთვა</span>
               </button>
-              <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-surface-bg hover:bg-surface-card text-text-primary text-body-sm font-medium transition-colors shadow-sm active:scale-95 cursor-pointer" type="button">
+              <button
+                type="button"
+                onClick={handleDownloadScheduleExcel}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-surface-bg hover:bg-surface-card text-text-primary text-body-sm font-medium transition-colors shadow-sm active:scale-95 cursor-pointer"
+                title="Excel / CSV ამონაწერის ჩამოტვირთვა"
+              >
                 <span className="material-symbols-outlined text-[16px] text-teal-700">table_view</span>
                 <span>Excel ამონაწერი</span>
               </button>
             </div>
           </div>
-          {/* Interactive Schedule Toggle Tabs */}
+          {/* Interactive Schedule Toggle Tabs (Point 3) */}
           <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
             <div className="inline-flex p-1 rounded-lg bg-surface-bg border border-border-subtle" role="tablist">
               <button aria-selected="true" className="px-3.5 py-1.5 rounded-md text-body-sm font-semibold bg-surface-card text-primary shadow-sm transition-all" role="tab" type="button">
                 სტანდარტული გრაფიკი (12 თვემდე)
               </button>
-              <button aria-selected="false" className="px-3.5 py-1.5 rounded-md text-body-sm font-medium text-text-muted hover:text-text-primary transition-all" role="tab" type="button">
-                არასტანდარტული / გახანგრძლივებული (12 თვეზე მეტი)
-              </button>
+              {isNonStandard && (
+                <button aria-selected="false" className="px-3.5 py-1.5 rounded-md text-body-sm font-medium text-text-muted hover:text-text-primary transition-all" role="tab" type="button">
+                  არასტანდარტული / გახანგრძლივებული (12 თვეზე მეტი)
+                </button>
+              )}
             </div>
             <div className="text-body-sm text-text-muted flex items-center gap-1 font-data-mono-md">
               <span className="material-symbols-outlined text-[16px] text-primary">info</span>
-              სულ 12 პერიოდი (7 დაფარული)
+              სულ {totalPeriodsCount} პერიოდი ({paidPeriodsCount} დაფარული)
             </div>
           </div>
         </div>
-        {/* Table Responsive Container */}
+        {/* Table Responsive Container (Point 2: All 12 Periods from Database) */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -652,94 +1016,85 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle font-body-sm text-text-primary">
-              {/* Row 6 (Paid) */}
-              <tr className="hover:bg-slate-50/80 transition-colors bg-white">
-                <td className="py-3 px-3.5 text-center font-data-mono-md text-text-muted">06</td>
-                <td className="py-3 px-3.5 font-data-mono-md">25 აგვ, 2024</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md">275.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">25.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md font-semibold">300.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md">3,200.00 ₾</td>
-                <td className="py-3 px-3.5 text-center">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-rating-a/20 text-teal-800 font-semibold">
-                    <span className="material-symbols-outlined text-[13px]">check</span> გადახდილი
-                  </span>
-                </td>
-                <td className="py-3 px-3.5 text-center">
-                  <button className="p-1 rounded text-primary hover:bg-blue-50 transition-colors cursor-pointer" title="ქვითრის ჩამოტვირთვა #REC-8841-06" type="button">
-                    <span className="material-symbols-outlined text-[18px]">download</span>
-                  </button>
-                </td>
-              </tr>
-              {/* Row 7 (Paid) */}
-              <tr className="hover:bg-slate-50/80 transition-colors bg-slate-50/30">
-                <td className="py-3 px-3.5 text-center font-data-mono-md text-text-muted">07</td>
-                <td className="py-3 px-3.5 font-data-mono-md">25 სექ, 2024</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md">278.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">22.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md font-semibold">300.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md">2,900.00 ₾</td>
-                <td className="py-3 px-3.5 text-center">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-rating-a/20 text-teal-800 font-semibold">
-                    <span className="material-symbols-outlined text-[13px]">check</span> გადახდილი
-                  </span>
-                </td>
-                <td className="py-3 px-3.5 text-center">
-                  <button className="p-1 rounded text-primary hover:bg-blue-50 transition-colors cursor-pointer" title="ქვითრის ჩამოტვირთვა #REC-8841-07" type="button">
-                    <span className="material-symbols-outlined text-[18px]">download</span>
-                  </button>
-                </td>
-              </tr>
-              {/* Row 8 (Active / Next Due - Highlighted) */}
-              <tr className="bg-blue-50/50 hover:bg-blue-50 transition-colors ring-1 ring-inset ring-primary/20">
-                <td className="py-3 px-3.5 text-center font-data-mono-md font-bold text-primary">08</td>
-                <td className="py-3 px-3.5 font-data-mono-md font-bold text-text-primary flex items-center gap-1">
-                  <span>25 ოქტ, 2024</span>
-                  <span className="w-2 h-2 rounded-full bg-primary animate-ping" />
-                </td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md font-semibold">281.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">19.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md font-bold text-primary">300.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md font-semibold">2,600.00 ₾</td>
-                <td className="py-3 px-3.5 text-center">
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-primary text-white font-semibold shadow-xs">
-                    <span className="material-symbols-outlined text-[13px]">schedule</span> მომდევნო გადასახდელი
-                  </span>
-                </td>
-                <td className="py-3 px-3.5 text-center">
-                  <span className="text-[11px] text-text-muted italic">მოლოდინში</span>
-                </td>
-              </tr>
-              {/* Row 9 (Planned) */}
-              <tr className="hover:bg-slate-50/80 transition-colors bg-white">
-                <td className="py-3 px-3.5 text-center font-data-mono-md text-text-muted">09</td>
-                <td className="py-3 px-3.5 font-data-mono-md text-text-muted">25 ნოე, 2024</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">284.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">16.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">300.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">2,300.00 ₾</td>
-                <td className="py-3 px-3.5 text-center">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-slate-100 text-text-muted">
-                    დაგეგმილი
-                  </span>
-                </td>
-                <td className="py-3 px-3.5 text-center text-text-muted">—</td>
-              </tr>
-              {/* Row 10 (Planned) */}
-              <tr className="hover:bg-slate-50/80 transition-colors bg-slate-50/30">
-                <td className="py-3 px-3.5 text-center font-data-mono-md text-text-muted">10</td>
-                <td className="py-3 px-3.5 font-data-mono-md text-text-muted">25 დეკ, 2024</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">287.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">13.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">300.00 ₾</td>
-                <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">2,000.00 ₾</td>
-                <td className="py-3 px-3.5 text-center">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-slate-100 text-text-muted">
-                    დაგეგმილი
-                  </span>
-                </td>
-                <td className="py-3 px-3.5 text-center text-text-muted">—</td>
-              </tr>
+              {allInstallments.map((inst: any) => {
+                const isPaid = inst.isPaid;
+                const isNext = inst.isNextDue;
+
+                return (
+                  <tr
+                    key={inst.id}
+                    className={`transition-colors ${
+                      isNext
+                        ? 'bg-blue-50/60 hover:bg-blue-50 ring-1 ring-inset ring-primary/20'
+                        : isPaid
+                        ? 'bg-white hover:bg-slate-50/80'
+                        : 'bg-slate-50/30 hover:bg-slate-50/80 text-text-muted'
+                    }`}
+                  >
+                    <td className={`py-3 px-3.5 text-center font-data-mono-md ${isNext ? 'font-bold text-primary' : 'text-text-muted'}`}>
+                      {inst.installmentNo}
+                    </td>
+                    <td className={`py-3 px-3.5 font-data-mono-md ${isNext ? 'font-bold text-text-primary flex items-center gap-1.5' : ''}`}>
+                      <span>{inst.dueDate}</span>
+                      {isNext && <span className="w-2 h-2 rounded-full bg-primary animate-ping" />}
+                    </td>
+                    <td className={`py-3 px-3.5 text-right font-data-mono-md ${isNext ? 'font-semibold text-text-primary' : ''}`}>
+                      {inst.principal}
+                    </td>
+                    <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">
+                      {inst.interest}
+                    </td>
+                    <td className={`py-3 px-3.5 text-right font-data-mono-md ${isNext ? 'font-bold text-primary text-[15px]' : isPaid ? 'font-semibold' : ''}`}>
+                      {inst.amount}
+                    </td>
+                    <td className={`py-3 px-3.5 text-right font-data-mono-md ${isNext ? 'font-semibold text-text-primary' : ''}`}>
+                      {inst.remaining}
+                    </td>
+                    <td className="py-3 px-3.5 text-center">
+                      {isPaid ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-rating-a/20 text-teal-800 font-semibold">
+                          <span className="material-symbols-outlined text-[13px]">check</span> გადახდილი
+                        </span>
+                      ) : isNext ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-primary text-white font-semibold shadow-xs">
+                          <span className="material-symbols-outlined text-[13px]">schedule</span> მომდევნო გადასახდელი
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-label-sm font-label-sm bg-slate-100 text-text-muted">
+                          დაგეგმილი
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3.5 text-center">
+                      {isPaid ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openOfficialDocument({
+                              id: inst.id,
+                              debtorName: debtorFullName,
+                              amount: 300,
+                              paymentDate: new Date().toISOString(),
+                              receiptNumber: inst.receiptNumber || `REC-8841-${inst.installmentNo}`,
+                              status: 'CONFIRMED_BY_CREDITOR',
+                              confirmedByRole: 'CREDITOR',
+                              confirmedByUserName: creditorCompanyName,
+                            });
+                          }}
+                          className="p-1 rounded text-primary hover:bg-blue-50 transition-colors cursor-pointer"
+                          title={`ქვითრის ჩამოტვირთვა #${inst.receiptNumber || inst.installmentNo}`}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">download</span>
+                        </button>
+                      ) : isNext ? (
+                        <span className="text-[11px] text-primary font-semibold italic">მოლოდინში</span>
+                      ) : (
+                        <span className="text-text-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -884,14 +1239,22 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
             </div>
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
-                className="px-2.5 py-1.5 rounded-lg border border-primary/30 bg-blue-50 text-primary text-body-sm font-medium hover:bg-blue-100 transition-colors text-center cursor-pointer"
+                className={`px-2.5 py-1.5 rounded-lg text-body-sm font-medium transition-all text-center cursor-pointer ${
+                  paymentAmount === '300'
+                    ? 'border-2 border-primary/50 bg-blue-50 text-primary font-semibold shadow-xs'
+                    : 'border border-border-subtle bg-surface-bg text-text-primary hover:bg-slate-200'
+                }`}
                 onClick={() => setPaymentAmount('300')}
                 type="button"
               >
                 მომდევნო: 300 ₾
               </button>
               <button
-                className="px-2.5 py-1.5 rounded-lg border border-border-subtle bg-surface-bg text-text-primary text-body-sm font-medium hover:bg-slate-200 transition-colors text-center cursor-pointer"
+                className={`px-2.5 py-1.5 rounded-lg text-body-sm font-medium transition-all text-center cursor-pointer ${
+                  paymentAmount === '2900'
+                    ? 'border-2 border-primary/50 bg-blue-50 text-primary font-semibold shadow-xs'
+                    : 'border border-border-subtle bg-surface-bg text-text-primary hover:bg-slate-200'
+                }`}
                 onClick={() => setPaymentAmount('2900')}
                 type="button"
               >

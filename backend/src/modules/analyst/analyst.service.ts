@@ -9,6 +9,9 @@ export interface AssignRoleDto {
   agreementNumber?: string;
   amount?: number;
   creditorId?: string;
+  supportingDocuments?: any[];
+  waybillFileName?: string;
+  turnoverFileName?: string;
 }
 
 export interface DispatchTaskDto {
@@ -164,6 +167,28 @@ export class AnalystService {
             rating: 'B',
             riskScore: 65,
             scheduleType: ScheduleType.STANDARD,
+            supportingDocuments: dto.supportingDocuments || [
+              {
+                id: `doc-${Date.now()}-1`,
+                title: 'სასაქონლო ზედნადები (RS.GE ელ. დოკუმენტი)',
+                docType: 'WAYBILL',
+                fileName: dto.waybillFileName || 'rs_waybill_verified.pdf',
+                fileUrl: '/documents/rs_waybill_verified.pdf',
+                fileSize: '1.2 MB',
+                uploadedAt: new Date().toISOString(),
+                description: 'დამოწმებული ელექტრონული სასაქონლო ზედნადები',
+              },
+              {
+                id: `doc-${Date.now()}-2`,
+                title: 'ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი',
+                docType: 'ACCOUNT_TURNOVER',
+                fileName: dto.turnoverFileName || 'account_turnover_verified.xlsx',
+                fileUrl: '/documents/account_turnover_verified.xlsx',
+                fileSize: '450 KB',
+                uploadedAt: new Date().toISOString(),
+                description: 'საბუღალტრო ურთიერთშედარების ბარათი',
+              },
+            ],
           },
         });
 

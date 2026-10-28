@@ -508,16 +508,15 @@ async function main() {
   console.log('✅ Staged Excel Registry Items provisioned for Analyst Console');
 
   // 9. Real Debt Claim (Creditor: შპს ჯეო ტრეიდინგი -> Debtor: გიორგი ბერიძე)
-  const claim = await prisma.debtClaim.upsert({
-    where: { caseNumber: 'DI-2024-8841' },
-    update: {},
-    create: {
+  await prisma.debtClaim.deleteMany({ where: { caseNumber: 'DI-2024-8841' } });
+  const claim = await prisma.debtClaim.create({
+    data: {
       caseNumber: 'DI-2024-8841',
       creditorId: creditor.id,
       debtorId: debtor.id,
       agreementNumber: 'AGR-99214',
-      initialAmount: 1540.00,
-      remainingAmount: 890.00,
+      initialAmount: 5000.00,
+      remainingAmount: 2900.00,
       penaltyAmount: 0.00,
       currency: 'GEL',
       daysOverdue: 0,
@@ -525,28 +524,66 @@ async function main() {
       rating: 'B',
       riskScore: 68,
       scheduleType: 'STANDARD',
+      supportingDocuments: [
+        {
+          id: 'doc-01',
+          title: 'სასაქონლო ზედნადები (RS.GE #WAYBILL-8841)',
+          docType: 'WAYBILL',
+          fileName: 'rs_waybill_8841.pdf',
+          fileUrl: '/documents/rs_waybill_8841.pdf',
+          fileSize: '1.2 MB',
+          uploadedAt: '2024-03-01T10:00:00Z',
+          description: 'საქონლის მიწოდების ოფიციალური საგადასახადო ზედნადები',
+        },
+        {
+          id: 'doc-02',
+          title: 'ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი',
+          docType: 'ACCOUNT_TURNOVER',
+          fileName: 'brunviti_barati_2024.xlsx',
+          fileUrl: '/documents/brunviti_barati_2024.xlsx',
+          fileSize: '480 KB',
+          uploadedAt: '2024-03-01T10:05:00Z',
+          description: 'ურთიერთშედარების აქტი და ბრუნვის ამონაწერი Excel ფორმატში',
+        },
+        {
+          id: 'doc-03',
+          title: 'ხელშეკრულება & მიღება-ჩაბარების აქტი #AGR-8841',
+          docType: 'CONTRACT',
+          fileName: 'khelshekruleba_8841.pdf',
+          fileUrl: '/documents/khelshekruleba_8841.pdf',
+          fileSize: '2.4 MB',
+          uploadedAt: '2024-03-01T10:10:00Z',
+          description: 'მხარეთა შორის გაფორმებული საკრედიტო ხელშეკრულება',
+        },
+      ],
       schedules: {
         create: {
           type: 'STANDARD',
           totalMonths: 12,
-          monthlyAmount: 150.00,
-          startDate: new Date('2024-05-01'),
+          monthlyAmount: 300.00,
+          startDate: new Date('2024-03-01'),
           isActive: true,
           installments: {
             create: [
-              { installmentNo: 1, dueDate: new Date('2024-06-01'), amount: 150.00, paidAmount: 150.00, isPaid: true, paidAt: new Date('2024-06-01') },
-              { installmentNo: 2, dueDate: new Date('2024-07-01'), amount: 150.00, paidAmount: 150.00, isPaid: true, paidAt: new Date('2024-07-01') },
-              { installmentNo: 3, dueDate: new Date('2024-08-01'), amount: 150.00, paidAmount: 150.00, isPaid: true, paidAt: new Date('2024-08-01') },
-              { installmentNo: 4, dueDate: new Date('2024-09-01'), amount: 200.00, paidAmount: 200.00, isPaid: true, paidAt: new Date('2024-09-01') },
-              { installmentNo: 5, dueDate: new Date('2024-11-01'), amount: 150.00, paidAmount: 0.00, isPaid: false },
-              { installmentNo: 6, dueDate: new Date('2024-12-01'), amount: 150.00, paidAmount: 0.00, isPaid: false },
-            ]
-          }
-        }
-      }
-    }
+              { installmentNo: 1, dueDate: new Date('2024-03-25'), amount: 300.00, paidAmount: 300.00, isPaid: true, paidAt: new Date('2024-03-25') },
+              { installmentNo: 2, dueDate: new Date('2024-04-25'), amount: 300.00, paidAmount: 300.00, isPaid: true, paidAt: new Date('2024-04-25') },
+              { installmentNo: 3, dueDate: new Date('2024-05-25'), amount: 300.00, paidAmount: 300.00, isPaid: true, paidAt: new Date('2024-05-25') },
+              { installmentNo: 4, dueDate: new Date('2024-06-25'), amount: 300.00, paidAmount: 300.00, isPaid: true, paidAt: new Date('2024-06-25') },
+              { installmentNo: 5, dueDate: new Date('2024-07-25'), amount: 300.00, paidAmount: 300.00, isPaid: true, paidAt: new Date('2024-07-25') },
+              { installmentNo: 6, dueDate: new Date('2024-08-25'), amount: 300.00, paidAmount: 300.00, isPaid: true, paidAt: new Date('2024-08-25') },
+              { installmentNo: 7, dueDate: new Date('2024-09-25'), amount: 300.00, paidAmount: 300.00, isPaid: true, paidAt: new Date('2024-09-25') },
+              { installmentNo: 8, dueDate: new Date('2024-10-25'), amount: 300.00, paidAmount: 0.00, isPaid: false },
+              { installmentNo: 9, dueDate: new Date('2024-11-25'), amount: 300.00, paidAmount: 0.00, isPaid: false },
+              { installmentNo: 10, dueDate: new Date('2024-12-25'), amount: 300.00, paidAmount: 0.00, isPaid: false },
+              { installmentNo: 11, dueDate: new Date('2025-01-25'), amount: 300.00, paidAmount: 0.00, isPaid: false },
+              { installmentNo: 12, dueDate: new Date('2025-02-25'), amount: 300.00, paidAmount: 0.00, isPaid: false },
+            ],
+          },
+        },
+      },
+    },
   });
-  console.log('✅ Real Debt Claim provisioned:', claim.caseNumber, '(Remaining: 890.00 GEL)');
+  console.log('✅ Real Debt Claim provisioned:', claim.caseNumber, '(Remaining: 2,900.00 GEL, 12 periods, supporting docs attached)');
 
   // 9.1 Seed Payment Receipts (Point 8: Creditor & Accountant manual confirmations)
   await prisma.paymentReceipt.upsert({
