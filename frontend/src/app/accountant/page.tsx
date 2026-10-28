@@ -64,7 +64,7 @@ export default function AccountantDashboardPage() {
 
   const handleLogout = async () => {
     await authService.logout();
-    router.push('/login');
+    window.location.href = '/ops';
   };
 
   const handleConfirmByAccountant = async (e: React.FormEvent) => {
