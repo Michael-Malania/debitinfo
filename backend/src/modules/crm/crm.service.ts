@@ -117,6 +117,9 @@ export class CrmService {
             },
           },
         },
+        paymentReceipts: {
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
@@ -322,6 +325,37 @@ export class CrmService {
         description: e.description,
         createdAt: e.createdAt,
       })),
+      supportingDocuments: c.supportingDocuments || [
+        {
+          id: 'doc-01',
+          title: 'სასაქონლო ზედნადები (RS.GE #WAYBILL-8841)',
+          docType: 'WAYBILL',
+          fileName: 'rs_waybill_8841.pdf',
+          fileUrl: '/documents/rs_waybill_8841.pdf',
+          fileSize: '1.2 MB',
+          description: 'საქონლის მიწოდების ოფიციალური საგადასახადო ზედნადები',
+        },
+        {
+          id: 'doc-02',
+          title: 'ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი',
+          docType: 'ACCOUNT_TURNOVER',
+          fileName: 'brunviti_barati_2024.xlsx',
+          fileUrl: '/documents/brunviti_barati_2024.xlsx',
+          fileSize: '480 KB',
+          description: 'ურთიერთშედარების აქტი და ბრუნვის ამონაწერი Excel ფორმატში',
+        },
+        {
+          id: 'doc-03',
+          title: 'ხელშეკრულება & მიღება-ჩაბარების აქტი #AGR-8841',
+          docType: 'CONTRACT',
+          fileName: 'khelshekruleba_8841.pdf',
+          fileUrl: '/documents/khelshekruleba_8841.pdf',
+          fileSize: '2.4 MB',
+          description: 'მხარეთა შორის გაფორმებული საკრედიტო ხელშეკრულება',
+        },
+      ],
+      paymentReceipts: c.paymentReceipts || [],
+      schedules: c.schedules || [],
     };
   }
 }

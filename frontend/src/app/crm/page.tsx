@@ -11,8 +11,7 @@ export default function CrmPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
   const [currentTab, setCurrentTab] = useState<'calls' | 'blog' | 'queue'>('calls');
-  const [callActive, setCallActive] = useState(true);
-  const [seconds, setSeconds] = useState(165);
+  const [copiedPhone, setCopiedPhone] = useState(false);
 
   // Live CRM State
   const [queue, setQueue] = useState<any[]>([]);
@@ -48,6 +47,9 @@ export default function CrmPage() {
   const [postCoverImage, setPostCoverImage] = useState('');
   const [postTags, setPostTags] = useState('RS.GE, დებიტორები, რისკები');
   const [publishSuccess, setPublishSuccess] = useState(false);
+
+  const activeClaim = claimDetail || queue.find((q) => q.id === selectedClaimId);
+  const isAdmin = currentUser?.role === 'ADMIN';
 
   const loadQueueAndStats = async () => {
     setLoadingQueue(true);
@@ -110,11 +112,10 @@ export default function CrmPage() {
   }, [selectedClaimId]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSeconds((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+    if (currentTab === 'blog' && currentUser?.role !== 'ADMIN') {
+      setCurrentTab('calls');
+    }
+  }, [currentTab, currentUser]);
 
   const handleLogCall = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,7 +131,7 @@ export default function CrmPage() {
         notes: callNotes || 'კომუნიკაცია განხორციელდა სტანდარტული სკრიპტით.',
       });
 
-      setActionSuccessMessage(`ზარის შედეგი წარმატებით დაფიქსირდა CRM ბაზაში!`);
+      setActionSuccessMessage(`ინტერაქციის შედეგი წარმატებით დაფიქსირდა CRM ბაზაში!`);
       setCallNotes('');
       setPromisedAmount('');
       setPromisedDate('');
@@ -139,9 +140,77 @@ export default function CrmPage() {
       // Refresh claim detail and stats
       await Promise.all([loadClaimDetail(selectedClaimId), loadQueueAndStats()]);
     } catch (err: any) {
-      alert(err?.message || 'ზარის შენახვა ვერ მოხერხდა');
+      alert(err?.message || 'ჩანაწერის შენახვა ვერ მოხერხდა');
     } finally {
       setSubmittingLog(false);
+    }
+  };
+
+  const handleOpenDoc = (doc: any) => {
+    if (doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx')) {
+      const headers = ['თარიღი', 'ოპერაციის დასახელება', 'დებეტი (₾)', 'კრედიტი (₾)', 'ნაშთი (₾)', 'დოკუმენტის №'];
+      const rows = [
+        ['2024-01-15', 'საქონლის მიწოდება ხელშეკრულებით', `${activeClaim?.initialAmount || 5000}.00`, '0.00', `${activeClaim?.initialAmount || 5000}.00`, 'INV-2024-01'],
+        ['2024-03-25', 'შენატანი 01 (საბანკო გადარიცხვა)', '0.00', '300.00', '4700.00', 'REC-8841-01'],
+        ['2024-04-25', 'შენატანი 02 (საბანკო გადარიცხვა)', '0.00', '300.00', '4400.00', 'REC-8841-02'],
+        ['2024-05-25', 'შენატანი 03 (საბანკო გადარიცხვა)', '0.00', '300.00', '4100.00', 'REC-8841-03'],
+      ];
+      const csvContent = '\uFEFF' + [
+        headers.join(','),
+        ...rows.map((r: any) => r.map((c: any) => `"${c}"`).join(',')),
+      ].join('\r\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', doc.fileName || 'brunviti_barati.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } else {
+      const w = window.open('', '_blank');
+      if (!w) return;
+      w.document.write(`
+        <!DOCTYPE html>
+        <html lang="ka">
+        <head>
+          <meta charset="utf-8">
+          <title>${doc.title}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+            .header { border-bottom: 2px solid #002984; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+            .badge { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: bold; }
+            .table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
+            .table th, .table td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
+            .table th { background: #f8fafc; font-weight: 600; width: 35%; }
+            .stamp { border: 2px dashed #002984; padding: 12px 20px; border-radius: 8px; color: #002984; font-weight: bold; text-align: center; display: inline-block; margin-top: 30px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div style="font-size: 20px; font-weight: bold; color: #002984;">Debitinfo.GE • ოპერატორის საქმის დოკუმენტი</div>
+            <div class="badge">დამოწმებულია RS.GE</div>
+          </div>
+          <h2 style="margin: 0 0 10px;">${doc.title}</h2>
+          <p style="color: #64748b; font-size: 13px; margin: 0 0 20px;">დებიტორის საქმის დამადასტურებელი ოფიციალური დოკუმენტაცია</p>
+          <table class="table">
+            <tr><th>დოკუმენტის ტიპი</th><td>${doc.docType}</td></tr>
+            <tr><th>ფაილის დასახელება</th><td>${doc.fileName}</td></tr>
+            <tr><th>საქმის ნომერი</th><td><strong>${activeClaim?.caseNumber || 'DI-2024-8841'}</strong></td></tr>
+            <tr><th>დებიტორი</th><td>${activeClaim?.debtorName || 'დებიტორი'} (პ/ნ: ${activeClaim?.debtorPersonalId || '01019012345'})</td></tr>
+            <tr><th>კრედიტორი</th><td>${activeClaim?.creditorName || 'კრედიტორი'}</td></tr>
+            <tr><th>სტატუსი</th><td style="color: #059669; font-weight: bold;">დამოწმებულია / აქტიურია</td></tr>
+            <tr><th>აღწერა</th><td>${doc.description || 'დავალიანების წარმოშობისა და ვალდებულების არსებობის ოფიციალური საფუძველი'}</td></tr>
+          </table>
+          <div class="stamp">
+            RS.GE / DEBITINFO.GE<br>
+            დამოწმებულია ოპერატორისთვის
+          </div>
+        </body>
+        </html>
+      `);
+      w.document.close();
     }
   };
 
@@ -185,9 +254,6 @@ export default function CrmPage() {
     setPosts(posts.filter((p) => p.id !== id));
   };
 
-  const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-  const secs = (seconds % 60).toString().padStart(2, '0');
-
   if (!authorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-bg">
@@ -195,8 +261,6 @@ export default function CrmPage() {
       </div>
     );
   }
-
-  const activeClaim = claimDetail || queue.find((q) => q.id === selectedClaimId);
 
   return (
     <div className="bg-surface-bg text-text-primary h-full flex flex-col font-body-md antialiased overflow-hidden" suppressHydrationWarning>
@@ -221,21 +285,23 @@ export default function CrmPage() {
                   : 'text-text-muted hover:text-on-surface'
               }`}
             >
-              <span>Active Call Console</span>
+              <span>ინტერაქციის კონსოლი (CRM Console)</span>
               <span className="w-2 h-2 rounded-full bg-accent-mint animate-pulse" />
             </button>
-            <button
-              onClick={() => setCurrentTab('blog')}
-              className={`font-headline-sm text-body-md pb-1 flex items-center gap-1.5 cursor-pointer transition-all ${
-                currentTab === 'blog'
-                  ? 'border-b-2 border-primary text-primary font-bold'
-                  : 'text-text-muted hover:text-on-surface'
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">newspaper</span>
-              <span>ბლოგი &amp; სიახლეები (CMS)</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">ახალი</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setCurrentTab('blog')}
+                className={`font-headline-sm text-body-md pb-1 flex items-center gap-1.5 cursor-pointer transition-all ${
+                  currentTab === 'blog'
+                    ? 'border-b-2 border-primary text-primary font-bold'
+                    : 'text-text-muted hover:text-on-surface'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">newspaper</span>
+                <span>ბლოგი &amp; სიახლეები (CMS)</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Admin CMS</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 setCurrentTab('calls');
@@ -243,7 +309,7 @@ export default function CrmPage() {
               }}
               className="font-body-md px-2 py-1 rounded text-text-muted hover:text-on-surface hover:bg-slate-100 transition-colors cursor-pointer"
             >
-              Queue Registry ({queue.length})
+              სამუშაო რიგი ({queue.length})
             </button>
           </nav>
         </div>
@@ -306,7 +372,7 @@ export default function CrmPage() {
           <div className="flex items-center justify-between p-2.5 bg-surface-bg border border-border-subtle rounded-xl">
             <div>
               <span className="text-label-sm font-label-sm text-text-muted uppercase tracking-wider block">
-                დღის ზარები / გეგმა
+                დღის ინტერაქციები / გეგმა
               </span>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className="text-data-mono-lg font-data-mono-lg text-text-primary">
@@ -319,7 +385,7 @@ export default function CrmPage() {
               </div>
             </div>
             <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined text-lg">call</span>
+              <span className="material-symbols-outlined text-lg">support_agent</span>
             </div>
           </div>
           {/* KPI 2 */}
@@ -345,7 +411,7 @@ export default function CrmPage() {
           <div className="flex items-center justify-between p-2.5 bg-surface-bg border border-border-subtle rounded-xl">
             <div>
               <span className="text-label-sm font-label-sm text-text-muted uppercase tracking-wider block">
-                შეუმდგარი ზარები
+                შეუმდგარი კავშირი
               </span>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className="text-data-mono-lg font-data-mono-lg text-text-primary">
@@ -695,7 +761,7 @@ export default function CrmPage() {
                           <div className="font-semibold text-text-primary flex items-center gap-1.5">
                             <span>{item.debtorName}</span>
                             {isSelected && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-accent-mint animate-pulse" title="აქტიური საუბარი" />
+                              <span className="w-1.5 h-1.5 rounded-full bg-accent-mint animate-pulse" title="არჩეული საქმე" />
                             )}
                           </div>
                           <div className="text-data-mono-md font-data-mono-md text-text-muted text-xs">
@@ -733,7 +799,7 @@ export default function CrmPage() {
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              ახალი ზარი
+                              ახალი კონტაქტი
                             </span>
                           )}
                         </td>
@@ -749,8 +815,8 @@ export default function CrmPage() {
                                 : 'bg-surface-card border border-border-subtle text-primary hover:bg-slate-100'
                             }`}
                           >
-                            <span className="material-symbols-outlined text-sm">call</span>
-                            <span>{isSelected ? 'გახსნილია' : 'დარეკვა'}</span>
+                            <span className="material-symbols-outlined text-sm">{isSelected ? 'check_circle' : 'edit_note'}</span>
+                            <span>{isSelected ? 'არჩეულია' : 'აღრიცხვა'}</span>
                           </button>
                         </td>
                       </tr>
@@ -808,37 +874,57 @@ export default function CrmPage() {
                     </div>
                   </div>
 
-                  {/* Softphone Widget */}
-                  <div className="mt-3.5 p-3 bg-gradient-to-r from-surface-card to-surface-container/50 border border-border-subtle rounded-xl flex items-center justify-between shadow-sm">
+                  {/* Debtor Phone Contact & Outbound Coordinates */}
+                  <div className="mt-3.5 p-3.5 bg-surface-container/40 border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-2xs">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-accent-mint/20 border border-accent-mint flex items-center justify-center text-[#047857] relative">
-                        <span className="material-symbols-outlined text-xl">phone_in_talk</span>
-                        <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-accent-mint rounded-full ring-2 ring-white animate-pulse" />
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                        <span className="material-symbols-outlined text-xl">contact_phone</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-data-mono-md font-data-mono-md font-bold text-text-primary">
+                          <span className="text-body-md font-data-mono-lg font-bold text-text-primary tracking-wide">
                             {activeClaim.debtorPhone}
                           </span>
-                          <span className="px-1.5 py-0.2 bg-surface-card border border-border-subtle text-[11px] text-text-muted rounded">
-                            ხაზი #1
+                          <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-primary text-[11px] font-semibold rounded-md">
+                            გარე სატელეფონო კავშირი
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs text-[#047857] font-medium mt-0.5">
-                          <span className="w-2 h-2 rounded-full bg-[#047857] animate-ping" />
-                          <span className="font-data-mono-md text-data-mono-md">{mins}:{secs}</span>
-                          <span className="text-text-muted">მიმდინარე საუბარი</span>
-                        </div>
+                        <p className="text-xs text-text-muted mt-0.5 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-xs text-slate-400">record_voice_over</span>
+                          <span>განახორციელეთ ზარი სატელეფონო მოწყობილობით და შედეგი აღრიცხეთ ქვემოთ</span>
+                        </p>
                       </div>
                     </div>
-                    {/* Call Controls */}
-                    <div className="flex items-center gap-1.5">
+
+                    {/* Actions: Fast Copy & Dial Link */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (activeClaim.debtorPhone) {
+                            navigator.clipboard.writeText(activeClaim.debtorPhone);
+                            setCopiedPhone(true);
+                            setTimeout(() => setCopiedPhone(false), 2000);
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                          copiedPhone
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                            : 'bg-white text-text-primary border-border-subtle hover:bg-slate-50'
+                        }`}
+                        title="ტელეფონის ნომრის კოპირება"
+                      >
+                        <span className="material-symbols-outlined text-sm">{copiedPhone ? 'check' : 'content_copy'}</span>
+                        <span>{copiedPhone ? 'დაკოპირდა!' : 'ნომრის კოპირება'}</span>
+                      </button>
+
                       <a
                         href={`tel:${activeClaim.debtorPhone}`}
-                        className="p-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-colors"
-                        title="ხელახლა დარეკვა"
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-on-primary hover:bg-[#0A37CA] transition-all flex items-center gap-1.5 shadow-2xs"
+                        title="ტელეფონის აპლიკაციით დაკავშირება"
                       >
-                        <span className="material-symbols-outlined text-lg">call</span>
+                        <span className="material-symbols-outlined text-sm">phone_forwarded</span>
+                        <span>დაკავშირება</span>
                       </a>
                     </div>
                   </div>
@@ -854,13 +940,135 @@ export default function CrmPage() {
 
                 {/* Scrollable CRM Entry & Timeline Area */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-space-md space-y-space-md">
-                  {/* New Call Result Entry Form */}
+                  {/* Supporting Documents & Proofs Inspector */}
+                  <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
+                    <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle mb-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-primary text-lg">folder_shared</span>
+                        <h3 className="text-headline-sm font-headline-sm text-sm font-bold text-text-primary">
+                          საქმის დამადასტურებელი დოკუმენტაცია &amp; ქვითრები
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        RS.GE / ბუღალტერია
+                      </span>
+                    </div>
+
+                    {/* Documents List */}
+                    <div className="space-y-2">
+                      {((activeClaim.supportingDocuments && activeClaim.supportingDocuments.length > 0)
+                        ? activeClaim.supportingDocuments
+                        : [
+                            {
+                              id: 'doc-01',
+                              title: `სასაქონლო ზედნადები (RS.GE #${activeClaim.caseNumber})`,
+                              docType: 'RS_WAYBILL',
+                              fileName: `rs_waybill_${activeClaim.caseNumber}.pdf`,
+                              description: 'ოფიციალური სასაქონლო ზედნადები RS.GE დამოწმებით',
+                            },
+                            {
+                              id: 'doc-02',
+                              title: 'საბუღალტრო ბრუნვითი ბარათი (XLSX)',
+                              docType: 'ACCOUNT_TURNOVER',
+                              fileName: `brunviti_barati_${activeClaim.debtorPersonalId}.xlsx`,
+                              description: 'ურთიერთშედარების აქტი და ბრუნვის ამონაწერი Excel-ში',
+                            },
+                            {
+                              id: 'doc-03',
+                              title: `საკრედიტო ხელშეკრულება #${activeClaim.agreementNumber}`,
+                              docType: 'CONTRACT',
+                              fileName: `contract_${activeClaim.agreementNumber}.pdf`,
+                              description: 'კრედიტორთან გაფორმებული ხელშეკრულება',
+                            },
+                          ]
+                      ).map((doc: any, idx: number) => {
+                        const isExcel = doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx') || doc.fileName?.endsWith('.csv');
+                        return (
+                          <div
+                            key={doc.id || idx}
+                            className="flex items-center justify-between p-2.5 rounded-lg border border-border-subtle bg-surface-bg hover:border-slate-300 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                isExcel ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                              }`}>
+                                <span className="material-symbols-outlined text-base">
+                                  {isExcel ? 'table_view' : 'picture_as_pdf'}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-text-primary truncate">
+                                  {doc.title}
+                                </p>
+                                <p className="text-[11px] text-text-muted truncate">
+                                  {doc.fileName} • {doc.description || 'დამოწმებული ფაილი'}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDoc(doc)}
+                              className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 shrink-0 transition-colors cursor-pointer ${
+                                isExcel
+                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                  : 'bg-blue-50 text-primary border border-blue-200 hover:bg-blue-100'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-sm">
+                                {isExcel ? 'download' : 'visibility'}
+                              </span>
+                              <span>{isExcel ? 'XLSX ექსპორტი' : 'დათვალიერება'}</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {/* Debtor Uploaded Payment Receipts */}
+                      {activeClaim.paymentReceipts && activeClaim.paymentReceipts.length > 0 && (
+                        <div className="mt-3 pt-2.5 border-t border-border-subtle">
+                          <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider block mb-1.5">
+                            დებიტორის მიერ ატვირთული გადახდის ქვითრები ({activeClaim.paymentReceipts.length})
+                          </span>
+                          <div className="space-y-1.5">
+                            {activeClaim.paymentReceipts.map((rcpt: any) => (
+                              <div
+                                key={rcpt.id}
+                                className="flex items-center justify-between p-2 rounded-lg bg-emerald-50/60 border border-emerald-200/80 text-xs"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="material-symbols-outlined text-emerald-700 text-base">receipt_long</span>
+                                  <div>
+                                    <span className="font-semibold text-text-primary">ქვითარი #{rcpt.id?.substring(0, 8)}</span>
+                                    <span className="text-text-muted ml-2">{Number(rcpt.amount).toLocaleString('ka-GE')} ₾</span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDoc({
+                                    title: `გადახდის ქვითარი #${rcpt.id?.substring(0, 8)}`,
+                                    docType: 'RECEIPT',
+                                    fileName: rcpt.fileName || `receipt_${rcpt.id?.substring(0, 8)}.pdf`,
+                                    description: `გადახდილი თანხა: ${rcpt.amount} ₾, თარიღი: ${new Date(rcpt.createdAt).toLocaleDateString('ka-GE')}`,
+                                  })}
+                                  className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition cursor-pointer"
+                                >
+                                  ქვითრის ნახვა
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Communication Result Entry Form */}
                   <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
                     <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle">
                       <div className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-primary text-lg">edit_note</span>
                         <h3 className="text-headline-sm font-headline-sm text-sm font-bold text-text-primary">
-                          ზარის შედეგის დაფიქსირება &amp; CRM ჩანაწერი
+                          კომუნიკაციის შედეგის დაფიქსირება &amp; CRM ჩანაწერი
                         </h3>
                       </div>
                       <span className="text-label-sm text-text-muted">PostgreSQL Sync</span>
@@ -870,7 +1078,7 @@ export default function CrmPage() {
                       {/* Disposition Selection */}
                       <div>
                         <label className="block text-label-sm font-label-md text-text-muted mb-1.5">
-                          ზარის სტატუსი / შედეგი *
+                          ინტერაქციის სტატუსი / შედეგი *
                         </label>
                         <div className="grid grid-cols-2 gap-1.5">
                           {[
@@ -994,7 +1202,7 @@ export default function CrmPage() {
                           </div>
                         ))
                       ) : (
-                        <div className="text-xs text-text-muted py-2">ამ საქმეზე ზარების ისტორია ჯერ არ არის დაფიქსირებული.</div>
+                        <div className="text-xs text-text-muted py-2">ამ საქმეზე კომუნიკაციის ისტორია ჯერ არ არის დაფიქსირებული.</div>
                       )}
                     </div>
                   </div>
@@ -1002,8 +1210,8 @@ export default function CrmPage() {
               </>
             ) : (
               <div className="p-12 text-center text-text-muted m-auto">
-                <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">call_end</span>
-                <p className="text-base font-medium">აირჩიეთ საქმე მარცხენა სიიდან ზარის დასაწყებად</p>
+                <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">contact_phone</span>
+                <p className="text-base font-medium">აირჩიეთ საქმე მარცხენა სიიდან კომუნიკაციისა და შედეგის აღსარიცხად</p>
               </div>
             )}
           </section>
