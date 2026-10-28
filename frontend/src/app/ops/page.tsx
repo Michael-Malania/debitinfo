@@ -100,24 +100,48 @@ export default function OpsPage() {
   const [editContactAddress, setEditContactAddress] = useState('');
   const [editContactRelationType, setEditContactRelationType] = useState('EMERGENCY');
 
-  // Check current session on mount
+  // Check current session on mount with synchronization & loop prevention
   useEffect(() => {
-    const user = authService.getCurrentUser();
-    if (!user) {
+    try {
+      const token = authService.getToken();
+      const user = authService.getCurrentUser();
+
+      // If no token or no user, clear stale session and show login screen
+      if (!token || !user) {
+        if (user && !token) {
+          authService.clearSession();
+        }
+        setCurrentUser(null);
+        return;
+      }
+
+      // If not staff, clear session and show login screen
+      const staffRoles = ['ADMIN', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'LEGAL', 'ACCOUNTANT'];
+      if (!staffRoles.includes(user.role)) {
+        authService.clearSession();
+        setCurrentUser(null);
+        return;
+      }
+
+      // If staff but NOT ADMIN, synchronize cookies and forward to their workspace
+      if (user.role !== 'ADMIN') {
+        document.cookie = `access_token=${token}; path=/; max-age=604800; SameSite=Lax`;
+        document.cookie = `user_role=${user.role}; path=/; max-age=604800; SameSite=Lax`;
+        const dest = authService.getPortalRouteForRole(user.role);
+        router.replace(dest);
+        return;
+      }
+
+      // Admin user verified: synchronize cookies and enable workspace
+      document.cookie = `access_token=${token}; path=/; max-age=604800; SameSite=Lax`;
+      document.cookie = `user_role=ADMIN; path=/; max-age=604800; SameSite=Lax`;
+      setCurrentUser(user);
+    } catch (e) {
+      console.warn('Session verification error on /ops:', e);
       setCurrentUser(null);
+    } finally {
       setAuthChecked(true);
-      return;
     }
-
-    // Strict role check: ONLY ADMIN is allowed on /ops
-    if (user.role !== 'ADMIN') {
-      const dest = authService.getPortalRouteForRole(user.role);
-      router.replace(dest);
-      return;
-    }
-
-    setCurrentUser(user);
-    setAuthChecked(true);
   }, [router]);
 
   // Load Staff data when authenticated as admin
@@ -370,8 +394,8 @@ export default function OpsPage() {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-bg">
-        <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-surface-bg" suppressHydrationWarning>
+        <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" suppressHydrationWarning />
       </div>
     );
   }
@@ -381,7 +405,7 @@ export default function OpsPage() {
   // =========================================================================
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex flex-col font-body-md text-text-primary bg-surface-bg antialiased selection:bg-primary selection:text-white">
+      <div className="min-h-screen flex flex-col font-body-md text-text-primary bg-surface-bg antialiased selection:bg-primary selection:text-white" suppressHydrationWarning>
         {/* Top Header */}
         <header className="bg-surface-card sticky top-0 z-40 border-b border-border-subtle shadow-sm">
           <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
@@ -548,8 +572,8 @@ export default function OpsPage() {
   // Security Guard: Non-admin staff members must never see the admin control console
   if (currentUser.role !== 'ADMIN') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-bg p-4">
-        <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-lg max-w-md text-center space-y-3">
+      <div className="min-h-screen flex items-center justify-center bg-surface-bg p-4" suppressHydrationWarning>
+        <div className="bg-white p-6 rounded-2xl border border-border-subtle shadow-lg max-w-md text-center space-y-3" suppressHydrationWarning>
           <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
             <span className="material-symbols-outlined text-2xl animate-spin">sync</span>
           </div>
@@ -564,7 +588,7 @@ export default function OpsPage() {
   // VIEW 2: AUTHENTICATED OPS WORKSPACE (Staff & Employee Control Console)
   // =========================================================================
   return (
-    <div className="min-h-screen flex flex-col font-body-md text-text-primary bg-surface-bg antialiased selection:bg-primary selection:text-white">
+    <div className="min-h-screen flex flex-col font-body-md text-text-primary bg-surface-bg antialiased selection:bg-primary selection:text-white" suppressHydrationWarning>
       {/* Top Header */}
       <header className="bg-surface-card sticky top-0 z-40 border-b border-border-subtle shadow-sm">
         <div className="w-full px-4 lg:px-8 max-w-[1720px] mx-auto flex items-center justify-between h-16">

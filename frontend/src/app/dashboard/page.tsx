@@ -46,8 +46,8 @@ export default function UnifiedDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-bg">
-        <div className="p-8 rounded-2xl bg-surface-card border border-border-subtle shadow-xl flex flex-col items-center gap-4 text-center max-w-sm">
+      <div className="min-h-screen flex items-center justify-center bg-surface-bg" suppressHydrationWarning>
+        <div className="p-8 rounded-2xl bg-surface-card border border-border-subtle shadow-xl flex flex-col items-center gap-4 text-center max-w-sm" suppressHydrationWarning>
           <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
             <span className="material-symbols-outlined text-2xl animate-spin">sync</span>
           </div>

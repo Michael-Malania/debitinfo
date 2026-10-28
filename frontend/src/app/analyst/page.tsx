@@ -236,14 +236,14 @@ export default function AnalystPage() {
 
   if (!authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-bg">
-        <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-surface-bg" suppressHydrationWarning>
+        <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" suppressHydrationWarning />
       </div>
     );
   }
 
   return (
-    <div className="bg-surface-bg text-text-primary min-h-screen antialiased flex flex-col font-body-md select-none selection:bg-primary-container selection:text-white">
+    <div className="bg-surface-bg text-text-primary min-h-screen antialiased flex flex-col font-body-md select-none selection:bg-primary-container selection:text-white" suppressHydrationWarning>
 <div>
   {/* ========================================================================= */}
   {/* 1. TOP NAVIGATION BAR / OPERATIONS HEADER */}
