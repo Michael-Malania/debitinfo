@@ -109,15 +109,10 @@ export default function ProfilePage() {
           <div>
             <div className="flex flex-wrap items-center gap-2.5 mb-1">
               <h2 className="font-headline-md text-headline-md text-text-primary">გიორგი ბერიძე</h2>
-              {/* Verification Badge */}
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-label-md text-label-md">
-                <span className="material-symbols-outlined text-[15px] text-emerald-600" style={{fontVariationSettings: '"FILL" 1'}}>verified_user</span>
-                იდენტობა დადასტურებულია
-              </span>
             </div>
             <p className="font-body-sm text-body-sm text-text-muted flex items-center gap-1.5">
               <span className="material-symbols-outlined text-[16px] text-primary">account_balance</span>
-              შემოწმებულია სახელმწიფო სერვისების განვითარების სააგენტოსა და RS.GE-ს ბაზებთან
+              სუბიექტის ტიპი: ფიზიკური პირი • მისამართი: ქ. თბილისი, ჭავჭავაძის გამზ. 24
             </p>
           </div>
         </div>
@@ -191,13 +186,36 @@ export default function ProfilePage() {
             <span className="material-symbols-outlined text-[14px]">done_all</span> 0 ჩანაწერი
           </span>
         </div>
+        {/* Sealed / Locked Official Certificate Banner */}
+        <div className="w-full max-w-xl bg-gradient-to-r from-amber-500/10 via-amber-50/70 to-amber-500/10 border-2 border-dashed border-amber-300 rounded-xl p-5 text-left shadow-xs">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center shrink-0 shadow-2xs">
+              <span className="material-symbols-outlined text-[24px]">lock</span>
+            </div>
+            <div className="space-y-1.5 flex-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="font-bold text-text-primary text-body-md flex items-center gap-1.5">
+                  <span>ოფიციალური იურიდიული ცნობა</span>
+                  <span className="text-amber-800 text-xs font-semibold px-2 py-0.5 rounded bg-amber-200/80">დალუქულია</span>
+                </h4>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold">
+                  ფასიანი სერვისი • 15 ₾
+                </span>
+              </div>
+              <p className="text-body-sm text-text-muted leading-relaxed">
+                ოფიციალური ცნობის ჩამოტვირთვა დალუქულია. სერვისის ჩასართავად და დამოწმებული PDF დოკუმენტის მისაღებად აუცილებელია მომსახურების საფასურის გადახდა.
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Action CTAs */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 w-full pt-2">
           {/* Download Certificate Primary CTA */}
-          <a className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-lg bg-primary text-white font-label-md text-label-md hover:bg-[#0A37CA] transition-all shadow-md shadow-primary/25 active:scale-[0.98]" href="#">
-            <span className="material-symbols-outlined text-[20px]">download</span>
-            <span>ოფიციალური ცნობის ჩამოტვირთვა (PDF)</span>
-          </a>
+          <button className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-body-md transition-all shadow-md shadow-amber-600/25 active:scale-[0.98] cursor-pointer" type="button" onClick={() => alert('ოფიციალური ცნობის ჩასართავად და ჩამოსატვირთად აუცილებელია მომსახურების საფასურის (15 ₾) გადახდა.')}>
+            <span className="material-symbols-outlined text-[20px]">lock</span>
+            <span>ოფიციალური ცნობის ჩამოტვირთვა (15 ₾)</span>
+          </button>
           {/* Refresh Check Secondary CTA */}
           <button className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-surface-card border border-border-subtle text-text-primary hover:border-secondary-container hover:text-primary transition-all font-label-md text-label-md shadow-sm active:scale-[0.98]" type="button">
             <span className="material-symbols-outlined text-[18px] text-primary">autorenew</span>
@@ -465,8 +483,10 @@ export default function ProfilePage() {
               <p className="font-body-sm text-body-sm text-text-muted">დამოწმებული ელექტრონული შტამპით ბანკებსა და საელჩოებში წარსადგენად.</p>
             </div>
             <div className="pt-4 mt-2 border-t border-border-subtle flex items-center justify-between">
-              <a className="font-body-sm text-body-sm text-primary hover:underline font-medium" href="#">გენერირება →</a>
-              <span className="font-label-sm text-label-sm text-text-muted">PDF ფორმატი</span>
+              <span className="font-body-sm text-body-sm text-amber-700 font-semibold flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">lock</span> 15 ₾ (ფასიანი)
+              </span>
+              <span className="font-label-sm text-label-sm text-amber-800 bg-amber-100 px-2 py-0.5 rounded text-[11px] font-semibold">დალუქულია</span>
             </div>
           </div>
           {/* Service Card 3 */}

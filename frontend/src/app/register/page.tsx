@@ -33,39 +33,8 @@ export default function RegisterPage() {
 
   // UI State
   const [loading, setLoading] = useState(false);
-  const [rsChecking, setRsChecking] = useState(false);
-  const [rsVerifiedBadge, setRsVerifiedBadge] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-
-  // Auto-verify / Inspect with RS.GE
-  const handleCheckRsGe = async () => {
-    const id = personalId.trim();
-    if (!id || (id.length !== 9 && id.length !== 11)) {
-      setError('გთხოვთ მიუთითოთ 9-ნიშნა ს/კ (იურიდიული პირი) ან 11-ნიშნა პ/ნ (ფიზიკური პირი)');
-      return;
-    }
-    setError('');
-    setRsChecking(true);
-    try {
-      const data = await authService.getTaxpayerInfo(id);
-      if (data?.fullName) {
-        if (entityType === 'legal') {
-          setCompanyName(data.fullName);
-          if (data.registeredSubject) setLegalForm(data.registeredSubject);
-        } else {
-          const parts = data.fullName.split(' ');
-          setFirstName(parts[0] || '');
-          setLastName(parts.slice(1).join(' ') || '');
-        }
-        setRsVerifiedBadge(`RS.GE დადასტურებულია: ${data.fullName} (${data.status})`);
-      }
-    } catch (e: any) {
-      setError(e?.message || 'RS.GE-დან მონაცემების მიღება ვერ მოხერხდა');
-    } finally {
-      setRsChecking(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,48 +194,20 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {/* Quick Identifier & RS.GE Inspection Row */}
-            <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/50 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="block font-label-md text-label-md text-text-primary font-semibold">
-                  {entityType === 'legal' ? 'საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) *' : 'პირადი ნომერი (11 ნიშნა) *'}
-                </label>
-                <button
-                  type="button"
-                  onClick={handleCheckRsGe}
-                  disabled={rsChecking}
-                  className="px-3 py-1 rounded-lg bg-white border border-blue-300 hover:border-blue-500 text-primary text-xs font-semibold flex items-center gap-1.5 shadow-2xs self-start transition active:scale-95"
-                >
-                  {rsChecking ? (
-                    <span className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                  ) : (
-                    <span className="material-symbols-outlined text-xs">sync</span>
-                  )}
-                  <span>RS.GE მონაცემების შემოწმება &amp; ავტოშევსება</span>
-                </button>
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  maxLength={entityType === 'legal' ? 9 : 11}
-                  value={personalId}
-                  onChange={(e) => {
-                    setPersonalId(e.target.value);
-                    setRsVerifiedBadge(null);
-                  }}
-                  placeholder={entityType === 'legal' ? '405123456' : '01019012345'}
-                  required
-                  className="w-full bg-white border border-border-subtle rounded-lg px-3 py-2 font-mono text-text-primary focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all"
-                />
-              </div>
-
-              {rsVerifiedBadge && (
-                <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-                  <span className="material-symbols-outlined text-sm text-emerald-600">verified</span>
-                  <span>{rsVerifiedBadge}</span>
-                </div>
-              )}
+            {/* Identifier Input Field */}
+            <div>
+              <label className="block font-label-md text-label-md text-text-primary font-semibold mb-1.5">
+                {entityType === 'legal' ? 'საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) *' : 'პირადი ნომერი (11 ნიშნა) *'}
+              </label>
+              <input
+                type="text"
+                maxLength={entityType === 'legal' ? 9 : 11}
+                value={personalId}
+                onChange={(e) => setPersonalId(e.target.value)}
+                placeholder={entityType === 'legal' ? '405123456' : '01019012345'}
+                required
+                className="w-full bg-white border border-border-subtle rounded-lg px-3.5 py-2.5 font-mono text-text-primary focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-container/20 transition-all text-sm"
+              />
             </div>
 
             {/* ======================================================== */}

@@ -13,6 +13,9 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
   const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [isCertificatePaid, setIsCertificatePaid] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paying, setPaying] = useState(false);
 
   const isLegal = user.entityType === 'LEGAL';
 
@@ -44,8 +47,77 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
     setDownloading(true);
     setTimeout(() => {
       setDownloading(false);
-      alert('ოფიციალური სუფთა საკრედიტო ისტორიის ცნობა (PDF) წარმატებით გენერირდა!');
-    }, 1200);
+      const certWindow = window.open('', '_blank');
+      if (certWindow) {
+        certWindow.document.write(`
+          <!DOCTYPE html>
+          <html lang="ka">
+          <head>
+            <meta charset="utf-8">
+            <title>ოფიციალური ცნობა - Debitinfo.GE - ${personalId}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1e293b; line-height: 1.6; max-width: 800px; margin: 0 auto; }
+              .header { border-bottom: 2px solid #002984; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+              .brand { font-size: 24px; font-weight: bold; color: #002984; }
+              .badge { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 6px 14px; border-radius: 9999px; font-size: 13px; font-weight: bold; }
+              .title { font-size: 22px; font-weight: bold; text-align: center; margin: 30px 0 8px; color: #0f172a; }
+              .subtitle { text-align: center; color: #64748b; font-size: 14px; margin-bottom: 30px; }
+              .table { width: 100%; border-collapse: collapse; margin: 25px 0; }
+              .table th, .table td { border: 1px solid #e2e8f0; padding: 12px 16px; text-align: left; font-size: 14px; }
+              .table th { background: #f8fafc; font-weight: 600; width: 38%; color: #475569; }
+              .status-ok { color: #059669; font-weight: bold; font-size: 15px; }
+              .stamp-box { margin-top: 50px; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+              .stamp { border: 2px dashed #002984; padding: 15px 24px; border-radius: 8px; text-align: center; color: #002984; font-weight: bold; font-size: 13px; line-height: 1.4; }
+              .qr-box { font-size: 12px; color: #64748b; text-align: right; line-height: 1.5; }
+              @media print { .no-print { display: none; } }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="brand">Debitinfo.GE</div>
+              <div class="badge">რეიტინგი: A • სუფთა საკრედიტო ისტორია</div>
+            </div>
+            <div class="title">ოფიციალური იურიდიული ცნობა</div>
+            <div class="subtitle">დავალიანების არარსებობისა და საკრედიტო რეიტინგის შესახებ</div>
+            
+            <table class="table">
+              <tr><th>სუბიექტის დასახელება</th><td><strong>${displayName}</strong></td></tr>
+              <tr><th>${isLegal ? 'საიდენტიფიკაციო კოდი (ს/კ)' : 'პირადი ნომერი (პ/ნ)'}</th><td><strong style="font-family: monospace;">${personalId}</strong></td></tr>
+              <tr><th>სამართლებრივი სტატუსი</th><td>${isLegal ? 'იურიდიული პირი' : 'ფიზიკური პირი'}</td></tr>
+              <tr><th>მისამართი</th><td>${address}</td></tr>
+              <tr><th>მიმდინარე დავალიანება</th><td class="status-ok">0.00 ₾ (არ ფიქსირდება)</td></tr>
+              <tr><th>სასამართლო / სააღსრულებო საქმე</th><td>0 აქტიური საქმე</td></tr>
+              <tr><th>ცნობის ნომერი</th><td>#DI-${Date.now().toString().slice(-8)}</td></tr>
+              <tr><th>გაცემის თარიღი</th><td>${new Date().toLocaleDateString('ka-GE')}</td></tr>
+            </table>
+
+            <p style="font-size: 13px; color: #475569; margin-top: 24px; text-align: justify;">
+              წინამდებარე ცნობა ადასტურებს, რომ აღნიშნულ სუბიექტს საქართველოს მოვალეთა და კრედიტორთა ეროვნულ ბაზაში Debitinfo.GE არ ერიცხება ვადაგადაცილებული ფინანსური ან საკრედიტო დავალიანება. დოკუმენტი განკუთვნილია წარსადგენად ბანკებში, საჯარო რეესტრსა და ოფიციალურ სახელმწიფო უწყებებში.
+            </p>
+
+            <div class="stamp-box">
+              <div class="stamp">
+                DEBITINFO.GE<br>
+                ელექტრონულად დამოწმებულია<br>
+                ✓ ოფიციალური ბეჭედი
+              </div>
+              <div class="qr-box">
+                QR ვერიფიკაციის კოდი: DI-VERIFY-${Math.random().toString(36).substring(2, 9).toUpperCase()}<br>
+                ვალიდურობის ვადა: 30 კალენდარული დღე
+              </div>
+            </div>
+
+            <div class="no-print" style="margin-top: 40px; text-align: center;">
+              <button onclick="window.print()" style="padding: 12px 28px; background: #002984; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer;">
+                🖨️ ბეჭდვა / PDF შენახვა
+              </button>
+            </div>
+          </body>
+          </html>
+        `);
+        certWindow.document.close();
+      }
+    }, 600);
   };
 
   return (
@@ -151,11 +223,6 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
               <div>
                 <div className="flex flex-wrap items-center gap-2.5 mb-1">
                   <h2 className="font-headline-md text-headline-md text-text-primary font-bold">{displayName}</h2>
-                  {/* Verification Badge */}
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-label-md text-label-md font-semibold">
-                    <span className="material-symbols-outlined text-[15px] text-emerald-600">verified_user</span>
-                    {user.isRsVerified ? 'იდენტობა დადასტურებულია RS.GE-ით' : 'სისტემაში ვერიფიცირებული'}
-                  </span>
                 </div>
                 <p className="font-body-sm text-body-sm text-text-muted flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-[16px] text-primary">account_balance</span>
@@ -249,19 +316,77 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
               </span>
             </div>
 
+            {/* Sealed / Locked Paid Official Certificate Banner */}
+            {!isCertificatePaid ? (
+              <div className="w-full max-w-xl bg-gradient-to-r from-amber-500/10 via-amber-50/70 to-amber-500/10 border-2 border-dashed border-amber-300 rounded-xl p-5 text-left shadow-xs transition-all">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center shrink-0 shadow-2xs">
+                    <span className="material-symbols-outlined text-[24px]">lock</span>
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="font-bold text-text-primary text-body-md flex items-center gap-1.5">
+                        <span>ოფიციალური იურიდიული ცნობა</span>
+                        <span className="text-amber-850 text-xs font-semibold px-2 py-0.5 rounded bg-amber-200/80">დალუქულია</span>
+                      </h4>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[11px] font-bold">
+                        ფასიანი სერვისი • 15 ₾
+                      </span>
+                    </div>
+                    <p className="text-body-sm text-text-muted leading-relaxed">
+                      ოფიციალური ცნობის ჩამოტვირთვა დალუქულია. სერვისის ჩასართავად და დამოწმებული PDF დოკუმენტის მისაღებად აუცილებელია მომსახურების საფასურის გადახდა.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full max-w-xl bg-emerald-500/10 border border-emerald-300 rounded-xl p-5 text-left shadow-xs transition-all">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+                    <span className="material-symbols-outlined text-[24px]">lock_open</span>
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h4 className="font-bold text-text-primary text-body-md flex items-center gap-1.5">
+                        <span>ოფიციალური იურიდიული ცნობა</span>
+                        <span className="text-emerald-800 text-xs font-semibold px-2 py-0.5 rounded bg-emerald-200/80">ჩართულია</span>
+                      </h4>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold">
+                        გადახდილია • აქტიური
+                      </span>
+                    </div>
+                    <p className="text-body-sm text-text-muted leading-relaxed">
+                      სერვისი წარმატებით გააქტიურებულია. შეგიძლიათ შეუზღუდავად ჩამოტვირთოთ ოფიციალური QR-კოდირებული PDF დოკუმენტი.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Action CTAs */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 w-full pt-2">
-              <button
-                onClick={handleDownloadCertificate}
-                disabled={downloading}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md transition-all shadow-md shadow-primary/20 active:scale-[0.98] cursor-pointer"
-                type="button"
-              >
-                <span className="material-symbols-outlined text-[20px]">
-                  {downloading ? 'sync' : 'download'}
-                </span>
-                <span>{downloading ? 'მზადდება PDF...' : 'ოფიციალური ცნობის ჩამოტვირთვა (PDF)'}</span>
-              </button>
+              {!isCertificatePaid ? (
+                <button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-body-md transition-all shadow-md shadow-amber-600/25 active:scale-[0.98] cursor-pointer"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[20px]">lock</span>
+                  <span>ოფიციალური ცნობის ჩამოტვირთვა (15 ₾)</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleDownloadCertificate}
+                  disabled={downloading}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md transition-all shadow-md shadow-primary/20 active:scale-[0.98] cursor-pointer"
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {downloading ? 'sync' : 'download'}
+                  </span>
+                  <span>{downloading ? 'მზადდება PDF...' : 'ოფიციალური ცნობის ჩამოტვირთვა (PDF)'}</span>
+                </button>
+              )}
               <button
                 onClick={() => window.location.reload()}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-surface-card border border-border-subtle text-text-primary hover:border-primary/40 hover:text-primary transition-all font-medium text-body-md shadow-xs active:scale-[0.98] cursor-pointer"
@@ -343,6 +468,121 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
           </div>
         </div>
       </footer>
+
+      {/* PAYMENT & ACTIVATION MODAL */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface-card rounded-2xl border border-border-subtle max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-6 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center shadow-xs shrink-0">
+                  <span className="material-symbols-outlined text-[26px]">lock</span>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-body-lg font-bold text-text-primary">
+                    სერვისის ჩართვა &amp; ცნობის მიღება
+                  </h3>
+                  <p className="text-body-sm text-text-muted">ოფიციალური იურიდიული დოკუმენტის გააქტიურება</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="text-text-muted hover:text-text-primary p-1 rounded-lg hover:bg-surface-bg transition-colors"
+                type="button"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            {/* Document Info Card */}
+            <div className="p-4 rounded-xl bg-surface-bg border border-border-subtle space-y-2.5">
+              <div className="flex items-center justify-between text-body-sm">
+                <span className="text-text-muted">დოკუმენტის ტიპი:</span>
+                <span className="font-semibold text-text-primary">ცნობა დავალიანების არარსებობის შესახებ</span>
+              </div>
+              <div className="flex items-center justify-between text-body-sm">
+                <span className="text-text-muted">მიმღები სუბიექტი:</span>
+                <span className="font-semibold text-text-primary">{displayName}</span>
+              </div>
+              <div className="flex items-center justify-between text-body-sm">
+                <span className="text-text-muted">{isLegal ? 'საიდენტიფიკაციო კოდი:' : 'პირადი ნომერი:'}</span>
+                <span className="font-mono font-semibold text-text-primary">{personalId}</span>
+              </div>
+              <div className="flex items-center justify-between text-body-sm">
+                <span className="text-text-muted">დამოწმების ფორმატი:</span>
+                <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px]">qr_code_2</span>
+                  QR კოდი + ელ. ბეჭედი
+                </span>
+              </div>
+            </div>
+
+            {/* Fee summary */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-primary/5 to-amber-500/5 border border-primary/20 flex items-center justify-between">
+              <div>
+                <span className="text-body-sm text-text-muted block">მომსახურების საფასური:</span>
+                <span className="text-xs text-text-muted">ერთჯერადი აქტივაცია • შეუზღუდავი ჩამოტვირთვა</span>
+              </div>
+              <span className="text-2xl font-bold font-mono text-primary">15.00 ₾</span>
+            </div>
+
+            {/* Payment Method Selector */}
+            <div className="space-y-2">
+              <label className="block text-body-sm font-semibold text-text-primary">გადახდის მეთოდი:</label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="border-2 border-primary bg-primary/5 rounded-xl p-3 flex items-center gap-2.5 cursor-pointer">
+                  <input type="radio" name="paymentMethod" defaultChecked className="text-primary" />
+                  <span className="material-symbols-outlined text-primary text-[20px]">credit_card</span>
+                  <span className="text-xs font-semibold text-text-primary">საბანკო ბარათი</span>
+                </label>
+                <label className="border border-border-subtle hover:border-primary/40 rounded-xl p-3 flex items-center gap-2.5 cursor-pointer">
+                  <input type="radio" name="paymentMethod" className="text-primary" />
+                  <span className="material-symbols-outlined text-text-muted text-[20px]">account_balance</span>
+                  <span className="text-xs font-semibold text-text-primary">TBC / BoG Pay</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="px-5 py-2.5 rounded-xl border border-border-subtle text-text-primary hover:bg-surface-bg text-body-sm font-medium transition-colors cursor-pointer"
+                type="button"
+              >
+                გაუქმება
+              </button>
+              <button
+                onClick={() => {
+                  setPaying(true);
+                  setTimeout(() => {
+                    setPaying(false);
+                    setIsCertificatePaid(true);
+                    setShowPaymentModal(false);
+                    handleDownloadCertificate();
+                  }, 1200);
+                }}
+                disabled={paying}
+                className="px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-body-sm font-semibold transition-all shadow-md shadow-amber-600/20 active:scale-[0.98] flex items-center gap-2 cursor-pointer disabled:opacity-75"
+                type="button"
+              >
+                {paying ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>მიმდინარეობს გადახდა...</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">verified</span>
+                    <span>გადახდა და სერვისის ჩართვა (15 ₾)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
