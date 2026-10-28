@@ -200,17 +200,33 @@ export default function OpsPage() {
     }
   };
 
-  // Quick fill helper for dev testing
-  const handleQuickFill = (role: 'admin' | 'analyst' | 'operator') => {
-    if (role === 'admin') {
-      setLoginIdentifier('admin@debitinfo.ge');
-      setLoginPassword('Debitinfo2024!');
-    } else if (role === 'analyst') {
-      setLoginIdentifier('analyst@debitinfo.ge');
-      setLoginPassword('Debitinfo2024!');
-    } else {
-      setLoginIdentifier('operator@debitinfo.ge');
-      setLoginPassword('Debitinfo2024!');
+  // Quick fill helper for dev testing (all staff roles)
+  const handleQuickFill = (role: 'admin' | 'accountant' | 'analyst' | 'lawyer' | 'operator' | 'visitor') => {
+    switch (role) {
+      case 'admin':
+        setLoginIdentifier('admin@debitinfo.ge');
+        setLoginPassword('Debitinfo2024!');
+        break;
+      case 'accountant':
+        setLoginIdentifier('accountant@debitinfo.ge');
+        setLoginPassword('Debitinfo2024!');
+        break;
+      case 'analyst':
+        setLoginIdentifier('analyst@debitinfo.ge');
+        setLoginPassword('Debitinfo2024!');
+        break;
+      case 'lawyer':
+        setLoginIdentifier('lawyer@debitinfo.ge');
+        setLoginPassword('Debitinfo2024!');
+        break;
+      case 'operator':
+        setLoginIdentifier('operator@debitinfo.ge');
+        setLoginPassword('Debitinfo2024!');
+        break;
+      case 'visitor':
+        setLoginIdentifier('visitor@debitinfo.ge');
+        setLoginPassword('Debitinfo2024!');
+        break;
     }
     setLoginError('');
   };
@@ -467,7 +483,7 @@ export default function OpsPage() {
               <span className="text-[11px] font-semibold text-text-muted block mb-2 uppercase tracking-wider">
                 სწრაფი ტესტირება (Dev Staff Presets):
               </span>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleQuickFill('admin')}
@@ -475,6 +491,14 @@ export default function OpsPage() {
                   title="სისტემური ადმინისტრატორი & HR მფლობელი"
                 >
                   ⚡ ადმინი (HR)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('accountant')}
+                  className="px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900 font-bold hover:bg-amber-100 transition shadow-2xs text-[11px] text-center ring-1 ring-amber-400/40"
+                  title="მთავარი ბუღალტერი — საგადახდო დავალებები & გადახდების დასტური"
+                >
+                  💼 ბუღალტერი
                 </button>
                 <button
                   type="button"
@@ -486,11 +510,27 @@ export default function OpsPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleQuickFill('lawyer')}
+                  className="px-2 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 font-semibold hover:bg-indigo-100 transition shadow-2xs text-[11px] text-center"
+                  title="იურისტი — სააღსრულებო და სასამართლო საქმეები"
+                >
+                  ⚖️ იურისტი
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleQuickFill('operator')}
                   className="px-2 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 font-semibold hover:bg-purple-100 transition shadow-2xs text-[11px] text-center"
                   title="ქოლ-ცენტრის ოპერატორი"
                 >
                   📞 ოპერატორი
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickFill('visitor')}
+                  className="px-2 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 font-semibold hover:bg-teal-100 transition shadow-2xs text-[11px] text-center"
+                  title="საველე ოფიცერი — ვიზიტები & ინსპექცია"
+                >
+                  📍 საველე ოფიცერი
                 </button>
               </div>
             </div>

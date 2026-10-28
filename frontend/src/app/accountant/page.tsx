@@ -34,7 +34,7 @@ export default function AccountantDashboardPage() {
         const me = await authService.getMe();
         if (!isMounted) return;
         if (!me) {
-          router.replace('/login?redirect=/accountant');
+          router.replace('/ops?redirect=/accountant');
           return;
         }
         // Admin or Accountant only
@@ -209,7 +209,7 @@ export default function AccountantDashboardPage() {
   const staffDept = currentUser?.staffProfile?.department || 'Financial & Accounting';
 
   return (
-    <div className="bg-surface-bg text-text-primary antialiased min-h-screen flex flex-col font-body-md text-body-md">
+    <div className="bg-surface-bg text-text-primary antialiased min-h-screen flex flex-col font-body-md text-body-md" suppressHydrationWarning>
       {/* HEADER */}
       <header className="bg-surface-card sticky top-0 z-40 border-b border-border-subtle shadow-xs">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 h-16 flex items-center justify-between">

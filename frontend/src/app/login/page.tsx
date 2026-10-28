@@ -33,7 +33,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickFill = (type: 'regular' | 'regular_company' | 'creditor' | 'debtor') => {
+  const handleQuickFill = (type: 'regular' | 'regular_company' | 'creditor' | 'debtor' | 'accountant') => {
     if (type === 'regular') {
       setEntityType('physical');
       setIdentifier('01024089123'); // დავით კვირიკაშვილი
@@ -49,6 +49,10 @@ export default function LoginPage() {
     } else if (type === 'debtor') {
       setEntityType('physical');
       setIdentifier('01019012345');
+      setPassword('Debitinfo2024!');
+    } else if (type === 'accountant') {
+      setEntityType('physical');
+      setIdentifier('accountant@debitinfo.ge');
       setPassword('Debitinfo2024!');
     }
     setError('');
@@ -169,6 +173,15 @@ export default function LoginPage() {
               >
                 🏢 კრედიტორი
               </button>
+              <button
+                type="button"
+                onClick={() => handleQuickFill('accountant')}
+                className="col-span-2 px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-900 font-bold transition shadow-2xs text-[11px] truncate flex items-center justify-center gap-1.5"
+                title="მთავარი ბუღალტერი (მარიამ წიკლაური) — საგადახდო დავალებები & გადახდების დასტური"
+              >
+                <span>💼 მთავარი ბუღალტერი (Accountant)</span>
+                <span className="text-[10px] text-amber-800 bg-amber-200/80 px-1.5 py-0.2 rounded font-mono font-semibold">.Finance</span>
+              </button>
             </div>
           </div>
 
@@ -268,6 +281,18 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Ops / Staff Portal Link */}
+          <div className="mt-4 p-2.5 rounded-xl bg-blue-50/70 border border-blue-200 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-primary font-medium">
+              <span className="material-symbols-outlined text-[17px]">badge</span>
+              <span>საოპერაციო პერსონალი?</span>
+            </div>
+            <Link href="/ops" className="text-primary hover:text-[#0A37CA] font-bold inline-flex items-center gap-1 hover:underline">
+              <span>Ops პორტალი</span>
+              <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            </Link>
+          </div>
 
           {/* Register CTA */}
           <div className="mt-4 pt-4 border-t border-border-subtle text-center">
