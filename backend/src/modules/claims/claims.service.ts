@@ -194,16 +194,42 @@ export class ClaimsService {
 
     const createdItems = [];
     for (const d of debtors) {
+      const debtOrigDate = d.debtOriginationDate ? new Date(d.debtOriginationDate) : null;
+      let overdueDays = Number(d.overdueDays) || 0;
+      if (!overdueDays && debtOrigDate && !isNaN(debtOrigDate.getTime())) {
+        const diffMs = Date.now() - debtOrigDate.getTime();
+        overdueDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+      }
+
+      const entityType = d.entityType === 'LEGAL' || d.taxId ? 'LEGAL' : 'PHYSICAL';
+      const displayName =
+        d.name ||
+        (d.firstName ? `${d.firstName} ${d.lastName || ''}`.trim() : entityType === 'LEGAL' ? 'შპს დებიტორი' : 'დებიტორი');
+
       const item = await this.prisma.stagedRegistryItem.create({
         data: {
           type: 'DEBTOR',
-          personalId: d.personalId || d.taxId || '01019012345',
-          name: d.name || d.fullName || 'ახალი დებიტორი',
-          companyOrPerson: d.entityType === 'LEGAL' ? 'იურიდიული პირი' : 'ფიზიკური პირი',
-          agreementNumber: d.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
+          entityType,
+          personalId: d.personalId || d.taxId || d.directorPersonalId || '01019012345',
+          taxId: d.taxId || null,
+          name: displayName,
+          firstName: d.firstName || null,
+          lastName: d.lastName || null,
+          phone: d.phone || '+995 599 00 00 00',
+          email: d.email || null,
+          legalAddress: d.legalAddress || null,
+          actualAddress: d.actualAddress || d.legalAddress || null,
           amount: Number(d.amount) || 0,
+          debtOriginationDate: debtOrigDate && !isNaN(debtOrigDate.getTime()) ? debtOrigDate : null,
+          directorFirstName: d.directorFirstName || null,
+          directorLastName: d.directorLastName || null,
+          directorPersonalId: d.directorPersonalId || null,
+          directorEmail: d.directorEmail || null,
+          directorPhone: d.directorPhone || null,
+          companyOrPerson: entityType === 'LEGAL' ? 'იურიდიული პირი' : 'ფიზიკური პირი',
+          agreementNumber: d.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
           creditorName,
-          overdueDays: Number(d.overdueDays) || 0,
+          overdueDays,
           status: 'PENDING_VERIFICATION',
           sourceFile: d.sourceFile || 'creditor_upload.xlsx',
         },

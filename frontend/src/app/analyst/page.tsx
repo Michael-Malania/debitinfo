@@ -907,52 +907,88 @@ export default function AnalystPage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-border-subtle text-text-muted text-[11px] uppercase tracking-wider font-semibold">
                     <th className="py-2.5 px-3">კრედიტორი</th>
-                    <th className="py-2.5 px-3">დებიტორი / სუბიექტი</th>
-                    <th className="py-2.5 px-3">საიდენტ. / პ/ნ</th>
+                    <th className="py-2.5 px-3">დებიტორი / სუბიექტის ტიპი</th>
+                    <th className="py-2.5 px-3">საიდენტ. / დირექტორი</th>
+                    <th className="py-2.5 px-3">თარიღი / ვადა</th>
                     <th className="py-2.5 px-3 text-right">დავალიანება</th>
-                    <th className="py-2.5 px-3">სტატუსი</th>
+                    <th className="py-2.5 px-3 text-center">სტატუსი</th>
                     <th className="py-2.5 px-3 text-right">RS.GE მოქმედება</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border-subtle">
-                  {pendingCreditorDebtors.map((item) => (
-                    <tr key={item.id} className="hover:bg-amber-50/30 transition-colors">
-                      <td className="py-3 px-3 font-medium text-text-primary">
-                        <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-sm text-primary">domain</span>
-                          <span>{item.creditorName || 'კრედიტორი'}</span>
-                        </div>
-                        <span className="text-[11px] text-text-muted font-mono">{item.agreementNumber || 'AGR-GENERAL'}</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="font-semibold text-text-primary">{item.name}</div>
-                        <span className="text-[11px] text-text-muted">{item.companyOrPerson || 'სუბიექტი'}</span>
-                      </td>
-                      <td className="py-3 px-3 font-mono font-medium text-text-primary">
-                        {item.personalId}
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-text-primary">
-                        {Number(item.amount).toLocaleString('ka-GE')} ₾
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[11px] font-semibold border border-amber-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          <span>დასადასტურებელი</span>
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <button
-                          type="button"
-                          disabled={verifyingId === item.id}
-                          onClick={() => handleVerifyDebtor(item.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">verified</span>
-                          <span>{verifyingId === item.id ? 'მოწმდება...' : 'RS.GE გადამოწმება & დადასტურება'}</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {pendingCreditorDebtors.map((item) => {
+                    const isLegal = item.entityType === 'LEGAL' || (item.taxId && item.taxId.length === 9);
+                    return (
+                      <tr key={item.id} className="hover:bg-amber-50/30 transition-colors">
+                        <td className="py-3 px-3 font-medium text-text-primary">
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-sm text-primary">domain</span>
+                            <span>{item.creditorName || 'კრედიტორი'}</span>
+                          </div>
+                          <span className="text-[11px] text-text-muted font-mono">{item.agreementNumber || 'AGR-GENERAL'}</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                            <span>{item.name}</span>
+                            {isLegal ? (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                <span className="material-symbols-outlined text-[11px]">apartment</span>
+                                <span>იურიდიული</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                <span className="material-symbols-outlined text-[11px]">person</span>
+                                <span>ფიზიკური</span>
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-text-muted flex items-center gap-2 mt-0.5">
+                            {item.phone && <span>ტელ: {item.phone}</span>}
+                            {item.legalAddress && <span>• {item.legalAddress}</span>}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-medium text-text-primary">
+                          <div className="font-mono text-xs">
+                            {isLegal ? `ს/კ: ${item.taxId || item.personalId}` : `პ/ნ: ${item.personalId}`}
+                          </div>
+                          {isLegal && (item.directorFirstName || item.directorLastName) && (
+                            <div className="text-[11px] text-slate-600 mt-0.5">
+                              დირექტორი: {item.directorFirstName} {item.directorLastName}
+                              {item.directorPhone && <span className="font-mono text-slate-500"> ({item.directorPhone})</span>}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-mono text-xs text-text-primary">
+                            {item.debtOriginationDate ? String(item.debtOriginationDate).split('T')[0] : '—'}
+                          </div>
+                          <div className="text-[11px] text-text-muted font-mono">
+                            {item.overdueDays ? `${item.overdueDays} დღე` : 'ახალი'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono font-bold text-text-primary">
+                          {Number(item.amount).toLocaleString('ka-GE')} ₾
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[11px] font-semibold border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span>დასადასტურებელი</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            disabled={verifyingId === item.id}
+                            onClick={() => handleVerifyDebtor(item.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">verified</span>
+                            <span>{verifyingId === item.id ? 'მოწმდება...' : 'RS.GE გადამოწმება & დადასტურება'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

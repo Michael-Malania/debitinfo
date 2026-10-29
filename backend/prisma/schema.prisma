@@ -588,23 +588,38 @@ model AuditLog {
 // ----------------------------------------------------
 
 model StagedRegistryItem {
-  id              String   @id @default(uuid())
-  type            String   // "DEBTOR" or "CREDITOR"
-  personalId      String   // 9 or 11 digits (Tax ID or PIN)
-  name            String   // Full Name or Company Name
-  companyOrPerson String?  // Optional employer or contact person
-  agreementNumber String?  // Contract/Agreement reference
-  amount          Decimal  @default(0.00) @db.Decimal(12, 2)
-  creditorName    String?  // Name of creditor for debt claim
-  overdueDays     Int      @default(0)
-  status          String   @default("PENDING") // PENDING, MATCHED, ASSIGNED
-  sourceFile      String?  // Excel source sheet name (e.g. "debtors_registry.xlsx")
-  matchedUserId   String?  // User ID if registered on platform
+  id                  String    @id @default(uuid())
+  type                String    // "DEBTOR" or "CREDITOR"
+  entityType          String?   @default("PHYSICAL") // "LEGAL" or "PHYSICAL"
+  personalId          String    // 9 or 11 digits (Tax ID or PIN)
+  taxId               String?   // 9 digits Tax ID (for LEGAL entities)
+  name                String    // Full Name or Company Name
+  firstName           String?   // First Name (for PHYSICAL entities)
+  lastName            String?   // Last Name (for PHYSICAL entities)
+  phone               String?   // Contact phone
+  email               String?   // Contact email
+  legalAddress        String?   // Legal address
+  actualAddress       String?   // Actual address
+  amount              Decimal   @default(0.00) @db.Decimal(12, 2)
+  debtOriginationDate DateTime? // ვალის წარმოქმნის თარიღი
+  directorFirstName   String?   // დირექტორის სახელი (for LEGAL)
+  directorLastName    String?   // დირექტორის გვარი (for LEGAL)
+  directorPersonalId  String?   // დირექტორის პირადი ნომერი (არასავალდებულო, for LEGAL)
+  directorEmail       String?   // დირექტორის ემაილი (for LEGAL)
+  directorPhone       String?   // დირექტორის ტელეფონის ნომერი (for LEGAL)
+  companyOrPerson     String?   // Optional employer or contact person tag
+  agreementNumber     String?   // Contract/Agreement reference
+  creditorName        String?   // Name of creditor for debt claim
+  overdueDays         Int       @default(0)
+  status              String    @default("PENDING") // PENDING, PENDING_VERIFICATION, VERIFIED, MATCHED, ASSIGNED
+  sourceFile          String?   // Excel source sheet name (e.g. "debtors_registry.xlsx")
+  matchedUserId       String?   // User ID if registered on platform
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([personalId])
+  @@index([taxId])
   @@index([type])
   @@index([status])
 }

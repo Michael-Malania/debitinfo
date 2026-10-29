@@ -250,23 +250,40 @@ export class AnalystService {
   async syncExcelData(items?: any[]) {
     if (items && Array.isArray(items) && items.length > 0) {
       for (const item of items) {
-        await this.prisma.stagedRegistryItem.upsert({
-          where: { id: item.id || 'new-item' },
-          create: {
+        const debtOrigDate = item.debtOriginationDate ? new Date(item.debtOriginationDate) : null;
+        let overdueDays = Number(item.overdueDays) || 0;
+        if (!overdueDays && debtOrigDate && !isNaN(debtOrigDate.getTime())) {
+          const diffMs = Date.now() - debtOrigDate.getTime();
+          overdueDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+        }
+        const entityType = item.entityType === 'LEGAL' || item.taxId ? 'LEGAL' : 'PHYSICAL';
+
+        await this.prisma.stagedRegistryItem.create({
+          data: {
             type: item.type || 'DEBTOR',
-            personalId: item.personalId,
-            name: item.name,
-            companyOrPerson: item.companyOrPerson,
-            agreementNumber: item.agreementNumber,
-            amount: item.amount || 0,
-            creditorName: item.creditorName,
-            overdueDays: item.overdueDays || 0,
-            status: item.status || 'PENDING',
+            entityType,
+            personalId: item.personalId || item.taxId || item.directorPersonalId || '01019012345',
+            taxId: item.taxId || null,
+            name: item.name || (item.firstName ? `${item.firstName} ${item.lastName || ''}`.trim() : 'დებიტორი'),
+            firstName: item.firstName || null,
+            lastName: item.lastName || null,
+            phone: item.phone || '+995 599 00 00 00',
+            email: item.email || null,
+            legalAddress: item.legalAddress || null,
+            actualAddress: item.actualAddress || item.legalAddress || null,
+            amount: Number(item.amount) || 0,
+            debtOriginationDate: debtOrigDate && !isNaN(debtOrigDate.getTime()) ? debtOrigDate : null,
+            directorFirstName: item.directorFirstName || null,
+            directorLastName: item.directorLastName || null,
+            directorPersonalId: item.directorPersonalId || null,
+            directorEmail: item.directorEmail || null,
+            directorPhone: item.directorPhone || null,
+            companyOrPerson: entityType === 'LEGAL' ? 'იურიდიული პირი' : 'ფიზიკური პირი',
+            agreementNumber: item.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
+            creditorName: item.creditorName || 'სისტემური იმპორტი',
+            overdueDays,
+            status: item.status || 'VERIFIED',
             sourceFile: item.sourceFile || 'excel_registry_sync.xlsx',
-          },
-          update: {
-            amount: item.amount || 0,
-            overdueDays: item.overdueDays || 0,
           },
         });
       }

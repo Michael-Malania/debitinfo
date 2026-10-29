@@ -38,19 +38,79 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
   const [newDebtorEntityType, setNewDebtorEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
   const [newDebtorActualMatchesLegal, setNewDebtorActualMatchesLegal] = useState(false);
   const [newDebtorForm, setNewDebtorForm] = useState({
+    // Legal fields
     taxId: '',
-    personalId: '',
     name: '',
-    directorName: '',
     phone: '',
     email: '',
     legalAddress: '',
     actualAddress: '',
     amount: '',
-    overdueDays: '30',
+    debtOriginationDate: new Date().toISOString().split('T')[0],
     agreementNumber: '',
+    directorFirstName: '',
+    directorLastName: '',
+    directorPersonalId: '',
+    directorEmail: '',
+    directorPhone: '',
+    // Physical fields
+    personalId: '',
+    firstName: '',
+    lastName: '',
   });
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+
+  // Selected debtor for right sidebar details & payment history inspection
+  const defaultSelectedDebtor = {
+    id: 'default-giorgi',
+    name: 'გიორგი გიორგაძე',
+    personalId: '01019012345',
+    entityType: 'PHYSICAL',
+    phone: '+995 599 12 34 56',
+    email: 'giorgi.g@gmail.com',
+    actualAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
+    legalAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
+    amount: 5000,
+    remainingAmount: 2200,
+    paidAmount: 2800,
+    rating: 'Grade B (ზომიერი რისკი)',
+    overdueDays: 45,
+    dueDate: '14 იან, 2025',
+    status: 'RESTRUCTURED',
+    agreementNumber: 'AGR-77142',
+  };
+
+  const [selectedDebtor, setSelectedDebtor] = useState<any>(defaultSelectedDebtor);
+
+  const handleSelectDebtor = (debtor: any) => {
+    const init = Number(debtor.amount || debtor.initialAmount || 0);
+    const rem = debtor.remainingAmount !== undefined ? Number(debtor.remainingAmount) : (debtor.paidAmount !== undefined ? Math.max(0, init - Number(debtor.paidAmount)) : init);
+    const paid = debtor.paidAmount !== undefined ? Number(debtor.paidAmount) : Math.max(0, init - rem);
+
+    setSelectedDebtor({
+      id: debtor.id || debtor.personalId || String(Math.random()),
+      name: debtor.name,
+      personalId: debtor.personalId || debtor.taxId || '—',
+      taxId: debtor.taxId,
+      entityType: debtor.entityType || (debtor.taxId ? 'LEGAL' : 'PHYSICAL'),
+      phone: debtor.phone || '+995 599 00 00 00',
+      email: debtor.email || '—',
+      legalAddress: debtor.legalAddress || 'ქ. თბილისი',
+      actualAddress: debtor.actualAddress || debtor.legalAddress || 'ქ. თბილისი',
+      amount: init,
+      remainingAmount: rem,
+      paidAmount: paid,
+      rating: debtor.rating || 'Grade B (ზომიერი რისკი)',
+      overdueDays: debtor.overdueDays || 30,
+      debtOriginationDate: debtor.debtOriginationDate,
+      dueDate: debtor.dueDate || (debtor.debtOriginationDate ? new Date(debtor.debtOriginationDate).toLocaleDateString('ka-GE') : '14 იან, 2025'),
+      agreementNumber: debtor.agreementNumber || 'AGR-GENERAL',
+      directorFirstName: debtor.directorFirstName,
+      directorLastName: debtor.directorLastName,
+      directorPhone: debtor.directorPhone,
+      status: debtor.status || 'ACTIVE',
+    });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -133,27 +193,71 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
 
   const handleCreateDebtorManually = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDebtorForm.name || (!newDebtorForm.personalId && !newDebtorForm.taxId)) {
-      alert('გთხოვთ შეავსოთ სავალდებულო ველები (სახელი/დასახელება და პირადი ნომერი/ს/კ)');
-      return;
+
+    if (newDebtorEntityType === 'LEGAL') {
+      if (!newDebtorForm.taxId || !newDebtorForm.name || !newDebtorForm.phone || !newDebtorForm.amount) {
+        alert('გთხოვთ შეავსოთ სავალდებულო ველები (საიდენტიფიკაციო კოდი, სრული დასახელება, ტელეფონი, საწყისი დავალიანება)');
+        return;
+      }
+    } else {
+      if (!newDebtorForm.personalId || !newDebtorForm.firstName || !newDebtorForm.lastName || !newDebtorForm.phone || !newDebtorForm.amount) {
+        alert('გთხოვთ შეავსოთ სავალდებულო ველები (პირადი ნომერი, სახელი, გვარი, ტელეფონი, საწყისი დავალიანება)');
+        return;
+      }
     }
-    const debtorItem = {
-      entityType: newDebtorEntityType,
-      taxId: newDebtorEntityType === 'LEGAL' ? newDebtorForm.taxId : '',
-      personalId: newDebtorEntityType === 'LEGAL' ? (newDebtorForm.personalId || newDebtorForm.taxId) : newDebtorForm.personalId,
-      name: newDebtorForm.name,
-      phone: newDebtorForm.phone || '+995 599 00 00 00',
-      email: newDebtorForm.email || '',
-      legalAddress: newDebtorForm.legalAddress || 'ქ. თბილისი',
-      actualAddress: newDebtorActualMatchesLegal
-        ? newDebtorForm.legalAddress
-        : (newDebtorForm.actualAddress || newDebtorForm.legalAddress || 'ქ. თბილისი'),
-      amount: parseFloat(newDebtorForm.amount) || 1200,
-      overdueDays: parseInt(newDebtorForm.overdueDays) || 30,
-      agreementNumber: newDebtorForm.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
-      status: 'PENDING_VERIFICATION',
-      sourceFile: 'manual_entry',
-    };
+
+    const debtOrigDate = newDebtorForm.debtOriginationDate ? new Date(newDebtorForm.debtOriginationDate) : null;
+    let overdueDays = 0;
+    if (debtOrigDate && !isNaN(debtOrigDate.getTime())) {
+      overdueDays = Math.max(0, Math.floor((Date.now() - debtOrigDate.getTime()) / (1000 * 60 * 60 * 24)));
+    }
+
+    const debtorItem =
+      newDebtorEntityType === 'LEGAL'
+        ? {
+            entityType: 'LEGAL',
+            taxId: newDebtorForm.taxId,
+            personalId: newDebtorForm.directorPersonalId || newDebtorForm.taxId,
+            name: newDebtorForm.name,
+            phone: newDebtorForm.phone,
+            email: newDebtorForm.email || '',
+            legalAddress: newDebtorForm.legalAddress || 'ქ. თბილისი',
+            actualAddress: newDebtorActualMatchesLegal
+              ? (newDebtorForm.legalAddress || 'ქ. თბილისი')
+              : (newDebtorForm.actualAddress || newDebtorForm.legalAddress || 'ქ. თბილისი'),
+            amount: parseFloat(newDebtorForm.amount) || 0,
+            debtOriginationDate: newDebtorForm.debtOriginationDate || new Date().toISOString().split('T')[0],
+            overdueDays,
+            directorFirstName: newDebtorForm.directorFirstName || '',
+            directorLastName: newDebtorForm.directorLastName || '',
+            directorPersonalId: newDebtorForm.directorPersonalId || '',
+            directorEmail: newDebtorForm.directorEmail || '',
+            directorPhone: newDebtorForm.directorPhone || '',
+            agreementNumber: newDebtorForm.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
+            status: 'PENDING_VERIFICATION',
+            sourceFile: 'manual_entry',
+          }
+        : {
+            entityType: 'PHYSICAL',
+            taxId: '',
+            personalId: newDebtorForm.personalId,
+            firstName: newDebtorForm.firstName,
+            lastName: newDebtorForm.lastName,
+            name: `${newDebtorForm.firstName} ${newDebtorForm.lastName}`.trim(),
+            phone: newDebtorForm.phone,
+            email: newDebtorForm.email || '',
+            legalAddress: newDebtorForm.legalAddress || 'ქ. თბილისი',
+            actualAddress: newDebtorActualMatchesLegal
+              ? (newDebtorForm.legalAddress || 'ქ. თბილისი')
+              : (newDebtorForm.actualAddress || newDebtorForm.legalAddress || 'ქ. თბილისი'),
+            amount: parseFloat(newDebtorForm.amount) || 0,
+            debtOriginationDate: newDebtorForm.debtOriginationDate || new Date().toISOString().split('T')[0],
+            overdueDays,
+            agreementNumber: newDebtorForm.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
+            status: 'PENDING_VERIFICATION',
+            sourceFile: 'manual_entry',
+          };
+
     try {
       await creditorBackendService.importDebtorsBatch([debtorItem]);
       setImportSuccessMessage(
@@ -163,16 +267,22 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
       setIsAddDebtorModalOpen(false);
       setNewDebtorForm({
         taxId: '',
-        personalId: '',
         name: '',
-        directorName: '',
         phone: '',
         email: '',
         legalAddress: '',
         actualAddress: '',
         amount: '',
-        overdueDays: '30',
+        debtOriginationDate: new Date().toISOString().split('T')[0],
         agreementNumber: '',
+        directorFirstName: '',
+        directorLastName: '',
+        directorPersonalId: '',
+        directorEmail: '',
+        directorPhone: '',
+        personalId: '',
+        firstName: '',
+        lastName: '',
       });
       const latest = await creditorBackendService.getUploadedDebtors();
       setUploadedDebtors(latest && latest.length > 0 ? latest : [debtorItem, ...uploadedDebtors]);
@@ -593,207 +703,558 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
             <tbody className="divide-y divide-border-subtle text-body-sm">
               {/* Uploaded / Imported Debtors by Creditor */}
               {uploadedDebtors.map((ud: any) => {
-                const isPending = ud.status === 'PENDING_VERIFICATION' || ud.status === 'PENDING';
+                const isSelected = selectedDebtor?.personalId === ud.personalId || selectedDebtor?.id === ud.id;
+                const isLegal = ud.entityType === 'LEGAL' || (ud.taxId && ud.taxId.length === 9);
                 return (
-                  <tr key={ud.id} className="bg-amber-50/20 hover:bg-amber-50/40 transition-colors border-l-4 border-l-amber-400">
+                  <tr
+                    key={ud.id || ud.personalId}
+                    onClick={() => handleSelectDebtor(ud)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                        : 'bg-amber-50/15 hover:bg-amber-50/35 border-l-4 border-l-amber-400'
+                    }`}
+                  >
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                      <div className="font-semibold text-text-primary flex items-center gap-2">
                         <span>{ud.name}</span>
-                        {isPending && (
-                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="მოწმდება ანალიტიკოსის მიერ" />
+                        {isLegal ? (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                            <span className="material-symbols-outlined text-[12px]">apartment</span>
+                            <span>იურიდიული</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                            <span className="material-symbols-outlined text-[12px]">person</span>
+                            <span>ფიზიკური</span>
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
                         )}
                       </div>
-                      <div className="font-data-mono-md text-[11px] text-text-muted">
-                        {ud.personalId?.length === 9 ? 'ს/კ' : 'პ/ნ'}: {ud.personalId} • {ud.agreementNumber || 'AGR-GENERAL'}
+                      <div className="font-data-mono-md text-[11px] text-text-muted mt-0.5 flex flex-wrap items-center gap-x-2">
+                        <span>{isLegal ? 'ს/კ' : 'პ/ნ'}: {isLegal ? (ud.taxId || ud.personalId) : ud.personalId}</span>
+                        {ud.phone && <span>• ტელ: {ud.phone}</span>}
+                        {ud.debtOriginationDate && (
+                          <span>• წარმოქმნის თარიღი: {String(ud.debtOriginationDate).split('T')[0]}</span>
+                        )}
+                        <span>• {ud.agreementNumber || 'AGR-88451'}</span>
                       </div>
+                      {isLegal && (ud.directorFirstName || ud.directorLastName) && (
+                        <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-1">
+                          <span className="font-medium text-slate-700">დირექტორი:</span>
+                          <span>{ud.directorFirstName} {ud.directorLastName}</span>
+                          {ud.directorPhone && <span className="font-mono text-slate-500">({ud.directorPhone})</span>}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
                       ₾ {Number(ud.amount || 0).toLocaleString('ka-GE')}.00
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className="font-data-mono-md font-bold text-amber-700">₾ {Number(ud.amount || 0).toLocaleString('ka-GE')}.00</span>
-                      <div className="text-[10px] text-text-muted font-data-mono-md">ვადა: {ud.overdueDays || 30} დღე</div>
+                      <span className="font-data-mono-md font-bold text-amber-700">₾ {Number(ud.remainingAmount ?? ud.amount ?? 0).toLocaleString('ka-GE')}.00</span>
+                      <div className="text-[10px] text-text-muted font-data-mono-md">ვადა: {ud.overdueDays || 0} დღე</div>
                     </td>
                     <td className="py-3.5 px-3 text-center">
                       <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
-                        {isPending ? 'მოწმდება' : 'Grade B'}
+                        {ud.rating || 'Grade B'}
                       </span>
                     </td>
                     <td className="py-3.5 px-3 text-center">
-                      {isPending ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-semibold border border-amber-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                          <span>დასადასტურებელი</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200">
-                          <span className="material-symbols-outlined text-[12px]">check_circle</span>
-                          <span>დადასტურებული</span>
-                        </span>
-                      )}
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-semibold border border-amber-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                        <span>დასადასტურებელი</span>
+                      </span>
                     </td>
                     <td className="py-3.5 px-3 text-right">
-                      {isPending ? (
-                        <span className="text-[11px] text-amber-700 font-medium" title="დოკუმენტაცია გადაგზავნილია ანალიტიკოსთან RS.GE გადამოწმებისთვის">
-                          RS.GE მოწმდება
-                        </span>
-                      ) : (
-                        <button className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer" title="დეტალები">
-                          <span className="material-symbols-outlined text-[18px]">visibility</span>
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDebtor(ud);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-600 hover:text-primary hover:bg-slate-100'
+                        }`}
+                        title="დეტალები & გადახდების ისტორია"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">visibility</span>
+                      </button>
                     </td>
                   </tr>
                 );
               })}
-              {/* Row 1: Selected Debtor (გიორგი გიორგაძე) */}
-              <tr className="bg-blue-50/40 hover:bg-blue-50/70 transition-colors border-l-4 border-l-primary">
-                <td className="py-3.5 px-4">
-                  <div className="font-semibold text-text-primary flex items-center gap-1.5">
-                    გიორგი გიორგაძე
-                    <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
-                  </div>
-                  <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: 01019012345</div>
-                </td>
-                <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                  ₾ 5,000.00
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <span className="font-data-mono-md font-bold text-amber-600">₾ 2,200.00</span>
-                  <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: 2,800.00</div>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
-                    Grade B
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).badgeClass}`}>
-                    {getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).label}
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer" title="დეტალები">
-                    <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
-                  </button>
-                </td>
-              </tr>
+
+              {/* Sample Debtor: ლევან მაისურაძე (if not present in uploadedDebtors) */}
+              {!uploadedDebtors.some((d) => d.personalId === '01015099882' || d.name?.includes('მაისურაძე')) && (
+                (() => {
+                  const levanItem = {
+                    id: 'levan-maisuradze-sample',
+                    name: 'ლევან მაისურაძე',
+                    personalId: '01015099882',
+                    agreementNumber: 'AGR-88451',
+                    amount: 4500,
+                    remainingAmount: 4500,
+                    paidAmount: 0,
+                    rating: 'Grade B (ზომიერი რისკი)',
+                    overdueDays: 90,
+                    phone: '+995 591 22 33 44',
+                    email: 'levan.m@gmail.com',
+                    actualAddress: 'ქ. თბილისი, პეკინის გამზ. #14',
+                    legalAddress: 'ქ. თბილისი, პეკინის გამზ. #14',
+                    status: 'დასადასტურებელი',
+                    entityType: 'PHYSICAL',
+                  };
+                  const isSelected = selectedDebtor?.personalId === levanItem.personalId;
+                  return (
+                    <tr
+                      key="sample-levan"
+                      onClick={() => handleSelectDebtor(levanItem)}
+                      className={`transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                          : 'bg-amber-50/15 hover:bg-amber-50/35 border-l-4 border-l-amber-400'
+                      }`}
+                    >
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-text-primary flex items-center gap-2">
+                          <span>{levanItem.name}</span>
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                            <span className="material-symbols-outlined text-[12px]">person</span>
+                            <span>ფიზიკური</span>
+                          </span>
+                          {isSelected && (
+                            <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
+                          )}
+                        </div>
+                        <div className="font-data-mono-md text-[11px] text-text-muted mt-0.5 flex flex-wrap items-center gap-x-2">
+                          <span>პ/ნ: {levanItem.personalId}</span>
+                          <span>• ტელ: {levanItem.phone}</span>
+                          <span>• {levanItem.agreementNumber}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
+                        ₾ {levanItem.amount.toLocaleString('ka-GE')}.00
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <span className="font-data-mono-md font-bold text-amber-700">₾ {levanItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
+                        <div className="text-[10px] text-text-muted font-data-mono-md">ვადა: {levanItem.overdueDays} დღე</div>
+                      </td>
+                      <td className="py-3.5 px-3 text-center">
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
+                          Grade B
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 text-center">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-semibold border border-amber-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                          <span>დასადასტურებელი</span>
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectDebtor(levanItem);
+                          }}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            isSelected ? 'text-primary bg-primary/15' : 'text-slate-600 hover:text-primary hover:bg-slate-100'
+                          }`}
+                          title="დეტალები & გადახდების ისტორია"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">visibility</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })()
+              )}
+
+              {/* Row 1: გიორგი გიორგაძე */}
+              {(() => {
+                const giorgiItem = {
+                  id: 'default-giorgi',
+                  name: 'გიორგი გიორგაძე',
+                  personalId: '01019012345',
+                  entityType: 'PHYSICAL',
+                  phone: '+995 599 12 34 56',
+                  email: 'giorgi.g@gmail.com',
+                  actualAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
+                  legalAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
+                  amount: 5000,
+                  remainingAmount: 2200,
+                  paidAmount: 2800,
+                  rating: 'Grade B (ზომიერი რისკი)',
+                  overdueDays: 45,
+                  dueDate: '14 იან, 2025',
+                  status: 'RESTRUCTURED',
+                  agreementNumber: 'AGR-77142',
+                };
+                const isSelected = selectedDebtor?.personalId === giorgiItem.personalId;
+                return (
+                  <tr
+                    key="row-giorgi"
+                    onClick={() => handleSelectDebtor(giorgiItem)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                        <span>{giorgiItem.name}</span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
+                        )}
+                      </div>
+                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {giorgiItem.personalId} • {giorgiItem.agreementNumber}</div>
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
+                      ₾ {giorgiItem.amount.toLocaleString('ka-GE')}.00
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="font-data-mono-md font-bold text-amber-600">₾ {giorgiItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
+                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {giorgiItem.paidAmount.toLocaleString('ka-GE')}.00</div>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
+                        Grade B
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).badgeClass}`}>
+                        {getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDebtor(giorgiItem);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
+                        }`}
+                        title="დეტალები & გადახდების ისტორია"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">visibility</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })()}
+
               {/* Row 2: ნინო აბაშიძე */}
-              <tr className="hover:bg-slate-50 transition-colors">
-                <td className="py-3.5 px-4">
-                  <div className="font-semibold text-text-primary">ნინო აბაშიძე</div>
-                  <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: 01024098765</div>
-                </td>
-                <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                  ₾ 18,200.00
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <span className="font-data-mono-md font-bold text-rose-600">₾ 18,200.00</span>
-                  <div className="text-[10px] text-text-muted font-data-mono-md">დაფარულია: 0.00</div>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-700 border border-rose-500/30">
-                    Grade C
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).badgeClass}`}>
-                    {getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).label}
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
-                    <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
-                  </button>
-                </td>
-              </tr>
+              {(() => {
+                const ninoItem = {
+                  id: 'default-nino',
+                  name: 'ნინო აბაშიძე',
+                  personalId: '01024098765',
+                  entityType: 'PHYSICAL',
+                  amount: 18200,
+                  remainingAmount: 18200,
+                  paidAmount: 0,
+                  rating: 'Grade C (მაღალი რისკი)',
+                  overdueDays: 120,
+                  phone: '+995 595 44 33 22',
+                  email: 'nino.a@gmail.com',
+                  actualAddress: 'ქ. თბილისი, რუსთაველის გამზ. 18',
+                  legalAddress: 'ქ. თბილისი, რუსთაველის გამზ. 18',
+                  status: 'IN_LITIGATION',
+                  agreementNumber: 'AGR-99321',
+                };
+                const isSelected = selectedDebtor?.personalId === ninoItem.personalId;
+                return (
+                  <tr
+                    key="row-nino"
+                    onClick={() => handleSelectDebtor(ninoItem)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                        <span>{ninoItem.name}</span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
+                        )}
+                      </div>
+                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {ninoItem.personalId} • {ninoItem.agreementNumber}</div>
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
+                      ₾ {ninoItem.amount.toLocaleString('ka-GE')}.00
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="font-data-mono-md font-bold text-rose-600">₾ {ninoItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
+                      <div className="text-[10px] text-text-muted font-data-mono-md">დაფარულია: 0.00</div>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-700 border border-rose-500/30">
+                        Grade C
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).badgeClass}`}>
+                        {getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDebtor(ninoItem);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
+                        }`}
+                        title="დეტალები & გადახდების ისტორია"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">visibility</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })()}
+
               {/* Row 3: შპს ალფა ლოჯისტიკსი */}
-              <tr className="hover:bg-slate-50 transition-colors">
-                <td className="py-3.5 px-4">
-                  <div className="font-semibold text-text-primary">შპს ალფა ლოჯისტიკსი</div>
-                  <div className="font-data-mono-md text-[11px] text-text-muted">ს/კ: 405991823</div>
-                </td>
-                <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                  ₾ 42,500.00
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <span className="font-data-mono-md font-bold text-amber-600">₾ 12,500.00</span>
-                  <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: 30,000.00</div>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-mint/20 text-emerald-800 border border-accent-mint/40">
-                    Grade A
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
-                    {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
-                    <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
-                  </button>
-                </td>
-              </tr>
+              {(() => {
+                const alfaItem = {
+                  id: 'default-alfa',
+                  name: 'შპს ალფა ლოჯისტიკსი',
+                  taxId: '405991823',
+                  personalId: '405991823',
+                  entityType: 'LEGAL',
+                  amount: 42500,
+                  remainingAmount: 12500,
+                  paidAmount: 30000,
+                  rating: 'Grade A (საიმედო)',
+                  overdueDays: 15,
+                  phone: '+995 591 88 77 66',
+                  email: 'info@alfalogistics.ge',
+                  actualAddress: 'ქ. თბილისი, აეროპორტის გზატკეცილი #4',
+                  legalAddress: 'ქ. თბილისი, აეროპორტის გზატკეცილი #4',
+                  directorFirstName: 'ნიკოლოზ',
+                  directorLastName: 'სვანიძე',
+                  directorPhone: '+995 591 88 77 66',
+                  status: 'ACTIVE',
+                  agreementNumber: 'AGR-44120',
+                };
+                const isSelected = selectedDebtor?.taxId === alfaItem.taxId;
+                return (
+                  <tr
+                    key="row-alfa"
+                    onClick={() => handleSelectDebtor(alfaItem)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                        <span>{alfaItem.name}</span>
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                          <span className="material-symbols-outlined text-[12px]">apartment</span>
+                          <span>იურიდიული</span>
+                        </span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
+                        )}
+                      </div>
+                      <div className="font-data-mono-md text-[11px] text-text-muted">ს/კ: {alfaItem.taxId} • {alfaItem.agreementNumber}</div>
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
+                      ₾ {alfaItem.amount.toLocaleString('ka-GE')}.00
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="font-data-mono-md font-bold text-amber-600">₾ {alfaItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
+                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {alfaItem.paidAmount.toLocaleString('ka-GE')}.00</div>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-mint/20 text-emerald-800 border border-accent-mint/40">
+                        Grade A
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
+                        {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDebtor(alfaItem);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
+                        }`}
+                        title="დეტალები & გადახდების ისტორია"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">visibility</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })()}
+
               {/* Row 4: დავით კაპანაძე */}
-              <tr className="hover:bg-slate-50 transition-colors">
-                <td className="py-3.5 px-4">
-                  <div className="font-semibold text-text-primary">დავით კაპანაძე</div>
-                  <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: 62001004321</div>
-                </td>
-                <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                  ₾ 4,500.00
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <span className="font-data-mono-md font-bold text-emerald-700">₾ 0.00</span>
-                  <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: 4,500.00</div>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-mint/20 text-emerald-800 border border-accent-mint/40">
-                    Grade A
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).badgeClass}`}>
-                    {getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).label}
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
-                    <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
-                  </button>
-                </td>
-              </tr>
+              {(() => {
+                const davitItem = {
+                  id: 'default-davit',
+                  name: 'დავით კაპანაძე',
+                  personalId: '62001004321',
+                  entityType: 'PHYSICAL',
+                  amount: 4500,
+                  remainingAmount: 0,
+                  paidAmount: 4500,
+                  rating: 'Grade A (საიმედო)',
+                  overdueDays: 0,
+                  phone: '+995 599 33 22 11',
+                  email: 'davit.k@gmail.com',
+                  actualAddress: 'ქ. ბათუმი, გორგილაძის ქ. 32',
+                  legalAddress: 'ქ. ბათუმი, გორგილაძის ქ. 32',
+                  status: 'SETTLED',
+                  agreementNumber: 'AGR-11204',
+                };
+                const isSelected = selectedDebtor?.personalId === davitItem.personalId;
+                return (
+                  <tr
+                    key="row-davit"
+                    onClick={() => handleSelectDebtor(davitItem)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                        <span>{davitItem.name}</span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
+                        )}
+                      </div>
+                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {davitItem.personalId} • {davitItem.agreementNumber}</div>
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
+                      ₾ {davitItem.amount.toLocaleString('ka-GE')}.00
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="font-data-mono-md font-bold text-emerald-700">₾ 0.00</span>
+                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {davitItem.paidAmount.toLocaleString('ka-GE')}.00</div>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-mint/20 text-emerald-800 border border-accent-mint/40">
+                        Grade A
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).badgeClass}`}>
+                        {getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDebtor(davitItem);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
+                        }`}
+                        title="დეტალები & გადახდების ისტორია"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">visibility</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })()}
+
               {/* Row 5: მარიამ წიკლაური */}
-              <tr className="hover:bg-slate-50 transition-colors">
-                <td className="py-3.5 px-4">
-                  <div className="font-semibold text-text-primary">მარიამ წიკლაური</div>
-                  <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: 01008022119</div>
-                </td>
-                <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                  ₾ 9,800.00
-                </td>
-                <td className="py-3.5 px-4 text-right">
-                  <span className="font-data-mono-md font-bold text-amber-600">₾ 6,300.00</span>
-                  <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: 3,500.00</div>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
-                    Grade B
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-center">
-                  <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
-                    {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
-                  </span>
-                </td>
-                <td className="py-3.5 px-3 text-right">
-                  <button className="p-1.5 text-text-muted hover:text-primary hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="დეტალები">
-                    <span className="material-symbols-outlined text-[18px]" data-icon="visibility">visibility</span>
-                  </button>
-                </td>
-              </tr>
+              {(() => {
+                const mariamItem = {
+                  id: 'default-mariam',
+                  name: 'მარიამ წიკლაური',
+                  personalId: '01008022119',
+                  entityType: 'PHYSICAL',
+                  amount: 9800,
+                  remainingAmount: 6300,
+                  paidAmount: 3500,
+                  rating: 'Grade B (ზომიერი რისკი)',
+                  overdueDays: 55,
+                  phone: '+995 577 66 55 44',
+                  email: 'mariam.ts@gmail.com',
+                  actualAddress: 'ქ. ქუთაისი, წერეთლის ქ. 12',
+                  legalAddress: 'ქ. ქუთაისი, წერეთლის ქ. 12',
+                  status: 'ACTIVE',
+                  agreementNumber: 'AGR-55823',
+                };
+                const isSelected = selectedDebtor?.personalId === mariamItem.personalId;
+                return (
+                  <tr
+                    key="row-mariam"
+                    onClick={() => handleSelectDebtor(mariamItem)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                        <span>{mariamItem.name}</span>
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
+                        )}
+                      </div>
+                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {mariamItem.personalId} • {mariamItem.agreementNumber}</div>
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
+                      ₾ {mariamItem.amount.toLocaleString('ka-GE')}.00
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="font-data-mono-md font-bold text-amber-600">₾ {mariamItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
+                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {mariamItem.paidAmount.toLocaleString('ka-GE')}.00</div>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
+                        Grade B
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
+                        {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDebtor(mariamItem);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
+                        }`}
+                        title="დეტალები & გადახდების ისტორია"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">visibility</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>
@@ -820,16 +1281,29 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-headline-sm">
-                გგ
+                {selectedDebtor?.name
+                  ? selectedDebtor.name
+                      .split(' ')
+                      .filter(Boolean)
+                      .map((p: string) => p[0])
+                      .slice(0, 2)
+                      .join('')
+                  : 'დბ'}
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-headline-sm font-headline-sm font-bold text-text-primary">გიორგი გიორგაძე</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-headline-sm font-headline-sm font-bold text-text-primary">
+                    {selectedDebtor?.name || 'დებიტორი'}
+                  </h3>
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
-                    Grade B (ზომიერი რისკი)
+                    {selectedDebtor?.rating || 'Grade B (ზომიერი რისკი)'}
                   </span>
                 </div>
-                <div className="font-data-mono-md text-body-sm text-text-muted mt-0.5">პ/ნ: 01019012345 (დებიტორი)</div>
+                <div className="font-data-mono-md text-body-sm text-text-muted mt-0.5">
+                  {selectedDebtor?.entityType === 'LEGAL' ? 'ს/კ' : 'პ/ნ'}: {selectedDebtor?.taxId || selectedDebtor?.personalId} (
+                  {selectedDebtor?.entityType === 'LEGAL' ? 'იურიდიული პირი' : 'დებიტორი'})
+                  {selectedDebtor?.agreementNumber && ` • ${selectedDebtor.agreementNumber}`}
+                </div>
               </div>
             </div>
             {/* Detail Action Menu */}
@@ -841,227 +1315,307 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 p-3 bg-surface-bg rounded-lg border border-border-subtle text-body-sm">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-text-muted text-[18px]" data-icon="call">call</span>
-              <span className="font-data-mono-md text-text-primary">+995 599 12 34 56</span>
+              <span className="font-data-mono-md text-text-primary">{selectedDebtor?.phone || '+995 599 00 00 00'}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-text-muted text-[18px]" data-icon="calendar_month">calendar_month</span>
-              <span className="text-text-muted">ვადა: <strong className="text-text-primary">14 იან, 2025</strong></span>
+              <span className="text-text-muted">
+                ვადა: <strong className="text-text-primary">{selectedDebtor?.dueDate || (selectedDebtor?.debtOriginationDate ? String(selectedDebtor.debtOriginationDate).split('T')[0] : '14 იან, 2025')}</strong>
+                {selectedDebtor?.overdueDays !== undefined ? ` (${selectedDebtor.overdueDays} დღე)` : ''}
+              </span>
             </div>
             <div className="flex items-start gap-2 sm:col-span-2">
               <span className="material-symbols-outlined text-text-muted text-[18px] shrink-0" data-icon="location_on">location_on</span>
-              <span className="text-text-muted truncate">თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42</span>
+              <span className="text-text-muted truncate">
+                {selectedDebtor?.actualAddress || selectedDebtor?.legalAddress || 'ქ. თბილისი'}
+              </span>
             </div>
-          </div>
-        </div>
-        {/* Financial Balance Dynamics & Progress Visualizer */}
-        <div className="p-4 rounded-xl bg-slate-50/80 border border-border-subtle space-y-3">
-          <div className="flex items-center justify-between text-body-sm">
-            <span className="text-text-muted font-medium">ვალის კლების დინამიკა</span>
-            <span className="text-emerald-700 font-bold font-data-mono-md">56% დაფარულია</span>
-          </div>
-          {/* Visual Progress Bar */}
-          <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
-            <div className="bg-accent-mint h-2.5 rounded-full transition-all duration-500 shadow-sm" style={{width: '56%', backgroundColor: '#0DFCC4'}} />
-          </div>
-          {/* Financial Breakdown Triplet */}
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 text-center">
-            <div>
-              <div className="text-[11px] text-text-muted">მოთხოვნილი</div>
-              <div className="font-data-mono-md font-semibold text-text-primary text-[13px] mt-0.5">₾ 5,000.00</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-text-muted">გადახდილი</div>
-              <div className="font-data-mono-md font-bold text-emerald-600 text-[13px] mt-0.5">₾ 2,800.00</div>
-            </div>
-            <div>
-              <div className="text-[11px] text-text-muted">დარჩენილი</div>
-              <div className="font-data-mono-md font-bold text-amber-600 text-[13px] mt-0.5">₾ 2,200.00</div>
-            </div>
-          </div>
-        </div>
-        {/* 2.2 Payment Receipts & Pending Verifications (Point 3, 4, 8) */}
-        <div className="space-y-4 pt-1">
-          {/* Real-time Notification Banner when debtor submits receipt */}
-          {pendingReceipts.length > 0 && (
-            <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-50/70 to-amber-500/10 border-2 border-dashed border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[22px]">notifications_active</span>
-                </div>
-                <div>
-                  <h4 className="font-bold text-body-md text-text-primary flex items-center gap-2">
-                    <span>შეტყობინება გადახდის შესახებ</span>
-                    <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">
-                      {pendingReceipts.length} ახალი ქვითარი
-                    </span>
-                  </h4>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    დებიტორმა განახორციელა თანხის შემოტანა და ატვირთა ქვითარი. გთხოვთ გადაამოწმოთ და დაადასტუროთ თანხის მიღება.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedReceiptForConfirm(pendingReceipts[0])}
-                className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all self-start sm:self-auto cursor-pointer"
-                type="button"
-              >
-                <span className="material-symbols-outlined text-sm">verified</span>
-                <span>მიღების დადასტურება</span>
-              </button>
-            </div>
-          )}
-
-          {/* Pending Submissions Queue */}
-          {pendingReceipts.length > 0 && (
-            <div className="p-4 rounded-xl bg-blue-50/40 border border-blue-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                  დასადასტურებელი გადახდები (მოლოდინშია)
-                </span>
-                <span className="text-xs font-data-mono-md text-text-muted">
-                  {pendingReceipts.length} განაცხადი
+            {selectedDebtor?.entityType === 'LEGAL' && (selectedDebtor?.directorFirstName || selectedDebtor?.directorLastName) && (
+              <div className="flex items-center gap-2 sm:col-span-2 pt-1 border-t border-border-subtle text-xs text-slate-700">
+                <span className="material-symbols-outlined text-primary text-[16px]">badge</span>
+                <span>
+                  <strong>დირექტორი:</strong> {selectedDebtor.directorFirstName} {selectedDebtor.directorLastName}
+                  {selectedDebtor.directorPhone && ` (ტელ: ${selectedDebtor.directorPhone})`}
                 </span>
               </div>
-              <div className="space-y-2">
-                {pendingReceipts.map((pr) => (
-                  <div
-                    key={pr.id}
-                    className="p-3 rounded-lg bg-white border border-border-subtle hover:border-primary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-base">receipt</span>
-                      </div>
-                      <div>
-                        <div className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
-                          <span>{pr.debtorName}</span>
-                          <span className="font-data-mono-md font-bold text-emerald-700">+{Number(pr.amount).toLocaleString('ka-GE')} ₾</span>
-                        </div>
-                        <div className="text-[11px] text-text-muted font-data-mono-md">
-                          #{pr.receiptNumber} • {new Date(pr.paymentDate).toLocaleDateString('ka-GE')} • {pr.debtorNotes || 'ქვითარი ატვირთულია'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 self-end sm:self-center">
-                      <button
-                        onClick={() => setSelectedReceiptForConfirm(pr)}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
-                        type="button"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">check_circle</span>
-                        <span>თანხის მიღების დადასტურება</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Historical Payments Log (Clean Neutral - Point 8) */}
-          <div className="flex items-center justify-between border-b border-border-subtle pb-2">
-            <h4 className="font-semibold text-text-primary text-body-sm flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[18px] text-primary" data-icon="history">history</span>
-              გადახდების ქრონოლოგიური ისტორია &amp; დადასტურებები
-            </h4>
-            <span className="text-[11px] font-label-sm text-text-muted">
-              სულ {receipts.length} ტრანზაქცია
-            </span>
-          </div>
-
-          <div className="space-y-2.5">
-            {receipts.length === 0 ? (
-              <div className="p-4 rounded-lg bg-slate-50 text-center text-xs text-text-muted">
-                გადახდების ისტორია ჯერ არ ფიქსირდება
-              </div>
-            ) : (
-              receipts.map((r) => {
-                const isConfirmedCreditor = r.status === 'CONFIRMED_BY_CREDITOR';
-                const isConfirmedAccountant = r.status === 'CONFIRMED_BY_ACCOUNTANT';
-                const isPending = r.status === 'PENDING_CONFIRMATION';
-
-                return (
-                  <div
-                    key={r.id}
-                    className="p-3.5 rounded-xl bg-surface-card border border-border-subtle hover:border-slate-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                          isPending
-                            ? 'bg-amber-100 text-amber-800'
-                            : isConfirmedAccountant
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          {isPending ? 'schedule' : isConfirmedAccountant ? 'account_balance' : 'verified'}
-                        </span>
-                      </div>
-                      <div>
-                        <div className="text-body-sm font-semibold text-text-primary flex items-center gap-2 flex-wrap">
-                          <span>{r.debtorName}</span>
-                          <span className="text-xs text-text-muted font-data-mono-md">
-                            • {new Date(r.paymentDate).toLocaleDateString('ka-GE')}
-                          </span>
-                          <span className="text-xs text-text-muted font-data-mono-md">
-                            • ტრანზაქცია #{r.receiptNumber}
-                          </span>
-                        </div>
-                        {/* Who confirmed (Point 8) */}
-                        <div className="text-xs mt-1">
-                          {isPending && (
-                            <span className="text-amber-700 font-medium flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              მოლოდინშია (დასადასტურებელია თქვენს ან ბუღალტრის მიერ)
-                            </span>
-                          )}
-                          {isConfirmedCreditor && (
-                            <span className="text-emerald-700 font-medium flex items-center gap-1">
-                              <span className="material-symbols-outlined text-xs">check_circle</span>
-                              დადასტურებულია თქვენს (კრედიტორის) მიერ
-                            </span>
-                          )}
-                          {isConfirmedAccountant && (
-                            <span className="text-blue-700 font-medium flex items-center gap-1">
-                              <span className="material-symbols-outlined text-xs">verified</span>
-                              დადასტურებულია ბუღალტრის მიერ (ბრძანება #{r.accountantOrderNumber || 'ACC-ORD'})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3 self-end sm:self-center">
-                      <div className="text-right">
-                        <div className="font-data-mono-md font-bold text-emerald-600 text-body-sm">
-                          +{Number(r.amount).toLocaleString('ka-GE')} ₾
-                        </div>
-                      </div>
-                      {!isPending && (
-                        <button
-                          onClick={() => openOfficialDocument(r)}
-                          className="px-2.5 py-1.5 rounded-lg border border-border-subtle hover:bg-slate-50 text-primary text-xs font-medium flex items-center gap-1 shadow-2xs cursor-pointer"
-                          type="button"
-                          title={isConfirmedAccountant ? 'ბუღალტრის დასტურის ბრძანება (PDF)' : 'ქვითრის ჩამოტვირთვა'}
-                        >
-                          <span className="material-symbols-outlined text-[15px]">
-                            {isConfirmedAccountant ? 'picture_as_pdf' : 'download'}
-                          </span>
-                          <span className="hidden md:inline">
-                            {isConfirmedAccountant ? 'ბრძანება (PDF)' : 'ქვითარი'}
-                          </span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
             )}
           </div>
         </div>
+
+        {/* Financial Balance Dynamics & Progress Visualizer */}
+        {(() => {
+          const initAmount = Number(selectedDebtor?.amount || selectedDebtor?.initialAmount || 0);
+          const remAmount = Number(selectedDebtor?.remainingAmount ?? initAmount);
+          const paidAmount = Number(selectedDebtor?.paidAmount ?? Math.max(0, initAmount - remAmount));
+          const paidPercent = initAmount > 0 ? Math.min(100, Math.round((paidAmount / initAmount) * 100)) : 0;
+
+          return (
+            <div className="p-4 rounded-xl bg-slate-50/80 border border-border-subtle space-y-3">
+              <div className="flex items-center justify-between text-body-sm">
+                <span className="text-text-muted font-medium">ვალის კლების დინამიკა</span>
+                <span className="text-emerald-700 font-bold font-data-mono-md">{paidPercent}% დაფარულია</span>
+              </div>
+              {/* Visual Progress Bar */}
+              <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                <div
+                  className="bg-accent-mint h-2.5 rounded-full transition-all duration-500 shadow-sm"
+                  style={{ width: `${paidPercent}%`, backgroundColor: '#0DFCC4' }}
+                />
+              </div>
+              {/* Financial Breakdown Triplet */}
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/60 text-center">
+                <div>
+                  <div className="text-[11px] text-text-muted">მოთხოვნილი</div>
+                  <div className="font-data-mono-md font-semibold text-text-primary text-[13px] mt-0.5">
+                    ₾ {initAmount.toLocaleString('ka-GE')}.00
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-text-muted">გადახდილი</div>
+                  <div className="font-data-mono-md font-bold text-emerald-600 text-[13px] mt-0.5">
+                    ₾ {paidAmount.toLocaleString('ka-GE')}.00
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-text-muted">დარჩენილი</div>
+                  <div className="font-data-mono-md font-bold text-amber-600 text-[13px] mt-0.5">
+                    ₾ {remAmount.toLocaleString('ka-GE')}.00
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 2.2 Payment Receipts & Pending Verifications */}
+        {(() => {
+          const debtorPending = pendingReceipts.filter(
+            (pr) =>
+              (selectedDebtor?.personalId && (pr as any).debtorPersonalId === selectedDebtor.personalId) ||
+              (selectedDebtor?.name && pr.debtorName?.toLowerCase().includes(selectedDebtor.name.toLowerCase())) ||
+              (selectedDebtor?.id && pr.claimId === selectedDebtor.id)
+          );
+
+          const debtorReceipts = receipts.filter(
+            (r) =>
+              (selectedDebtor?.personalId && (r as any).debtorPersonalId === selectedDebtor.personalId) ||
+              (selectedDebtor?.name && r.debtorName?.toLowerCase().includes(selectedDebtor.name.toLowerCase())) ||
+              (selectedDebtor?.id && r.claimId === selectedDebtor.id)
+          );
+
+          return (
+            <div className="space-y-4 pt-1">
+              {/* Real-time Notification Banner when debtor submits receipt */}
+              {debtorPending.length > 0 && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-amber-500/10 via-amber-50/70 to-amber-500/10 border-2 border-dashed border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[22px]">notifications_active</span>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-body-md text-text-primary flex items-center gap-2">
+                        <span>შეტყობინება გადახდის შესახებ</span>
+                        <span className="px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 text-xs font-bold">
+                          {debtorPending.length} ახალი ქვითარი
+                        </span>
+                      </h4>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        დებიტორმა განახორციელა თანხის შემოტანა და ატვირთა ქვითარი. გთხოვთ გადაამოწმოთ და დაადასტუროთ თანხის მიღება.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedReceiptForConfirm(debtorPending[0])}
+                    className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all self-start sm:self-auto cursor-pointer"
+                    type="button"
+                  >
+                    <span className="material-symbols-outlined text-sm">verified</span>
+                    <span>მიღების დადასტურება</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Pending Submissions Queue */}
+              {debtorPending.length > 0 && (
+                <div className="p-4 rounded-xl bg-blue-50/40 border border-blue-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                      დასადასტურებელი გადახდები (მოლოდინშია)
+                    </span>
+                    <span className="text-xs font-data-mono-md text-text-muted">
+                      {debtorPending.length} განაცხადი
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {debtorPending.map((pr) => (
+                      <div
+                        key={pr.id}
+                        className="p-3 rounded-lg bg-white border border-border-subtle hover:border-primary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                            <span className="material-symbols-outlined text-base">receipt</span>
+                          </div>
+                          <div>
+                            <div className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
+                              <span>{pr.debtorName}</span>
+                              <span className="font-data-mono-md font-bold text-emerald-700">+{Number(pr.amount).toLocaleString('ka-GE')} ₾</span>
+                            </div>
+                            <div className="text-[11px] text-text-muted font-data-mono-md">
+                              #{pr.receiptNumber} • {new Date(pr.paymentDate).toLocaleDateString('ka-GE')} • {pr.debtorNotes || 'ქვითარი ატვირთულია'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          <button
+                            onClick={() => setSelectedReceiptForConfirm(pr)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                            type="button"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">check_circle</span>
+                            <span>თანხის მიღების დადასტურება</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Historical Payments Log */}
+              <div className="flex items-center justify-between border-b border-border-subtle pb-2">
+                <h4 className="font-semibold text-text-primary text-body-sm flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[18px] text-primary" data-icon="history">history</span>
+                  გადახდების ქრონოლოგიური ისტორია &amp; დადასტურებები
+                </h4>
+                <span className="text-[11px] font-label-sm text-text-muted">
+                  სულ {debtorReceipts.length || (selectedDebtor?.paidAmount > 0 ? 1 : 0)} ტრანზაქცია
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                {debtorReceipts.length === 0 && (!selectedDebtor?.paidAmount || selectedDebtor.paidAmount === 0) ? (
+                  <div className="p-6 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-1.5">
+                    <span className="material-symbols-outlined text-2xl text-slate-400">payments</span>
+                    <div className="text-xs font-semibold text-slate-700">{selectedDebtor?.name} — გადახდების ისტორია ჯერ არ ფიქსირდება</div>
+                    <div className="text-[11px] text-text-muted">
+                      საწყისი დავალიანება (₾ {Number(selectedDebtor?.amount || 0).toLocaleString('ka-GE')}.00) სრულადაა დარჩენილი. დებიტორის მიერ გადახდის განხორციელებისას ჩანაწერი აქ ავტომატურად გამოჩნდება.
+                    </div>
+                  </div>
+                ) : debtorReceipts.length > 0 ? (
+                  debtorReceipts.map((r) => {
+                    const isConfirmedCreditor = r.status === 'CONFIRMED_BY_CREDITOR';
+                    const isConfirmedAccountant = r.status === 'CONFIRMED_BY_ACCOUNTANT';
+                    const isPending = r.status === 'PENDING_CONFIRMATION';
+
+                    return (
+                      <div
+                        key={r.id}
+                        className="p-3.5 rounded-xl bg-surface-card border border-border-subtle hover:border-slate-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                              isPending
+                                ? 'bg-amber-100 text-amber-800'
+                                : isConfirmedAccountant
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">
+                              {isPending ? 'schedule' : isConfirmedAccountant ? 'account_balance' : 'verified'}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="text-body-sm font-semibold text-text-primary flex items-center gap-2 flex-wrap">
+                              <span>{r.debtorName}</span>
+                              <span className="text-xs text-text-muted font-data-mono-md">
+                                • {new Date(r.paymentDate).toLocaleDateString('ka-GE')}
+                              </span>
+                              <span className="text-xs text-text-muted font-data-mono-md">
+                                • ტრანზაქცია #{r.receiptNumber}
+                              </span>
+                            </div>
+                            <div className="text-xs mt-1">
+                              {isPending && (
+                                <span className="text-amber-700 font-medium flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                  მოლოდინშია (დასადასტურებელია თქვენს ან ბუღალტრის მიერ)
+                                </span>
+                              )}
+                              {isConfirmedCreditor && (
+                                <span className="text-emerald-700 font-medium flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-xs">check_circle</span>
+                                  დადასტურებულია თქვენს (კრედიტორის) მიერ
+                                </span>
+                              )}
+                              {isConfirmedAccountant && (
+                                <span className="text-blue-700 font-medium flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-xs">verified</span>
+                                  დადასტურებულია ბუღალტრის მიერ (ბრძანება #{r.accountantOrderNumber || 'ACC-ORD'})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 self-end sm:self-center">
+                          <div className="text-right">
+                            <div className="font-data-mono-md font-bold text-emerald-600 text-body-sm">
+                              +{Number(r.amount).toLocaleString('ka-GE')} ₾
+                            </div>
+                          </div>
+                          {!isPending && (
+                            <button
+                              onClick={() => openOfficialDocument(r)}
+                              className="px-2.5 py-1.5 rounded-lg border border-border-subtle hover:bg-slate-50 text-primary text-xs font-medium flex items-center gap-1 shadow-2xs cursor-pointer"
+                              type="button"
+                              title={isConfirmedAccountant ? 'ბუღალტრის დასტურის ბრძანება (PDF)' : 'ქვითრის ჩამოტვირთვა'}
+                            >
+                              <span className="material-symbols-outlined text-[15px]">
+                                {isConfirmedAccountant ? 'picture_as_pdf' : 'download'}
+                              </span>
+                              <span className="hidden md:inline">
+                                {isConfirmedAccountant ? 'ბრძანება (PDF)' : 'ქვითარი'}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  /* Fallback when debtor has recorded partial payment but no receipt entity */
+                  <div className="p-3.5 rounded-xl bg-surface-card border border-border-subtle hover:border-slate-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[18px]">verified</span>
+                      </div>
+                      <div>
+                        <div className="text-body-sm font-semibold text-text-primary flex items-center gap-2 flex-wrap">
+                          <span>{selectedDebtor?.name}</span>
+                          <span className="text-xs text-text-muted font-data-mono-md">• {selectedDebtor?.dueDate || '12 იან, 2025'}</span>
+                          <span className="text-xs text-text-muted font-data-mono-md">• ტრანზაქცია #{selectedDebtor?.agreementNumber || 'TX-8841'}</span>
+                        </div>
+                        <div className="text-xs mt-1 text-emerald-700 font-medium flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">check_circle</span>
+                          დადასტურებულია კრედიტორის მიერ
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-data-mono-md font-bold text-emerald-600 text-body-sm">
+                        +₾ {Number(selectedDebtor?.paidAmount).toLocaleString('ka-GE')}.00
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Debtor Quick Interventions (SMS & Lawyer buttons removed as requested) */}
         <div className="pt-2 border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-2">
@@ -1242,7 +1796,7 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
     </div>
   )}
 
-  {/* Add Debtor Modal (Manual Addition for Creditor) */}
+  {/* Add Debtor Modal (Manual Addition for Creditor - Exactly matching Excel Template) */}
   {isAddDebtorModalOpen && (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
       <div
@@ -1250,17 +1804,17 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         onClick={() => setIsAddDebtorModalOpen(false)}
       />
       <div
-        className="relative bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-border-subtle z-10 space-y-4 text-left"
+        className="relative bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-border-subtle z-10 space-y-4 text-left max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
               <span className="material-symbols-outlined text-xl">person_add</span>
             </div>
             <div>
               <h3 className="font-bold text-headline-sm text-text-primary">ახალი დებიტორის დამატება რეესტრში</h3>
-              <p className="text-xs text-text-muted">გადაეცემა ანალიტიკოსს RS.GE გადამოწმებისთვის</p>
+              <p className="text-xs text-text-muted">ველები ზუსტად ემთხვევა იმპორტის Excel შაბლონს (გადაეცემა RS.GE გადამოწმებისთვის)</p>
             </div>
           </div>
           <button
@@ -1271,197 +1825,357 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
           </button>
         </div>
 
+        {/* Entity Type Toggle Tabs */}
+        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setNewDebtorEntityType('LEGAL')}
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              newDebtorEntityType === 'LEGAL'
+                ? 'bg-primary text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">apartment</span>
+            <span>იურიდიული პირი (LEGAL • 13 ველი)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setNewDebtorEntityType('PHYSICAL')}
+            className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              newDebtorEntityType === 'PHYSICAL'
+                ? 'bg-[#0F172A] text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+            }`}
+          >
+            <span className="material-symbols-outlined text-base">person</span>
+            <span>ფიზიკური პირი (PHYSICAL • 9 ველი)</span>
+          </button>
+        </div>
+
         <form onSubmit={handleCreateDebtorManually} className="space-y-4">
-          {/* Entity Type Toggle */}
-          <div className="flex items-center gap-4 text-body-sm pb-1">
-            <span className="font-semibold text-text-primary text-xs uppercase tracking-wider text-slate-500">სუბიექტის ტიპი:</span>
-            <label className="inline-flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="new_cred_debtor_type"
-                checked={newDebtorEntityType === 'LEGAL'}
-                onChange={() => setNewDebtorEntityType('LEGAL')}
-                className="text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-              />
-              <span className="text-text-primary font-medium text-body-sm">იურიდიული პირი (შპს/სს)</span>
-            </label>
-            <label className="inline-flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="radio"
-                name="new_cred_debtor_type"
-                checked={newDebtorEntityType === 'PHYSICAL'}
-                onChange={() => setNewDebtorEntityType('PHYSICAL')}
-                className="text-primary focus:ring-primary w-4 h-4 cursor-pointer"
-              />
-              <span className="text-slate-600 text-body-sm">ფიზიკური პირი</span>
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-body-sm">
-            {newDebtorEntityType === 'LEGAL' ? (
-              <>
+          {newDebtorEntityType === 'LEGAL' ? (
+            /* ========================================================= */
+            /* LEGAL ENTITY FORM (13 FIELDS)                             */
+            /* ========================================================= */
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-body-sm">
                 <div>
                   <label className="block text-xs font-semibold text-text-primary mb-1">
-                    საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) <span className="text-rating-c">*</span>
+                    1. საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) <span className="text-rating-c">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="404991201"
+                    placeholder="მაგ. 405118492"
                     value={newDebtorForm.taxId}
-                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, taxId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
+                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, taxId: e.target.value.replace(/\D/g, '').slice(0, 9) })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-text-primary mb-1">
-                    დირექტორის პირადი ნომერი (პ/ნ 11 ნიშნა) <span className="text-rating-c">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="01019012345"
-                    value={newDebtorForm.personalId}
-                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, personalId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-text-primary mb-1">
-                    ორგანიზაციის სრული დასახელება <span className="text-rating-c">*</span>
+                    2. სრული დასახელება <span className="text-rating-c">*</span>
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="შპს კომპანია"
+                    placeholder="მაგ. შპს კავკასუს ტრანს სერვისი"
                     value={newDebtorForm.name}
                     onChange={(e) => setNewDebtorForm({ ...newDebtorForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-text-primary mb-1">
-                    დირექტორის სახელი და გვარი
+                    3. ტელეფონი <span className="text-rating-c">*</span>
                   </label>
                   <input
-                    type="text"
-                    placeholder="გიორგი ბერიძე"
-                    value={newDebtorForm.directorName}
-                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, directorName: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-text-primary mb-1">
-                    პირადი ნომერი (პ/ნ 11 ნიშნა) <span className="text-rating-c">*</span>
-                  </label>
-                  <input
-                    type="text"
+                    type="tel"
                     required
-                    placeholder="01019012345"
-                    value={newDebtorForm.personalId}
-                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, personalId: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
+                    placeholder="+995 591 442299"
+                    value={newDebtorForm.phone}
+                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-text-primary mb-1">
-                    სახელი და გვარი <span className="text-rating-c">*</span>
+                    4. ელ-ფოსტა
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="info@cts-georgia.ge"
+                    value={newDebtorForm.email}
+                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
+                    5. იურიდიული მისამართი
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="დავით კვირიკაშვილი"
-                    value={newDebtorForm.name}
-                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
+                    placeholder="ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა"
+                    value={newDebtorForm.legalAddress}
+                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, legalAddress: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
                   />
                 </div>
-              </>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-text-primary mb-1">საკონტაქტო ტელეფონი</label>
-              <input
-                type="tel"
-                placeholder="+995 599 00 00 00"
-                value={newDebtorForm.phone}
-                onChange={(e) => setNewDebtorForm({ ...newDebtorForm, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-text-primary mb-1">ელ. ფოსტა</label>
-              <input
-                type="email"
-                placeholder="debtor@gmail.com"
-                value={newDebtorForm.email}
-                onChange={(e) => setNewDebtorForm({ ...newDebtorForm, email: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-text-primary mb-1">იურიდიული მისამართი</label>
-              <input
-                type="text"
-                placeholder="ქ. თბილისი, მისამართი"
-                value={newDebtorForm.legalAddress}
-                onChange={(e) => setNewDebtorForm({ ...newDebtorForm, legalAddress: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-text-primary">ფაქტობრივი მისამართი</label>
-                <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] text-primary">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-text-primary">6. ფაქტობრივი მისამართი</label>
+                    <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] text-primary">
+                      <input
+                        type="checkbox"
+                        checked={newDebtorActualMatchesLegal}
+                        onChange={(e) => setNewDebtorActualMatchesLegal(e.target.checked)}
+                        className="rounded border-slate-300 w-3 h-3 text-primary"
+                      />
+                      <span>ემთხვევა იურიდიულს</span>
+                    </label>
+                  </div>
                   <input
-                    type="checkbox"
-                    checked={newDebtorActualMatchesLegal}
-                    onChange={(e) => setNewDebtorActualMatchesLegal(e.target.checked)}
-                    className="rounded border-slate-300 w-3 h-3 text-primary"
+                    type="text"
+                    placeholder="ქ. თბილისი, ალ. ყაზბეგის გამზ. #24ა"
+                    disabled={newDebtorActualMatchesLegal}
+                    value={newDebtorActualMatchesLegal ? newDebtorForm.legalAddress : newDebtorForm.actualAddress}
+                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, actualAddress: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs disabled:bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
                   />
-                  <span>ემთხვევა</span>
-                </label>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
+                    7. საწყისი დავალიანება (GEL) <span className="text-rating-c">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="48500.00"
+                    value={newDebtorForm.amount}
+                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, amount: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
+                    8. ვალის წარმოქმნის თარიღი
+                  </label>
+                  <input
+                    type="date"
+                    value={newDebtorForm.debtOriginationDate}
+                    onChange={(e) => setNewDebtorForm({ ...newDebtorForm, debtOriginationDate: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                  />
+                </div>
               </div>
-              <input
-                type="text"
-                placeholder="ფაქტობრივი მისამართი"
-                disabled={newDebtorActualMatchesLegal}
-                value={newDebtorActualMatchesLegal ? newDebtorForm.legalAddress : newDebtorForm.actualAddress}
-                onChange={(e) => setNewDebtorForm({ ...newDebtorForm, actualAddress: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs disabled:bg-slate-50"
-              />
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-text-primary mb-1">დავალიანების თანხა (₾) <span className="text-rating-c">*</span></label>
-              <input
-                type="number"
-                required
-                placeholder="1500.00"
-                value={newDebtorForm.amount}
-                onChange={(e) => setNewDebtorForm({ ...newDebtorForm, amount: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
-              />
+              {/* Sub-card: Director Details (Fields 9 to 13) */}
+              <div className="bg-slate-50/80 rounded-xl p-3.5 border border-slate-200 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-800 pb-1 border-b border-slate-200">
+                  <span className="material-symbols-outlined text-sm text-primary">badge</span>
+                  <span>დირექტორის მონაცემები (ველები 9 - 13)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-body-sm">
+                  <div>
+                    <label className="block text-xs font-semibold text-text-primary mb-1">
+                      9. დირექტორის სახელი
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="დავით"
+                      value={newDebtorForm.directorFirstName}
+                      onChange={(e) => setNewDebtorForm({ ...newDebtorForm, directorFirstName: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-text-primary mb-1">
+                      10. დირექტორის გვარი
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="კაპანაძე"
+                      value={newDebtorForm.directorLastName}
+                      onChange={(e) => setNewDebtorForm({ ...newDebtorForm, directorLastName: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-text-primary mb-1">
+                      11. დირექტორის პირადი ნომერი (არასავალდებულო)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="01019045812 (11 ნიშნა)"
+                      value={newDebtorForm.directorPersonalId}
+                      onChange={(e) => setNewDebtorForm({ ...newDebtorForm, directorPersonalId: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-text-primary mb-1">
+                      12. დირექტორის ემაილი
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="davit.k@cts-georgia.ge"
+                      value={newDebtorForm.directorEmail}
+                      onChange={(e) => setNewDebtorForm({ ...newDebtorForm, directorEmail: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-semibold text-text-primary mb-1">
+                      13. დირექტორის ტელეფონის ნომერი
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="+995 599 114477"
+                      value={newDebtorForm.directorPhone}
+                      onChange={(e) => setNewDebtorForm({ ...newDebtorForm, directorPhone: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-text-primary mb-1">ხელშეკრულების №</label>
-              <input
-                type="text"
-                placeholder="AGR-2026-01"
-                value={newDebtorForm.agreementNumber}
-                onChange={(e) => setNewDebtorForm({ ...newDebtorForm, agreementNumber: e.target.value })}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs"
-              />
+          ) : (
+            /* ========================================================= */
+            /* PHYSICAL PERSON FORM (9 FIELDS)                           */
+            /* ========================================================= */
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-body-sm">
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  1. პირადი ნომერი (პ/ნ 11 ნიშნა) <span className="text-rating-c">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="01024089123"
+                  value={newDebtorForm.personalId}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, personalId: e.target.value.replace(/\D/g, '').slice(0, 11) })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  2. სახელი <span className="text-rating-c">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="დავით"
+                  value={newDebtorForm.firstName}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, firstName: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  3. გვარი <span className="text-rating-c">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="კვირიკაშვილი"
+                  value={newDebtorForm.lastName}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, lastName: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  4. ტელეფონი <span className="text-rating-c">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="+995 599 112233"
+                  value={newDebtorForm.phone}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  5. ელ-ფოსტა
+                </label>
+                <input
+                  type="email"
+                  placeholder="davit.k@gmail.com"
+                  value={newDebtorForm.email}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  6. იურიდიული მისამართი
+                </label>
+                <input
+                  type="text"
+                  placeholder="ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12"
+                  value={newDebtorForm.legalAddress}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, legalAddress: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-text-primary">7. ფაქტობრივი მისამართი</label>
+                  <label className="inline-flex items-center gap-1 cursor-pointer text-[11px] text-primary">
+                    <input
+                      type="checkbox"
+                      checked={newDebtorActualMatchesLegal}
+                      onChange={(e) => setNewDebtorActualMatchesLegal(e.target.checked)}
+                      className="rounded border-slate-300 w-3 h-3 text-primary"
+                    />
+                    <span>ემთხვევა იურიდიულს</span>
+                  </label>
+                </div>
+                <input
+                  type="text"
+                  placeholder="ქ. თბილისი, ვაჟა-ფშაველას გამზ. #12"
+                  disabled={newDebtorActualMatchesLegal}
+                  value={newDebtorActualMatchesLegal ? newDebtorForm.legalAddress : newDebtorForm.actualAddress}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, actualAddress: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs disabled:bg-slate-50 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  8. საწყისი დავალიანება (GEL) <span className="text-rating-c">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  placeholder="3200.00"
+                  value={newDebtorForm.amount}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, amount: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-primary mb-1">
+                  9. ვალის წარმოქმნის თარიღი
+                </label>
+                <input
+                  type="date"
+                  value={newDebtorForm.debtOriginationDate}
+                  onChange={(e) => setNewDebtorForm({ ...newDebtorForm, debtOriginationDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-hidden"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
             <span className="material-symbols-outlined text-amber-600 text-base">info</span>
-            <span>დამატების შემდეგ დებიტორი გადაეცემა ანალიტიკოსს RS.GE გადამოწმებისთვის (სტატუსი: დასადასტურებელი).</span>
+            <span>დებიტორის წარდგენის შემდეგ მონაცემები გადაეცემა ანალიტიკოსს RS.GE გადამოწმებისთვის (სტატუსი: დასადასტურებელი).</span>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2 border-t border-border-subtle">
@@ -1477,7 +2191,7 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
               className="px-5 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white text-xs font-semibold shadow-sm flex items-center gap-1.5 cursor-pointer"
             >
               <span className="material-symbols-outlined text-sm">send</span>
-              <span>დებიტორის წარდგენა</span>
+              <span>დებიტორის წარდგენა რეესტრში</span>
             </button>
           </div>
         </form>
