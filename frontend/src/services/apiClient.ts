@@ -3,7 +3,11 @@
  * Connects Next.js Frontend with NestJS + Fastify Backend
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://debitinfo-backend.onrender.com'
+    : 'http://localhost:4000');
 
 export async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
