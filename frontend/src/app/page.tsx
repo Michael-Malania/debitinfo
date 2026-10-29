@@ -1,15 +1,42 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export default function LandingPage() {
+  const [isOps, setIsOps] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const h = window.location.hostname.toLowerCase();
+      const opsDomain =
+        h.includes('ops.') ||
+        h.includes('-ops') ||
+        process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
+
+      if (opsDomain) {
+        setIsOps(true);
+        window.location.replace('/ops');
+      }
+    }
+  }, []);
 
   const [currentSlide, setCurrentSlide] = useState(1);
   const [searchMode, setSearchMode] = useState('personal');
   const [searchValue, setSearchValue] = useState('');
   const [searchResultVisible, setSearchResultVisible] = useState(false);
   const [pricingTier, setPricingTier] = useState('individual');
+
+  if (isOps) {
+    return (
+      <div className="min-h-screen bg-surface-bg flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-body-sm text-text-muted font-medium">გადამისამართება საოპერაციო პორტალზე...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-surface-bg text-text-primary antialiased min-h-screen flex flex-col">

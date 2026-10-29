@@ -25,10 +25,14 @@ function getTargetRouteByRole(role?: string): string {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const hostname = request.nextUrl.hostname || '';
+  const forwardedHost = request.headers.get('x-forwarded-host') || '';
   const host = request.headers.get('host') || '';
+  const allHosts = `${hostname} ${forwardedHost} ${host}`.toLowerCase();
+
   const isOpsDomain =
-    host.startsWith('ops.') ||
-    host.includes('-ops') ||
+    allHosts.includes('ops.') ||
+    allHosts.includes('-ops') ||
     process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
 
   // If on Ops domain and accessing root '/', direct to /ops login
@@ -152,12 +156,14 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/',
     '/ops/:path*',
     '/dashboard/:path*',
     '/crm/:path*',
     '/analyst/:path*',
     '/legal/:path*',
     '/field-officer/:path*',
+    '/accountant/:path*',
     '/hr/:path*',
   ],
 };
