@@ -102,6 +102,21 @@ export default function OpsPage() {
 
   // Check current session on mount with synchronization & loop prevention
   useEffect(() => {
+    // If on main production domain (e.g. debitinfo.vercel.app), restrict /ops completely so it behaves like a non-existent route
+    if (typeof window !== 'undefined') {
+      const host = (window.location.host || '').toLowerCase();
+      const isOps =
+        host.includes('ops.') ||
+        host.includes('-ops') ||
+        host.includes('localhost') ||
+        host.includes('127.0.0.1') ||
+        process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
+      if (!isOps && process.env.NODE_ENV === 'production') {
+        window.location.replace('/_not-found');
+        return;
+      }
+    }
+
     try {
       const token = authService.getToken();
       const user = authService.getCurrentUser();

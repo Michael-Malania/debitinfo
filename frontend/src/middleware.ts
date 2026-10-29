@@ -33,7 +33,8 @@ export function middleware(request: NextRequest) {
   const isOpsDomain =
     allHosts.includes('ops.') ||
     allHosts.includes('-ops') ||
-    process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
+    process.env.NEXT_PUBLIC_APP_TYPE === 'ops' ||
+    (process.env.NODE_ENV !== 'production' && (allHosts.includes('localhost') || allHosts.includes('127.0.0.1')));
 
   const accessToken = request.cookies.get('access_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
@@ -54,6 +55,13 @@ export function middleware(request: NextRequest) {
 
   // 1. Operations & Admin Portal (/ops)
   if (pathname === '/ops' || pathname.startsWith('/ops/')) {
+    // If NOT on Ops domain, restrict access completely and return 404 Not Found (exact behavior as /fakeblah)
+    if (!isOpsDomain) {
+      return NextResponse.rewrite(new URL('/_not-found', request.url), {
+        status: 404,
+      });
+    }
+
     // Unauthenticated staff are allowed to see the /ops login form
     if (!accessToken) {
       return NextResponse.next();
@@ -68,12 +76,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Helper for staff login redirects
+  const getStaffLoginUrl = (req: NextRequest, redirectPath: string) => {
+    if (isOpsDomain) {
+      const u = new URL('/', req.url);
+      u.searchParams.set('redirect', redirectPath);
+      return u;
+    }
+    const u = new URL('/login', req.url);
+    u.searchParams.set('redirect', redirectPath);
+    return u;
+  };
+
   // 2. HR & Staff Management (/hr)
   if (pathname === '/hr' || pathname.startsWith('/hr/')) {
     if (!accessToken) {
-      const opsUrl = new URL('/ops', request.url);
-      opsUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(opsUrl);
+      return NextResponse.redirect(getStaffLoginUrl(request, pathname));
     }
     if (userRole && userRole !== 'ADMIN') {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
@@ -84,9 +102,7 @@ export function middleware(request: NextRequest) {
   // 3. Legal Workspace (/legal) - Lawyers & Admins only
   if (pathname === '/legal' || pathname.startsWith('/legal/')) {
     if (!accessToken) {
-      const opsUrl = new URL('/ops', request.url);
-      opsUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(opsUrl);
+      return NextResponse.redirect(getStaffLoginUrl(request, pathname));
     }
     if (userRole && userRole !== 'LEGAL' && userRole !== 'ADMIN') {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
@@ -97,9 +113,7 @@ export function middleware(request: NextRequest) {
   // 4. Financial Analyst Workspace (/analyst) - Analysts & Admins only
   if (pathname === '/analyst' || pathname.startsWith('/analyst/')) {
     if (!accessToken) {
-      const opsUrl = new URL('/ops', request.url);
-      opsUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(opsUrl);
+      return NextResponse.redirect(getStaffLoginUrl(request, pathname));
     }
     if (userRole && userRole !== 'ANALYST' && userRole !== 'ADMIN') {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
@@ -110,9 +124,7 @@ export function middleware(request: NextRequest) {
   // 5. CRM / Call Center Workspace (/crm) - Operators & Admins only
   if (pathname === '/crm' || pathname.startsWith('/crm/')) {
     if (!accessToken) {
-      const opsUrl = new URL('/ops', request.url);
-      opsUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(opsUrl);
+      return NextResponse.redirect(getStaffLoginUrl(request, pathname));
     }
     if (userRole && userRole !== 'OPERATOR' && userRole !== 'ADMIN') {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
@@ -123,9 +135,7 @@ export function middleware(request: NextRequest) {
   // 6. Field Officer Console (/field-officer) - Field Officers & Admins only
   if (pathname === '/field-officer' || pathname.startsWith('/field-officer/')) {
     if (!accessToken) {
-      const opsUrl = new URL('/ops', request.url);
-      opsUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(opsUrl);
+      return NextResponse.redirect(getStaffLoginUrl(request, pathname));
     }
     if (userRole && userRole !== 'FIELD_OFFICER' && userRole !== 'ADMIN') {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
@@ -136,9 +146,7 @@ export function middleware(request: NextRequest) {
   // 7. Accountant Console (/accountant) - Accountants & Admins only
   if (pathname === '/accountant' || pathname.startsWith('/accountant/')) {
     if (!accessToken) {
-      const opsUrl = new URL('/ops', request.url);
-      opsUrl.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(opsUrl);
+      return NextResponse.redirect(getStaffLoginUrl(request, pathname));
     }
     if (userRole && userRole !== 'ACCOUNTANT' && userRole !== 'ADMIN') {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
