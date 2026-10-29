@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import OpsPage from './ops/page';
 
 export default function LandingPage() {
   const [isOps, setIsOps] = useState(false);
@@ -16,7 +17,6 @@ export default function LandingPage() {
 
       if (opsDomain) {
         setIsOps(true);
-        window.location.replace('/ops');
       }
     }
   }, []);
@@ -28,14 +28,7 @@ export default function LandingPage() {
   const [pricingTier, setPricingTier] = useState('individual');
 
   if (isOps) {
-    return (
-      <div className="min-h-screen bg-surface-bg flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-3 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-body-sm text-text-muted font-medium">გადამისამართება საოპერაციო პორტალზე...</p>
-        </div>
-      </div>
-    );
+    return <OpsPage />;
   }
 
   return (

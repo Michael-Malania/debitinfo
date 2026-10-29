@@ -35,13 +35,22 @@ export function middleware(request: NextRequest) {
     allHosts.includes('-ops') ||
     process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
 
-  // If on Ops domain and accessing root '/', direct to /ops login
-  if (isOpsDomain && pathname === '/') {
-    return NextResponse.redirect(new URL('/ops', request.url));
-  }
-
   const accessToken = request.cookies.get('access_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
+
+  // If on Ops domain and accessing root '/', rewrite internally to /ops without changing browser URL
+  if (isOpsDomain && pathname === '/') {
+    // If authenticated staff user who is NOT ADMIN, send them to their designated role portal
+    if (accessToken && userRole && userRole !== 'ADMIN') {
+      return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
+    }
+    return NextResponse.rewrite(new URL('/ops', request.url));
+  }
+
+  // If on Ops domain and someone visits /ops explicitly, redirect to root '/' to keep the address bar clean
+  if (isOpsDomain && pathname === '/ops') {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
 
   // 1. Operations & Admin Portal (/ops)
   if (pathname === '/ops' || pathname.startsWith('/ops/')) {
