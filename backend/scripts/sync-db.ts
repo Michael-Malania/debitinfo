@@ -22,7 +22,7 @@
  * ============================================================================
  */
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -43,33 +43,70 @@ interface ModelSyncConfig {
   name: string;
   accessor: string;
   displayName: string;
-  primaryKey?: string;
+  primaryKey: string;
 }
 
-// Strictly ordered by foreign key dependencies (topological sort)
-const SYNC_MODELS: ModelSyncConfig[] = [
-  { name: 'User', accessor: 'user', displayName: 'მომხმარებლები (Users)' },
-  { name: 'IndividualProfile', accessor: 'individualProfile', displayName: 'ფიზიკური პირის პროფილები' },
-  { name: 'CompanyProfile', accessor: 'companyProfile', displayName: 'იურიდიული პირის პროფილები' },
-  { name: 'StaffProfile', accessor: 'staffProfile', displayName: 'თანამშრომელთა პროფილები (Staff)' },
-  { name: 'ContactPerson', accessor: 'contactPerson', displayName: 'საკონტაქტო პირები' },
-  { name: 'Portfolio', accessor: 'portfolio', displayName: 'პორტფელები' },
-  { name: 'ClaimStatusConfig', accessor: 'claimStatusConfig', displayName: 'სტატუსების კონფიგურაცია', primaryKey: 'code' },
-  { name: 'BlogPost', accessor: 'blogPost', displayName: 'ბლოგ პოსტები' },
-  { name: 'StagedRegistryItem', accessor: 'stagedRegistryItem', displayName: 'რეესტრის იმპორტის ელემენტები' },
-  { name: 'DebtClaim', accessor: 'debtClaim', displayName: 'დებიტორული მოთხოვნები (Claims)' },
-  { name: 'RepaymentSchedule', accessor: 'repaymentSchedule', displayName: 'დაფარვის გრაფიკები' },
-  { name: 'RepaymentInstallment', accessor: 'repaymentInstallment', displayName: 'გრაფიკის შენატანები' },
-  { name: 'PaymentTransaction', accessor: 'paymentTransaction', displayName: 'საგადახდო ტრანზაქციები' },
-  { name: 'PaymentReceipt', accessor: 'paymentReceipt', displayName: 'გადახდის ქვითრები' },
-  { name: 'Dispute', accessor: 'dispute', displayName: 'დავები & აპელაციები' },
-  { name: 'LegalCase', accessor: 'legalCase', displayName: 'სასამართლო/სააღსრულებო საქმეები' },
-  { name: 'LegalDocument', accessor: 'legalDocument', displayName: 'იურიდიული დოკუმენტები' },
-  { name: 'CaseTimelineEvent', accessor: 'caseTimelineEvent', displayName: 'თაიმლაინის მოვლენები' },
-  { name: 'CrmCallLog', accessor: 'crmCallLog', displayName: 'ქოლ-ცენტრის ზარების ლოგი' },
-  { name: 'FieldVisitTask', accessor: 'fieldVisitTask', displayName: 'საველე ვიზიტების დავალებები' },
-  { name: 'AuditLog', accessor: 'auditLog', displayName: 'სისტემური აუდიტის ჟურნალი' },
-];
+/**
+ * Dynamically resolves all models from Prisma schema and performs a topological
+ * sort based on foreign key relationships so that parent tables are processed
+ * before child tables without requiring manual configuration.
+ */
+function getSyncModels(): ModelSyncConfig[] {
+  const models = Prisma.dmmf.datamodel.models;
+  const modelNames = models.map((m) => m.name);
+
+  // Build dependency graph from relations
+  const graph = new Map<string, Set<string>>();
+  for (const m of models) {
+    const deps = new Set<string>();
+    for (const f of m.fields) {
+      if (
+        f.relationFromFields &&
+        f.relationFromFields.length > 0 &&
+        modelNames.includes(f.type) &&
+        f.type !== m.name
+      ) {
+        deps.add(f.type);
+      }
+    }
+    graph.set(m.name, deps);
+  }
+
+  // Topological sort (DFS with cycle breaking)
+  const visited = new Set<string>();
+  const sortedNames: string[] = [];
+
+  function visit(name: string, ancestors = new Set<string>()) {
+    if (visited.has(name)) return;
+    if (ancestors.has(name)) return;
+    ancestors.add(name);
+    const deps = graph.get(name) || new Set<string>();
+    for (const dep of deps) {
+      visit(dep, new Set(ancestors));
+    }
+    visited.add(name);
+    sortedNames.push(name);
+  }
+
+  for (const name of modelNames) {
+    visit(name);
+  }
+
+  return sortedNames.map((name) => {
+    const m = models.find((x) => x.name === name)!;
+    const idField = m.fields.find((f) => f.isId);
+    const primaryKey = idField
+      ? idField.name
+      : (m as any).primaryKey?.fields?.[0] || 'id';
+    const accessor = name.charAt(0).toLowerCase() + name.slice(1);
+    return {
+      name,
+      accessor,
+      primaryKey,
+      displayName: name,
+    };
+  });
+}
 
 function sanitizeRecord(record: any): any {
   // Prisma findMany() without include returns only scalar database fields (strings, numbers, dates, Decimals, etc.)
@@ -83,8 +120,9 @@ function sanitizeRecord(record: any): any {
 }
 
 async function showStatus(local: PrismaClient, remote: PrismaClient) {
+  const models = getSyncModels();
   console.log('\n=============================================================================');
-  console.log('📊 Debitinfo.GE — მონაცემთა ბაზების შედარება (Local vs Remote Layerbase)');
+  console.log(`📊 Debitinfo.GE — მონაცემთა ბაზების შედარება (${models.length} მოდელი: Local vs Remote)`);
   console.log('=============================================================================');
   console.log(
     '| #  | მოდელი (Model)                   | Local DB | Remote DB | სტატუსი (Diff) |'
@@ -95,8 +133,8 @@ async function showStatus(local: PrismaClient, remote: PrismaClient) {
   let totalRemote = 0;
   let matchCount = 0;
 
-  for (let i = 0; i < SYNC_MODELS.length; i++) {
-    const m = SYNC_MODELS[i];
+  for (let i = 0; i < models.length; i++) {
+    const m = models[i];
     const lCount = await (local as any)[m.accessor].count();
     const rCount = await (remote as any)[m.accessor].count();
 
@@ -125,9 +163,10 @@ async function showStatus(local: PrismaClient, remote: PrismaClient) {
 }
 
 async function wipeDatabase(target: PrismaClient, targetName: string) {
+  const models = getSyncModels();
   console.log(`🧹 იწყება ${targetName}-ის ცხრილების გასუფთავება უსაფრთხო მიმდევრობით...`);
   // Wipe in reverse dependency order
-  const reversed = SYNC_MODELS.slice().reverse();
+  const reversed = models.slice().reverse();
   for (const m of reversed) {
     const count = await (target as any)[m.accessor].count();
     if (count > 0) {
@@ -145,8 +184,9 @@ async function syncDirection(
   targetName: string,
   options: { clean?: boolean; dryRun?: boolean }
 ) {
+  const models = getSyncModels();
   console.log('\n=============================================================================');
-  console.log(`🚀 Debitinfo.GE Sync: [${sourceName}] ➡️  [${targetName}]`);
+  console.log(`🚀 Debitinfo.GE Sync (${models.length} მოდელი): [${sourceName}] ➡️  [${targetName}]`);
   console.log(`   Clean Mode: ${options.clean ? 'კი (Overwriting)' : 'არა (Safe Upsert)'}`);
   console.log(`   Dry Run:    ${options.dryRun ? 'კი (Simulation Only)' : 'არა (Live DB Write)'}`);
   console.log('=============================================================================\n');
@@ -157,7 +197,7 @@ async function syncDirection(
 
   let totalUpserted = 0;
 
-  for (const m of SYNC_MODELS) {
+  for (const m of models) {
     const pk = m.primaryKey || 'id';
     const records = await (source as any)[m.accessor].findMany();
 
@@ -195,8 +235,9 @@ async function syncDirection(
 }
 
 async function smartBidirSync(local: PrismaClient, remote: PrismaClient, options: { dryRun?: boolean }) {
+  const models = getSyncModels();
   console.log('\n=============================================================================');
-  console.log('🔄 ორმხრივი ჭკვიანი სინქრონიზაცია (Bidirectional Smart Sync: Local <-> Remote)');
+  console.log(`🔄 ორმხრივი ჭკვიანი სინქრონიზაცია (${models.length} მოდელი): Local <-> Remote`);
   console.log(`   Dry Run: ${options.dryRun ? 'კი (Simulation)' : 'არა (Live DB Write)'}`);
   console.log('=============================================================================\n');
 
@@ -204,7 +245,7 @@ async function smartBidirSync(local: PrismaClient, remote: PrismaClient, options
   let pushedCount = 0;
   let unchangedCount = 0;
 
-  for (const m of SYNC_MODELS) {
+  for (const m of models) {
     const pk = m.primaryKey || 'id';
     const localRecords: any[] = await (local as any)[m.accessor].findMany();
     const remoteRecords: any[] = await (remote as any)[m.accessor].findMany();

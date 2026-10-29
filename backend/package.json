@@ -14,6 +14,8 @@
     "prisma:push": "prisma db push",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:studio": "prisma studio",
+    "db:push:all": "ts-node scripts/push-schema.ts all",
+    "db:push:remote": "ts-node scripts/push-schema.ts remote",
     "db:sync": "ts-node scripts/sync-db.ts bidir",
     "db:sync:status": "ts-node scripts/sync-db.ts status",
     "db:sync:pull": "ts-node scripts/sync-db.ts pull",
