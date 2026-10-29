@@ -69,4 +69,17 @@ export class AnalystController {
   async verifyDebtor(@Param('id') id: string) {
     return await this.analystService.verifyDebtor(id);
   }
+
+  @Post('register-creditor')
+  async registerCreditor(@Body() dto: any) {
+    return await this.analystService.registerCreditor(dto);
+  }
+
+  @Post('creditors/:taxId/debtors')
+  async addDebtorsToCreditor(
+    @Param('taxId') taxId: string,
+    @Body() body: { debtors: any[] },
+  ) {
+    return await this.analystService.addDebtorsToCreditor(taxId, body.debtors || []);
+  }
 }

@@ -473,10 +473,10 @@ async function main() {
   const sampleExcelCreditors = [
     {
       type: 'CREDITOR',
-      personalId: '404899120',
-      name: 'შპს ბათუმი თრეიდი',
-      companyOrPerson: 'ზურაბ ჩხეიძე',
-      agreementNumber: 'PORT-BAT-01',
+      personalId: '406112233',
+      name: 'შპს ალფა ფინანსი',
+      companyOrPerson: 'გიორგი კანდელაკი',
+      agreementNumber: 'PORT-ALF-02',
       amount: 180000.00,
       creditorName: null,
       overdueDays: 0,

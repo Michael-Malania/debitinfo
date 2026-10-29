@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import AddDebtorModal, { DebtorFormData } from './AddDebtorModal';
 
 interface AnalystRegistryManagerProps {
   users: any[];
@@ -17,8 +18,10 @@ interface AnalystRegistryManagerProps {
     role: 'DEBTOR' | 'CREDITOR',
     agreement?: string,
     amount?: number,
-    registryItemId?: string
+    registryItemId?: string,
+    creditorId?: string
   ) => Promise<void>;
+  onAddDebtorToCreditor?: (creditorTaxId: string, debtor: any) => Promise<void>;
 }
 
 export default function AnalystRegistryManager({
@@ -32,6 +35,7 @@ export default function AnalystRegistryManager({
   onRefreshData,
   onDismissMessage,
   onAssignRole,
+  onAddDebtorToCreditor,
 }: AnalystRegistryManagerProps) {
   const [activeTab, setActiveTab] = useState<'users' | 'debtors' | 'creditors'>('users');
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -39,27 +43,59 @@ export default function AnalystRegistryManager({
   const [targetRole, setTargetRole] = useState<'DEBTOR' | 'CREDITOR'>('DEBTOR');
   const [assignAmount, setAssignAmount] = useState('1540');
   const [assignAgreement, setAssignAgreement] = useState('');
+  const [selectedCreditorId, setSelectedCreditorId] = useState('');
   const [assigningLoading, setAssigningLoading] = useState(false);
 
+  // Add Debtor to Creditor Modal State
+  const [addDebtorModalOpen, setAddDebtorModalOpen] = useState(false);
+  const [targetCreditorForDebtor, setTargetCreditorForDebtor] = useState<any>(null);
+
   const regularUsersCount = users.filter((u) => u.role === 'REGULAR').length;
+
+  // Registered creditors for debtor linking dropdown
+  const registeredCreditorsList = [
+    ...users
+      .filter((u) => u.role === 'CREDITOR')
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        personalId: u.personalId,
+        email: u.email,
+      })),
+    ...excelCreditors.map((c) => ({
+      id: c.matchedUser?.id || c.personalId,
+      name: c.name,
+      personalId: c.personalId,
+      email: c.matchedUser?.email,
+    })),
+  ].filter(
+    (c, idx, arr) => arr.findIndex((x) => x.personalId === c.personalId) === idx
+  );
 
   const handleOpenAssignModal = (user: any, role: 'DEBTOR' | 'CREDITOR') => {
     setTargetUser(user);
     setTargetRole(role);
     setAssignAmount('1540');
     setAssignAgreement(`AGR-${Math.floor(10000 + Math.random() * 90000)}`);
+    setSelectedCreditorId(registeredCreditorsList[0]?.id || registeredCreditorsList[0]?.personalId || '');
     setAssignModalOpen(true);
   };
 
   const handleConfirmAssign = async () => {
     if (!targetUser) return;
+    if (targetRole === 'DEBTOR' && !selectedCreditorId) {
+      alert('დებიტორის სტატუსის მისანიჭებლად აუცილებელია აირჩიოთ შესაბამისი რეგისტრირებული კრედიტორი!');
+      return;
+    }
     setAssigningLoading(true);
     try {
       await onAssignRole(
         targetUser,
         targetRole,
         assignAgreement,
-        Number(assignAmount)
+        Number(assignAmount),
+        undefined,
+        selectedCreditorId
       );
       setAssignModalOpen(false);
     } finally {
@@ -388,6 +424,7 @@ export default function AnalystRegistryManager({
                   <th className="py-3 px-4">საკონტაქტო პირი / დირექტორი</th>
                   <th className="py-3 px-4">პორტფელის მოცულობა (GEL)</th>
                   <th className="py-3 px-4">ხელშეკრულების №</th>
+                  <th className="py-3 px-4">დებიტორები</th>
                   <th className="py-3 px-4">საიტზე რეგისტრაცია</th>
                   <th className="py-3 px-4 text-right">ანალიტიკოსის მოქმედება</th>
                 </tr>
@@ -411,6 +448,12 @@ export default function AnalystRegistryManager({
                       {c.agreementNumber || 'PORT-01'}
                     </td>
                     <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-xs font-semibold">
+                        <span className="material-symbols-outlined text-[14px]">groups</span>
+                        <span>{c.debtorsCount || 0} დებიტორი</span>
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
                       {c.isRegisteredOnPlatform ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -421,25 +464,37 @@ export default function AnalystRegistryManager({
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      {c.isRegisteredOnPlatform ? (
+                      <div className="flex items-center justify-end gap-2 flex-wrap">
                         <button
-                          onClick={() =>
-                            onAssignRole(
-                              { id: c.matchedUser.id, name: c.name, email: c.matchedUser.email },
-                              'CREDITOR',
-                              c.agreementNumber,
-                              Number(c.amount),
-                              c.id
-                            )
-                          }
-                          disabled={c.matchedUser.role === 'CREDITOR'}
-                          className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium shadow-xs transition cursor-pointer disabled:opacity-50"
+                          type="button"
+                          onClick={() => {
+                            setTargetCreditorForDebtor(c);
+                            setAddDebtorModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-primary border border-blue-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                          title="დებიტორის დამატება ამ კრედიტორისთვის"
                         >
-                          {c.matchedUser.role === 'CREDITOR' ? 'უკვე კრედიტორია' : 'კრედიტორად გააქტიურება'}
+                          <span className="material-symbols-outlined text-[15px]">person_add</span>
+                          <span>+ დებიტორის მიბმა</span>
                         </button>
-                      ) : (
-                        <span className="text-text-muted text-xs italic">რეგისტრაციის მოლოდინში</span>
-                      )}
+                        {c.isRegisteredOnPlatform && c.matchedUser?.role !== 'CREDITOR' && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onAssignRole(
+                                { id: c.matchedUser.id, name: c.name, email: c.matchedUser.email },
+                                'CREDITOR',
+                                c.agreementNumber,
+                                Number(c.amount),
+                                c.id
+                              )
+                            }
+                            className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium shadow-xs transition cursor-pointer"
+                          >
+                            კრედიტორად გააქტიურება
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -520,9 +575,29 @@ export default function AnalystRegistryManager({
               </div>
             </div>
 
-            {/* If Debtor: Contract & Amount */}
+            {/* If Debtor: Creditor Selection, Contract & Amount */}
             {targetRole === 'DEBTOR' && (
               <div className="space-y-3 pt-1">
+                <div>
+                  <label className="block text-xs font-semibold text-text-primary mb-1">
+                    მიმაგრებული კრედიტორი (სავალდებულო) <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={selectedCreditorId}
+                    onChange={(e) => setSelectedCreditorId(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-medium focus:outline-none focus:border-primary"
+                  >
+                    <option value="">— აირჩიეთ რეგისტრირებული კრედიტორი —</option>
+                    {registeredCreditorsList.map((cred) => (
+                      <option key={cred.id || cred.personalId} value={cred.id || cred.personalId}>
+                        {cred.name} (ს/კ: {cred.personalId})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-text-muted mt-1">
+                    დებიტორის სტატუსის მინიჭებისთვის სავალდებულოა მიებმას კონკრეტულ მოქმედ კრედიტორს.
+                  </p>
+                </div>
                 <div>
                   <label className="block text-xs font-semibold text-text-primary mb-1">ხელშეკრულების ნომერი</label>
                   <input
@@ -567,6 +642,24 @@ export default function AnalystRegistryManager({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Reusable Add Debtor Modal for Existing Creditors */}
+      {addDebtorModalOpen && targetCreditorForDebtor && (
+        <AddDebtorModal
+          isOpen={addDebtorModalOpen}
+          onClose={() => {
+            setAddDebtorModalOpen(false);
+            setTargetCreditorForDebtor(null);
+          }}
+          creditorName={targetCreditorForDebtor.name}
+          creditorTaxId={targetCreditorForDebtor.personalId}
+          onAdd={async (debtorData: DebtorFormData) => {
+            if (onAddDebtorToCreditor) {
+              await onAddDebtorToCreditor(targetCreditorForDebtor.personalId, debtorData);
+            }
+          }}
+        />
       )}
     </section>
   );

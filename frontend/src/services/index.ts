@@ -822,6 +822,31 @@ export const analystBackendService = {
       method: 'POST',
     });
   },
+
+  async registerCreditor(data: {
+    taxId: string;
+    companyName: string;
+    category?: string;
+    agreementNumber?: string;
+    iban?: string;
+    representativeName?: string;
+    phone?: string;
+    email?: string;
+    initialAmount?: number;
+    debtors?: any[];
+  }): Promise<any> {
+    return await apiFetch('/api/v1/analyst/register-creditor', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async addDebtorsToCreditor(creditorTaxId: string, debtors: any[]): Promise<any> {
+    return await apiFetch(`/api/v1/analyst/creditors/${creditorTaxId}/debtors`, {
+      method: 'POST',
+      body: JSON.stringify({ debtors }),
+    });
+  },
 };
 
 export const visitsBackendService = {
