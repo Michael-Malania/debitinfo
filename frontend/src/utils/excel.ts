@@ -688,3 +688,517 @@ export async function parseDebtorExcelFile(file: File): Promise<ParsedDebtorRow[
 
   return parsedDebtors;
 }
+
+export interface DebtorScheduleExportParams {
+  debtorName: string;
+  debtorPersonalId: string;
+  creditorName: string;
+  caseNumber: string;
+  agreementNumber?: string;
+  totalInitial: number;
+  totalRemaining: number;
+  totalPaid: number;
+  installments: Array<{
+    installmentNo: number | string;
+    dueDate: string;
+    principal: number | string;
+    interest: number | string;
+    amount: number | string;
+    remaining: number | string;
+    isPaid?: boolean;
+    isNextDue?: boolean;
+    statusText?: string;
+  }>;
+}
+
+/**
+ * Generates and triggers download of an elegant, professional Microsoft Excel (.xlsx) statement
+ * for the debtor's payment schedule, balances, and transaction dynamics.
+ */
+export async function downloadDebtorScheduleStatementXLSX(params: DebtorScheduleExportParams): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Debitinfo.GE';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet('დაფარვის ამონაწერი', {
+    views: [{ state: 'frozen', ySplit: 7, showGridLines: true }],
+  });
+
+  // Set columns
+  ws.columns = [
+    { key: 'colA', width: 8 },  // №
+    { key: 'colB', width: 22 }, // გადახდის ვადა
+    { key: 'colC', width: 22 }, // ძირი თანხა (GEL)
+    { key: 'colD', width: 20 }, // პროცენტი (GEL)
+    { key: 'colE', width: 24 }, // ჯამური შენატანი (GEL)
+    { key: 'colF', width: 26 }, // დარჩენილი ბალანსი (GEL)
+    { key: 'colG', width: 24 }, // სტატუსი
+  ];
+
+  // Title Banner (Row 1)
+  ws.mergeCells('A1:G1');
+  const titleCell = ws.getCell('A1');
+  titleCell.value = 'DEBITINFO.GE • ოფიციალური ამონაწერი და დაფარვის გრაფიკი';
+  titleCell.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF1E3A8A' }, // Deep Royal Navy Blue
+  };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(1).height = 36;
+
+  // Subtitle Banner (Row 2)
+  ws.mergeCells('A2:G2');
+  const subCell = ws.getCell('A2');
+  subCell.value = `საქმის № ${params.caseNumber} • ხელშეკრულების № ${params.agreementNumber || 'AGR-8841'} • გენერირების თარიღი: ${new Date().toLocaleDateString('ka-GE')}`;
+  subCell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FFE0E7FF' } };
+  subCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF2563EB' },
+  };
+  subCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(2).height = 22;
+
+  // Blank separator (Row 3)
+  ws.getRow(3).height = 10;
+
+  // Summary Metadata Info (Rows 4 - 6)
+  const metaStyleLabel: Partial<ExcelJS.Style> = {
+    font: { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF475569' } },
+    alignment: { vertical: 'middle', horizontal: 'left' },
+  };
+  const metaStyleVal: Partial<ExcelJS.Style> = {
+    font: { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } },
+    alignment: { vertical: 'middle', horizontal: 'left' },
+  };
+
+  ws.getCell('A4').value = 'მოვალე (დებიტორი):';
+  ws.getCell('A4').style = metaStyleLabel as any;
+  ws.getCell('B4').value = params.debtorName;
+  ws.getCell('B4').style = metaStyleVal as any;
+  ws.mergeCells('B4:C4');
+
+  ws.getCell('E4').value = 'კრედიტორი:';
+  ws.getCell('E4').style = metaStyleLabel as any;
+  ws.getCell('F4').value = params.creditorName;
+  ws.getCell('F4').style = metaStyleVal as any;
+  ws.mergeCells('F4:G4');
+
+  ws.getCell('A5').value = 'პირადი ნომერი:';
+  ws.getCell('A5').style = metaStyleLabel as any;
+  ws.getCell('B5').value = String(params.debtorPersonalId);
+  ws.getCell('B5').numFmt = '@';
+  ws.getCell('B5').style = metaStyleVal as any;
+
+  ws.getCell('E5').value = 'საწყისი დავალიანება:';
+  ws.getCell('E5').style = metaStyleLabel as any;
+  ws.getCell('F5').value = `₾ ${Number(params.totalInitial).toLocaleString('ka-GE')}.00`;
+  ws.getCell('F5').style = metaStyleVal as any;
+
+  ws.getCell('A6').value = 'საქმის სტატუსი:';
+  ws.getCell('A6').style = metaStyleLabel as any;
+  ws.getCell('B6').value = 'აქტიური (დამტკიცებული გრაფიკი)';
+  ws.getCell('B6').style = metaStyleVal as any;
+
+  ws.getCell('E6').value = 'დარჩენილი ბალანსი:';
+  ws.getCell('E6').style = metaStyleLabel as any;
+  ws.getCell('F6').value = `₾ ${Number(params.totalRemaining).toLocaleString('ka-GE')}.00`;
+  ws.getCell('F6').font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFD97706' } };
+
+  [4, 5, 6].forEach((r) => {
+    ws.getRow(r).height = 20;
+  });
+
+  // Table Headers (Row 7)
+  const headerRow = ws.getRow(7);
+  headerRow.height = 32;
+  const headers = [
+    '№',
+    'გადახდის ვადა',
+    'ძირი თანხა (GEL)',
+    'პროცენტი (GEL)',
+    'ჯამური შენატანი (GEL)',
+    'დარჩენილი ბალანსი (GEL)',
+    'სტატუსი',
+  ];
+
+  headers.forEach((h, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = h;
+    cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F172A' }, // Slate Navy
+    };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: idx === 0 || idx === 1 || idx === 6 ? 'center' : 'right',
+      wrapText: true,
+    };
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF020617' } },
+      left: { style: 'thin', color: { argb: 'FF334155' } },
+      bottom: { style: 'medium', color: { argb: 'FF020617' } },
+      right: { style: 'thin', color: { argb: 'FF334155' } },
+    };
+  });
+
+  // Data Rows (Row 8 onwards)
+  let sumPrincipal = 0;
+  let sumInterest = 0;
+  let sumAmount = 0;
+
+  params.installments.forEach((inst, idx) => {
+    const rowNum = 8 + idx;
+    const r = ws.getRow(rowNum);
+    r.height = 24;
+
+    const parseNum = (val: any): number => {
+      if (typeof val === 'number') return val;
+      const cleaned = String(val || '').replace(/[^0-9.-]/g, '');
+      return parseFloat(cleaned) || 0;
+    };
+
+    const p = parseNum(inst.principal);
+    const i = parseNum(inst.interest);
+    const a = parseNum(inst.amount);
+    const rem = parseNum(inst.remaining);
+
+    sumPrincipal += p;
+    sumInterest += i;
+    sumAmount += a;
+
+    const statusText = inst.statusText || (inst.isPaid ? 'გადახდილი' : inst.isNextDue ? 'მომდევნო გადასახდელი' : 'დაგეგმილი');
+
+    r.getCell(1).value = inst.installmentNo;
+    r.getCell(2).value = inst.dueDate;
+    r.getCell(3).value = p;
+    r.getCell(4).value = i;
+    r.getCell(5).value = a;
+    r.getCell(6).value = rem;
+    r.getCell(7).value = statusText;
+
+    // Zebra striping
+    const isEven = idx % 2 === 1;
+    const baseBg = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
+
+    for (let c = 1; c <= 7; c++) {
+      const cell = r.getCell(c);
+      cell.font = { name: 'Segoe UI', size: 9.5 };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: baseBg },
+      };
+
+      if (c === 1 || c === 2) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (c >= 3 && c <= 6) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0.00';
+        if (c === 5) cell.font = { name: 'Segoe UI', size: 9.5, bold: true };
+      } else if (c === 7) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        if (inst.isPaid) {
+          cell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: 'FF166534' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+        } else if (inst.isNextDue) {
+          cell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: 'FF92400E' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+        } else {
+          cell.font = { name: 'Segoe UI', size: 9, color: { argb: 'FF64748B' } };
+        }
+      }
+    }
+  });
+
+  // Totals Row
+  const totalRowNum = 8 + params.installments.length;
+  const totRow = ws.getRow(totalRowNum);
+  totRow.height = 26;
+  ws.mergeCells(`A${totalRowNum}:B${totalRowNum}`);
+  totRow.getCell(1).value = 'სულ ჯამი:';
+  totRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+  totRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+
+  totRow.getCell(3).value = Math.round(sumPrincipal * 100) / 100;
+  totRow.getCell(4).value = Math.round(sumInterest * 100) / 100;
+  totRow.getCell(5).value = Math.round(sumAmount * 100) / 100;
+  totRow.getCell(6).value = 0.0;
+  totRow.getCell(7).value = 'სრული დაფარვა';
+  totRow.getCell(7).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  for (let c = 1; c <= 7; c++) {
+    const cell = totRow.getCell(c);
+    cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE2E8F0' },
+    };
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF0F172A' } },
+      bottom: { style: 'double', color: { argb: 'FF0F172A' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+    if (c >= 3 && c <= 6) {
+      cell.alignment = { vertical: 'middle', horizontal: 'right' };
+      cell.numFmt = '#,##0.00';
+    }
+  }
+
+  // Footer Row
+  const footerRowNum = totalRowNum + 2;
+  ws.mergeCells(`A${footerRowNum}:G${footerRowNum}`);
+  const footCell = ws.getCell(`A${footerRowNum}`);
+  footCell.value = 'დოკუმენტი დაგენერირებულია Debitinfo.GE ფინანსური პლატფორმის მიერ და წარმოადგენს ოფიციალურ ამონაწერს.';
+  footCell.font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FF64748B' } };
+  footCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Generate buffer and trigger browser download
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `debitinfo_amonaweri_${params.caseNumber}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Generates and triggers download of a styled Microsoft Excel (.xlsx) Account Turnover Statement (ბრუნვითი ბარათი)
+ */
+export async function downloadDebtorAccountTurnoverXLSX(params: {
+  debtorName: string;
+  debtorPersonalId: string;
+  creditorName: string;
+  caseNumber: string;
+  agreementNumber?: string;
+  fileName?: string;
+  items?: Array<{
+    date: string;
+    description: string;
+    debit: number;
+    credit: number;
+    balance: number;
+    docNumber: string;
+  }>;
+}): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Debitinfo.GE';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet('ბრუნვითი ბარათი', {
+    views: [{ state: 'frozen', ySplit: 6, showGridLines: true }],
+  });
+
+  ws.columns = [
+    { key: 'colA', width: 16 }, // თარიღი
+    { key: 'colB', width: 44 }, // ოპერაციის დასახელება
+    { key: 'colC', width: 22 }, // დებეტი (GEL)
+    { key: 'colD', width: 22 }, // კრედიტი (GEL)
+    { key: 'colE', width: 22 }, // ნაშთი (GEL)
+    { key: 'colF', width: 24 }, // დოკუმენტის №
+  ];
+
+  // Header Banner (Row 1)
+  ws.mergeCells('A1:F1');
+  const titleCell = ws.getCell('A1');
+  titleCell.value = 'Debitinfo.GE • ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი';
+  titleCell.font = { name: 'Segoe UI', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF0F766E' }, // Teal / Emerald
+  };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(1).height = 36;
+
+  // Subtitle Banner (Row 2)
+  ws.mergeCells('A2:F2');
+  const subCell = ws.getCell('A2');
+  subCell.value = `მოვალე: ${params.debtorName} (${params.debtorPersonalId}) • კრედიტორი: ${params.creditorName} • საქმე #${params.caseNumber}`;
+  subCell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FFF0FDFA' } };
+  subCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF115E59' },
+  };
+  subCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(2).height = 22;
+
+  // Spacing (Row 3)
+  ws.getRow(3).height = 10;
+
+  // Metadata Row 4 & 5
+  ws.getCell('A4').value = 'გენერირების თარიღი:';
+  ws.getCell('A4').font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF475569' } };
+  ws.getCell('B4').value = new Date().toLocaleDateString('ka-GE');
+  ws.getCell('B4').font = { name: 'Segoe UI', size: 9.5, bold: true };
+
+  ws.getCell('D4').value = 'ხელშეკრულების №:';
+  ws.getCell('D4').font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF475569' } };
+  ws.getCell('E4').value = params.agreementNumber || 'AGR-8841';
+  ws.getCell('E4').font = { name: 'Segoe UI', size: 9.5, bold: true };
+
+  ws.getRow(4).height = 20;
+  ws.getRow(5).height = 8;
+
+  // Table Headers (Row 6)
+  const headerRow = ws.getRow(6);
+  headerRow.height = 30;
+  const headers = [
+    'თარიღი',
+    'ოპერაციის დასახელება',
+    'დებეტი (GEL)',
+    'კრედიტი (GEL)',
+    'ნაშთი (GEL)',
+    'დოკუმენტის №',
+  ];
+
+  headers.forEach((h, idx) => {
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = h;
+    cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF134E4A' },
+    };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: idx === 0 || idx === 5 ? 'center' : idx === 1 ? 'left' : 'right',
+    };
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF042F2E' } },
+      left: { style: 'thin', color: { argb: 'FF2DD4BF' } },
+      bottom: { style: 'medium', color: { argb: 'FF042F2E' } },
+      right: { style: 'thin', color: { argb: 'FF2DD4BF' } },
+    };
+  });
+
+  const defaultItems = [
+    { date: '2024-01-15', description: 'სასაქონლო მიწოდება ხელშეკრულებით #AGR-8841', debit: 5000.0, credit: 0.0, balance: 5000.0, docNumber: 'INV-2024-01' },
+    { date: '2024-03-25', description: 'შენატანი 01 (საბანკო გადარიცხვა BOG)', debit: 0.0, credit: 300.0, balance: 4700.0, docNumber: 'REC-8841-01' },
+    { date: '2024-04-25', description: 'შენატანი 02 (საბანკო გადარიცხვა TBC)', debit: 0.0, credit: 300.0, balance: 4400.0, docNumber: 'REC-8841-02' },
+    { date: '2024-05-25', description: 'შენატანი 03 (საბანკო გადარიცხვა BOG)', debit: 0.0, credit: 300.0, balance: 4100.0, docNumber: 'REC-8841-03' },
+    { date: '2024-06-25', description: 'შენატანი 04 (საბანკო გადარიცხვა BOG)', debit: 0.0, credit: 300.0, balance: 3800.0, docNumber: 'REC-8841-04' },
+    { date: '2024-07-25', description: 'შენატანი 05 (საბანკო გადარიცხვა TBC)', debit: 0.0, credit: 300.0, balance: 3500.0, docNumber: 'REC-8841-05' },
+    { date: '2024-08-25', description: 'შენატანი 06 (საბანკო გადარიცხვა BOG)', debit: 0.0, credit: 300.0, balance: 3200.0, docNumber: 'REC-8841-06' },
+    { date: '2024-09-25', description: 'შენატანი 07 (საბანკო გადარიცხვა BOG)', debit: 0.0, credit: 300.0, balance: 2900.0, docNumber: 'REC-8841-07' },
+  ];
+
+  const items = params.items && params.items.length > 0 ? params.items : defaultItems;
+
+  let totalDebit = 0;
+  let totalCredit = 0;
+
+  items.forEach((item, idx) => {
+    const rowNum = 7 + idx;
+    const r = ws.getRow(rowNum);
+    r.height = 24;
+
+    totalDebit += item.debit;
+    totalCredit += item.credit;
+
+    r.getCell(1).value = item.date;
+    r.getCell(2).value = item.description;
+    r.getCell(3).value = item.debit;
+    r.getCell(4).value = item.credit;
+    r.getCell(5).value = item.balance;
+    r.getCell(6).value = item.docNumber;
+
+    const isEven = idx % 2 === 1;
+    const baseBg = isEven ? 'FFF0FDFA' : 'FFFFFFFF';
+
+    for (let c = 1; c <= 6; c++) {
+      const cell = r.getCell(c);
+      cell.font = { name: 'Segoe UI', size: 9.5 };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: baseBg },
+      };
+
+      if (c === 1 || c === 6) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (c === 2) {
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0.00';
+      }
+    }
+  });
+
+  // Totals Row
+  const totalRowNum = 7 + items.length;
+  const totRow = ws.getRow(totalRowNum);
+  totRow.height = 26;
+  ws.mergeCells(`A${totalRowNum}:B${totalRowNum}`);
+  totRow.getCell(1).value = 'სულ ბრუნვა (ჯამი):';
+  totRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
+  totRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true };
+
+  totRow.getCell(3).value = totalDebit;
+  totRow.getCell(4).value = totalCredit;
+  totRow.getCell(5).value = totalDebit - totalCredit;
+  totRow.getCell(6).value = '—';
+  totRow.getCell(6).alignment = { vertical: 'middle', horizontal: 'center' };
+
+  for (let c = 1; c <= 6; c++) {
+    const cell = totRow.getCell(c);
+    cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE2E8F0' },
+    };
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF0F172A' } },
+      bottom: { style: 'double', color: { argb: 'FF0F172A' } },
+      left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+      right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+    };
+    if (c >= 3 && c <= 5) {
+      cell.alignment = { vertical: 'middle', horizontal: 'right' };
+      cell.numFmt = '#,##0.00';
+    }
+  }
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const rawName = params.fileName || `brunviti_barati_${params.caseNumber}`;
+  const fileName = rawName.replace(/\.csv$/, '.xlsx');
+  link.setAttribute('download', fileName.endsWith('.xlsx') ? fileName : `${fileName}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}

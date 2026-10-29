@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { INITIAL_BLOG_POSTS, blogService, authService, crmBackendService } from '@/services';
 import { BlogPost } from '@/types';
+import { downloadDebtorAccountTurnoverXLSX } from '@/utils/excel';
 
 export default function CrmPage() {
   const router = useRouter();
@@ -146,28 +147,21 @@ export default function CrmPage() {
     }
   };
 
-  const handleOpenDoc = (doc: any) => {
+  const handleOpenDoc = async (doc: any) => {
     if (doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx')) {
-      const headers = ['თარიღი', 'ოპერაციის დასახელება', 'დებეტი (₾)', 'კრედიტი (₾)', 'ნაშთი (₾)', 'დოკუმენტის №'];
-      const rows = [
-        ['2024-01-15', 'საქონლის მიწოდება ხელშეკრულებით', `${activeClaim?.initialAmount || 5000}.00`, '0.00', `${activeClaim?.initialAmount || 5000}.00`, 'INV-2024-01'],
-        ['2024-03-25', 'შენატანი 01 (საბანკო გადარიცხვა)', '0.00', '300.00', '4700.00', 'REC-8841-01'],
-        ['2024-04-25', 'შენატანი 02 (საბანკო გადარიცხვა)', '0.00', '300.00', '4400.00', 'REC-8841-02'],
-        ['2024-05-25', 'შენატანი 03 (საბანკო გადარიცხვა)', '0.00', '300.00', '4100.00', 'REC-8841-03'],
-      ];
-      const csvContent = '\uFEFF' + [
-        headers.join(','),
-        ...rows.map((r: any) => r.map((c: any) => `"${c}"`).join(',')),
-      ].join('\r\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', doc.fileName || 'brunviti_barati.csv');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      try {
+        await downloadDebtorAccountTurnoverXLSX({
+          debtorName: activeClaim?.debtorName || 'დებიტორი',
+          debtorPersonalId: activeClaim?.debtorPersonalId || '01019012345',
+          creditorName: activeClaim?.creditorName || 'შპს დებიტინფო კრედიტორი',
+          caseNumber: activeClaim?.caseNumber || 'DI-2024-8841',
+          agreementNumber: activeClaim?.agreementNumber || 'AGR-8841',
+          fileName: doc.fileName || `brunviti_barati_${activeClaim?.debtorPersonalId || '8841'}.xlsx`,
+        });
+      } catch (err) {
+        console.error('Failed to download turnover Excel:', err);
+        alert('Excel ბრუნვითი ბარათის გენერირება ვერ მოხერხდა.');
+      }
     } else {
       const w = window.open('', '_blank');
       if (!w) return;

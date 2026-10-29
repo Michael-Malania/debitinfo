@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService, debtorBackendService, paymentsService, PaymentReceiptItem, AuthUser } from '@/services';
+import { downloadDebtorScheduleStatementXLSX, downloadDebtorAccountTurnoverXLSX } from '@/utils/excel';
 
 interface DebtorDashboardViewProps {
   user: AuthUser;
@@ -431,60 +432,49 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
     printWindow.document.close();
   };
 
-  const handleDownloadScheduleExcel = () => {
-    const headers = ['№', 'გადახდის ვადა', 'ძირი თანხა (GEL)', 'პროცენტი (GEL)', 'ჯამური შენატანი (GEL)', 'დარჩენილი ბალანსი (GEL)', 'სტატუსი'];
-    const rows = allInstallments.map((i: any) => [
-      i.installmentNo,
-      i.dueDate,
-      i.principal.replace(' ₾', ''),
-      i.interest.replace(' ₾', ''),
-      i.amount.replace(' ₾', ''),
-      i.remaining.replace(' ₾', '').replace(',', ''),
-      i.isPaid ? 'გადახდილი' : i.isNextDue ? 'მომდევნო გადასახდელი' : 'დაგეგმილი',
-    ]);
-
-    const csvContent = '\uFEFF' + [
-      headers.join(','),
-      ...rows.map((r: any) => r.map((c: any) => `"${c}"`).join(',')),
-    ].join('\r\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `dafarvis_grafiki_${caseNumber}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleDownloadScheduleExcel = async () => {
+    try {
+      await downloadDebtorScheduleStatementXLSX({
+        debtorName: debtorFullName,
+        debtorPersonalId,
+        creditorName: creditorCompanyName,
+        caseNumber,
+        agreementNumber: primaryClaim?.agreementNumber || 'AGR-8841',
+        totalInitial: summary.totalInitial,
+        totalRemaining: summary.totalRemaining,
+        totalPaid: summary.totalPaid,
+        installments: allInstallments.map((inst: any) => ({
+          installmentNo: inst.installmentNo,
+          dueDate: inst.dueDate,
+          principal: inst.principal,
+          interest: inst.interest,
+          amount: inst.amount,
+          remaining: inst.remaining,
+          isPaid: inst.isPaid,
+          isNextDue: inst.isNextDue,
+        })),
+      });
+    } catch (err) {
+      console.error('Failed to download Excel statement:', err);
+      alert('Excel ამონაწერის გენერირება ვერ მოხერხდა.');
+    }
   };
 
-  const handleOpenSupportingDoc = (doc: any) => {
+  const handleOpenSupportingDoc = async (doc: any) => {
     if (doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx')) {
-      const headers = ['თარიღი', 'ოპერაციის დასახელება', 'დებეტი (₾)', 'კრედიტი (₾)', 'ნაშთი (₾)', 'დოკუმენტის №'];
-      const rows = [
-        ['2024-01-15', 'საქონლის მიწოდება ხელშეკრულებით', '5000.00', '0.00', '5000.00', 'INV-2024-01'],
-        ['2024-03-25', 'შენატანი 01 (საბანკო გადარიცხვა)', '0.00', '300.00', '4700.00', 'REC-8841-01'],
-        ['2024-04-25', 'შენატანი 02 (საბანკო გადარიცხვა)', '0.00', '300.00', '4400.00', 'REC-8841-02'],
-        ['2024-05-25', 'შენატანი 03 (საბანკო გადარიცხვა)', '0.00', '300.00', '4100.00', 'REC-8841-03'],
-        ['2024-06-25', 'შენატანი 04 (საბანკო გადარიცხვა)', '0.00', '300.00', '3800.00', 'REC-8841-04'],
-        ['2024-07-25', 'შენატანი 05 (საბანკო გადარიცხვა)', '0.00', '300.00', '3500.00', 'REC-8841-05'],
-        ['2024-08-25', 'შენატანი 06 (საბანკო გადარიცხვა)', '0.00', '300.00', '3200.00', 'REC-8841-06'],
-        ['2024-09-25', 'შენატანი 07 (საბანკო გადარიცხვა)', '0.00', '300.00', '2900.00', 'REC-8841-07'],
-      ];
-      const csvContent = '\uFEFF' + [
-        headers.join(','),
-        ...rows.map((r) => r.map((c) => `"${c}"`).join(',')),
-      ].join('\r\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', doc.fileName || 'brunviti_barati_2024.csv');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      try {
+        await downloadDebtorAccountTurnoverXLSX({
+          debtorName: debtorFullName,
+          debtorPersonalId,
+          creditorName: creditorCompanyName,
+          caseNumber,
+          agreementNumber: primaryClaim?.agreementNumber || 'AGR-8841',
+          fileName: doc.fileName || 'brunviti_barati_2024.xlsx',
+        });
+      } catch (err) {
+        console.error('Failed to download turnover Excel:', err);
+        alert('Excel ბრუნვითი ბარათის გენერირება ვერ მოხერხდა.');
+      }
     } else {
       const w = window.open('', '_blank');
       if (!w) return;
@@ -975,7 +965,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
                 type="button"
                 onClick={handleDownloadScheduleExcel}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-surface-bg hover:bg-surface-card text-text-primary text-body-sm font-medium transition-colors shadow-sm active:scale-95 cursor-pointer"
-                title="Excel / CSV ამონაწერის ჩამოტვირთვა"
+                title="Excel ამონაწერის ჩამოტვირთვა (.xlsx)"
               >
                 <span className="material-symbols-outlined text-[16px] text-teal-700">table_view</span>
                 <span>Excel ამონაწერი</span>
