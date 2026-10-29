@@ -25,6 +25,17 @@ function getTargetRouteByRole(role?: string): string {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const host = request.headers.get('host') || '';
+  const isOpsDomain =
+    host.startsWith('ops.') ||
+    host.includes('-ops') ||
+    process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
+
+  // If on Ops domain and accessing root '/', direct to /ops login
+  if (isOpsDomain && pathname === '/') {
+    return NextResponse.redirect(new URL('/ops', request.url));
+  }
+
   const accessToken = request.cookies.get('access_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
 
