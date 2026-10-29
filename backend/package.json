@@ -13,7 +13,11 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "ts-node prisma/seed.ts",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "db:sync": "ts-node scripts/sync-db.ts bidir",
+    "db:sync:status": "ts-node scripts/sync-db.ts status",
+    "db:sync:pull": "ts-node scripts/sync-db.ts pull",
+    "db:sync:push": "ts-node scripts/sync-db.ts push"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
