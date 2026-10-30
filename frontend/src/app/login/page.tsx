@@ -282,18 +282,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Ops / Staff Portal Link */}
-          <div className="mt-4 p-2.5 rounded-xl bg-blue-50/70 border border-blue-200 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-primary font-medium">
-              <span className="material-symbols-outlined text-[17px]">badge</span>
-              <span>საოპერაციო პერსონალი?</span>
-            </div>
-            <Link href="/ops" className="text-primary hover:text-[#0A37CA] font-bold inline-flex items-center gap-1 hover:underline">
-              <span>Ops პორტალი</span>
-              <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            </Link>
-          </div>
-
           {/* Register CTA */}
           <div className="mt-4 pt-4 border-t border-border-subtle text-center">
             <p className="text-body-md text-text-muted text-sm">

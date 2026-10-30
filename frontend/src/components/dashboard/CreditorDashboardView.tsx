@@ -444,11 +444,7 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         </Link>
         {/* Global Navigation Links */}
         <nav className="hidden md:flex items-center space-x-6 ml-4">
-          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/#services">სერვისები</Link>
           <span className="text-primary font-label-md text-label-md border-b-2 border-primary pb-1 font-semibold cursor-pointer">პორტფელი &amp; რეესტრი</span>
-          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/#pricing">ტარიფები</Link>
-          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/#blog">ბლოგი</Link>
-          <Link className="text-text-muted hover:text-primary transition-colors duration-150 font-label-md text-label-md" href="/contact">კონტაქტი</Link>
         </nav>
       </div>
       {/* Header Actions: Quick Search, Notifications & Organization Profile */}
