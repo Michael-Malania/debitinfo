@@ -288,8 +288,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
         const monthsGe = ['იან', 'თებ', 'მარ', 'აპრ', 'მაის', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
         const dateStr = `${d.getDate()} ${monthsGe[d.getMonth()]}, ${d.getFullYear()}`;
         const amount = Number(inst.amount) || 300;
-        const principal = Math.round((amount * 0.92) * 100) / 100;
-        const interest = Math.round((amount - principal) * 100) / 100;
         const isPaid = inst.isPaid;
         const initialDebt = Number(primaryClaim?.initialAmount) || 5000;
         const remainingBalance = Math.max(0, initialDebt - (num * amount));
@@ -300,8 +298,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
           installmentNo: formattedNo,
           num,
           dueDate: dateStr,
-          principal: `${principal.toFixed(2)} ₾`,
-          interest: `${interest.toFixed(2)} ₾`,
           amount: `${amount.toFixed(2)} ₾`,
           remaining: `${remainingBalance.toLocaleString()}.00 ₾`,
           isPaid,
@@ -310,18 +306,18 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
         };
       })
     : [
-        { id: '1', installmentNo: '01', num: 1, dueDate: '25 მარ, 2024', principal: '260.00 ₾', interest: '40.00 ₾', amount: '300.00 ₾', remaining: '4,700.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-01' },
-        { id: '2', installmentNo: '02', num: 2, dueDate: '25 აპრ, 2024', principal: '263.00 ₾', interest: '37.00 ₾', amount: '300.00 ₾', remaining: '4,400.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-02' },
-        { id: '3', installmentNo: '03', num: 3, dueDate: '25 მაის, 2024', principal: '266.00 ₾', interest: '34.00 ₾', amount: '300.00 ₾', remaining: '4,100.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-03' },
-        { id: '4', installmentNo: '04', num: 4, dueDate: '25 ივნ, 2024', principal: '269.00 ₾', interest: '31.00 ₾', amount: '300.00 ₾', remaining: '3,800.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-04' },
-        { id: '5', installmentNo: '05', num: 5, dueDate: '25 ივლ, 2024', principal: '272.00 ₾', interest: '28.00 ₾', amount: '300.00 ₾', remaining: '3,500.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-05' },
-        { id: '6', installmentNo: '06', num: 6, dueDate: '25 აგვ, 2024', principal: '275.00 ₾', interest: '25.00 ₾', amount: '300.00 ₾', remaining: '3,200.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-06' },
-        { id: '7', installmentNo: '07', num: 7, dueDate: '25 სექ, 2024', principal: '278.00 ₾', interest: '22.00 ₾', amount: '300.00 ₾', remaining: '2,900.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-07' },
-        { id: '8', installmentNo: '08', num: 8, dueDate: '25 ოქტ, 2024', principal: '281.00 ₾', interest: '19.00 ₾', amount: '300.00 ₾', remaining: '2,600.00 ₾', isPaid: false, isNextDue: true, receiptNumber: null },
-        { id: '9', installmentNo: '09', num: 9, dueDate: '25 ნოე, 2024', principal: '284.00 ₾', interest: '16.00 ₾', amount: '300.00 ₾', remaining: '2,300.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
-        { id: '10', installmentNo: '10', num: 10, dueDate: '25 დეკ, 2024', principal: '287.00 ₾', interest: '13.00 ₾', amount: '300.00 ₾', remaining: '2,000.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
-        { id: '11', installmentNo: '11', num: 11, dueDate: '25 იან, 2025', principal: '290.00 ₾', interest: '10.00 ₾', amount: '300.00 ₾', remaining: '1,700.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
-        { id: '12', installmentNo: '12', num: 12, dueDate: '25 თებ, 2025', principal: '293.00 ₾', interest: '7.00 ₾', amount: '300.00 ₾', remaining: '1,400.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+        { id: '1', installmentNo: '01', num: 1, dueDate: '25 მარ, 2024', amount: '300.00 ₾', remaining: '4,700.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-01' },
+        { id: '2', installmentNo: '02', num: 2, dueDate: '25 აპრ, 2024', amount: '300.00 ₾', remaining: '4,400.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-02' },
+        { id: '3', installmentNo: '03', num: 3, dueDate: '25 მაის, 2024', amount: '300.00 ₾', remaining: '4,100.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-03' },
+        { id: '4', installmentNo: '04', num: 4, dueDate: '25 ივნ, 2024', amount: '300.00 ₾', remaining: '3,800.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-04' },
+        { id: '5', installmentNo: '05', num: 5, dueDate: '25 ივლ, 2024', amount: '300.00 ₾', remaining: '3,500.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-05' },
+        { id: '6', installmentNo: '06', num: 6, dueDate: '25 აგვ, 2024', amount: '300.00 ₾', remaining: '3,200.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-06' },
+        { id: '7', installmentNo: '07', num: 7, dueDate: '25 სექ, 2024', amount: '300.00 ₾', remaining: '2,900.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-07' },
+        { id: '8', installmentNo: '08', num: 8, dueDate: '25 ოქტ, 2024', amount: '300.00 ₾', remaining: '2,600.00 ₾', isPaid: false, isNextDue: true, receiptNumber: null },
+        { id: '9', installmentNo: '09', num: 9, dueDate: '25 ნოე, 2024', amount: '300.00 ₾', remaining: '2,300.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+        { id: '10', installmentNo: '10', num: 10, dueDate: '25 დეკ, 2024', amount: '300.00 ₾', remaining: '2,000.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+        { id: '11', installmentNo: '11', num: 11, dueDate: '25 იან, 2025', amount: '300.00 ₾', remaining: '1,700.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
+        { id: '12', installmentNo: '12', num: 12, dueDate: '25 თებ, 2025', amount: '300.00 ₾', remaining: '1,400.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
       ];
 
   const paidPeriodsCount = allInstallments.filter((i: any) => i.isPaid).length;
@@ -384,9 +380,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
             <tr>
               <th>№</th>
               <th>გადახდის ვადა</th>
-              <th>ძირი თანხა</th>
-              <th>პროცენტი</th>
-              <th>ჯამური შენატანი</th>
+              <th>შენატანის თანხა</th>
               <th>დარჩენილი ბალანსი</th>
               <th>სტატუსი</th>
             </tr>
@@ -396,8 +390,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
               <tr>
                 <td class="text-center font-mono">${i.installmentNo}</td>
                 <td>${i.dueDate}</td>
-                <td class="text-right">${i.principal}</td>
-                <td class="text-right">${i.interest}</td>
                 <td class="text-right"><strong>${i.amount}</strong></td>
                 <td class="text-right">${i.remaining}</td>
                 <td class="text-center">
@@ -446,8 +438,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
         installments: allInstallments.map((inst: any) => ({
           installmentNo: inst.installmentNo,
           dueDate: inst.dueDate,
-          principal: inst.principal,
-          interest: inst.interest,
           amount: inst.amount,
           remaining: inst.remaining,
           isPaid: inst.isPaid,
@@ -547,17 +537,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
             <span className="material-symbols-outlined text-[18px]">calendar_month</span>
             <span>დაფარვის გრაფიკი</span>
           </a>
-          <a className="text-text-muted font-label-md text-label-md hover:text-primary transition-colors duration-150 flex items-center gap-1.5" href="#pay">
-            <span className="material-symbols-outlined text-[18px]">payments</span>
-            <span>ონლაინ გადახდა</span>
-          </a>
-          <button 
-            onClick={() => setIsDisputeOpen(true)}
-            className="text-text-muted font-label-md text-label-md hover:text-rose-600 transition-colors duration-150 flex items-center gap-1.5 cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[18px]">gavel</span>
-            <span>დავის გახსნა</span>
-          </button>
         </nav>
       </div>
       {/* Right Header Actions & User Session */}
@@ -567,11 +546,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
           <span className="material-symbols-outlined text-[22px]">notifications</span>
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error ring-2 ring-white" />
         </button>
-        {/* System Sync Indicator */}
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-bg border border-border-subtle">
-          <span className="w-2 h-2 rounded-full bg-rating-a animate-pulse" />
-          <span className="text-[11px] font-medium text-text-muted">RS.GE Live</span>
-        </div>
         <div className="h-6 w-px bg-border-subtle mx-1" />
         {/* User Profile Pill */}
         <div className="flex items-center gap-3 pl-1">
@@ -597,18 +571,12 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
   </header>
   {/* ================= Main Portal Container ================= */}
   <main className="flex-1 w-full max-w-7xl mx-auto px-4 lg:px-8 py-6 space-y-6">
-    {/* Page Breadcrumb & Quick Sync Banner */}
+    {/* Page Header / Context Title */}
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border-subtle">
       <div className="flex items-center gap-2 text-text-muted font-body-sm text-body-sm">
-        <Link href="/" className="hover:underline">მთავარი</Link>
-        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
         <span className="text-text-primary font-medium">დებიტორის პირადი პორტალი</span>
         <span className="material-symbols-outlined text-[14px]">chevron_right</span>
         <span className="text-primary font-semibold">საქმე #{caseNumber}</span>
-      </div>
-      <div className="flex items-center gap-2 text-text-muted text-body-sm font-data-mono-md">
-        <span className="material-symbols-outlined text-[16px] text-rating-a">check_circle</span>
-        <span>RS.GE სინქრონიზაცია აქტიურია</span>
       </div>
     </div>
     {/* ================= 2. პროფილის ბლოკი (User Profile Header Summary Card) ================= */}
@@ -652,10 +620,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
                 <span className="material-symbols-outlined text-[16px] text-text-muted">mail</span>
                 <span className="text-text-primary">{debtorEmail}</span>
               </div>
-              <div className="flex items-center gap-1.5 col-span-1 sm:col-span-2">
-                <span className="material-symbols-outlined text-[16px] text-rating-a">verified_user</span>
-                <span>{user?.isRsVerified ? 'RS.GE რეესტრის აქტიური ჩანაწერი' : 'RS.GE ვერიფიკაცია მოლოდინში'}</span>
-              </div>
             </div>
           </div>
         </div>
@@ -695,7 +659,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
               დავალიანების დამადასტურებელი დოკუმენტაცია
             </h4>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold">
-              დამოწმებულია ანალიტიკოსის მიერ
+              დამოწმებულია debitinfo.ge-ის მიერ
             </span>
           </div>
           <span className="text-xs text-text-muted">
@@ -812,7 +776,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
               დებიტორის სანდოობის ანალიზი და რეკომენდაციები
             </h3>
             <p className="text-body-md font-body-md text-text-muted leading-relaxed">
-              თქვენი მიმდინარე გადახდების დისციპლინა დამაკმაყოფილებელია. გრაფიკის დაცვის შემთხვევაში თქვენი რეიტინგი გაიზრდება <strong className="text-teal-700 font-semibold">Grade A</strong>-მდე, რაც გაგიხსნით გამარტივებულ საბანკო ლიმიტებს, პროცენტის შემცირების პერსპექტივას და სრულად მოხსნის შეზღუდვებს საჯარო რეესტრში.
+              თქვენი მიმდინარე გადახდების დისციპლინა დამაკმაყოფილებელია. გრაფიკის დაცვის შემთხვევაში თქვენი რეიტინგი გაიზრდება <strong className="text-teal-700 font-semibold">Grade A</strong>-მდე, რაც გაგიხსნით გამარტივებულ საბანკო ლიმიტებს, მისცემს debitinfo.ge-ის საშუალებას გასცეს თქვენზე დადებითი რეკომენდაცია და სრულად მოიხსნას შეზღუდვები საჯარო რეესტრში.
             </p>
           </div>
           {/* Action Tips Bento Cards */}
@@ -827,12 +791,12 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
               </div>
             </div>
             <div className="p-3.5 rounded-lg border border-border-subtle bg-surface-bg flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-200 text-primary flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[18px]">trending_down</span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[18px]">verified</span>
               </div>
               <div className="text-body-sm">
-                <span className="font-semibold text-text-primary block">წინსწრებით დაფარვა</span>
-                <span className="text-text-muted">ამცირებს დარჩენილ საპროცენტო ტვირთს 140 ₾-ით.</span>
+                <span className="font-semibold text-text-primary block">სანიმუშო გადამხდელის სტატუსი</span>
+                <span className="text-text-muted">ვალდებულების დროული დაფარვა განიჭებთ საიმედო პარტნიორის უმაღლეს რეიტინგს.</span>
               </div>
             </div>
           </div>
@@ -997,9 +961,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
               <tr className="bg-slate-100/70 border-b border-border-subtle text-text-muted font-label-md text-[11px] uppercase tracking-wider">
                 <th className="py-3 px-3.5 text-center w-12" scope="col">№</th>
                 <th className="py-3 px-3.5" scope="col">გადახდის ვადა</th>
-                <th className="py-3 px-3.5 text-right" scope="col">ძირი თანხა</th>
-                <th className="py-3 px-3.5 text-right" scope="col">პროცენტი</th>
-                <th className="py-3 px-3.5 text-right" scope="col">ჯამური შენატანი</th>
+                <th className="py-3 px-3.5 text-right" scope="col">შენატანის თანხა</th>
                 <th className="py-3 px-3.5 text-right" scope="col">დარჩენილი ბალანსი</th>
                 <th className="py-3 px-3.5 text-center" scope="col">სტატუსი</th>
                 <th className="py-3 px-3.5 text-center" scope="col">ქვითარი</th>
@@ -1027,12 +989,6 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
                     <td className={`py-3 px-3.5 font-data-mono-md ${isNext ? 'font-bold text-text-primary flex items-center gap-1.5' : ''}`}>
                       <span>{inst.dueDate}</span>
                       {isNext && <span className="w-2 h-2 rounded-full bg-primary animate-ping" />}
-                    </td>
-                    <td className={`py-3 px-3.5 text-right font-data-mono-md ${isNext ? 'font-semibold text-text-primary' : ''}`}>
-                      {inst.principal}
-                    </td>
-                    <td className="py-3 px-3.5 text-right font-data-mono-md text-text-muted">
-                      {inst.interest}
                     </td>
                     <td className={`py-3 px-3.5 text-right font-data-mono-md ${isNext ? 'font-bold text-primary text-[15px]' : isPaid ? 'font-semibold' : ''}`}>
                       {inst.amount}

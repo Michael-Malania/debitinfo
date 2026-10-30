@@ -363,7 +363,7 @@ export const MOCK_CALL_QUEUE: CallQueueItem[] = [
     phone: '+995 595 99 88 77',
     priority: 'medium',
     debtAmount: 4500,
-    lastDisposition: 'გაასაჩივრა საპროცენტო განაკვეთი',
+    lastDisposition: 'გაასაჩივრა დავალიანების ოდენობა',
     nextScheduledCall: '11:15'
   },
   {

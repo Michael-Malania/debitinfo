@@ -701,8 +701,6 @@ export interface DebtorScheduleExportParams {
   installments: Array<{
     installmentNo: number | string;
     dueDate: string;
-    principal: number | string;
-    interest: number | string;
     amount: number | string;
     remaining: number | string;
     isPaid?: boolean;
@@ -728,15 +726,13 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
   ws.columns = [
     { key: 'colA', width: 8 },  // №
     { key: 'colB', width: 22 }, // გადახდის ვადა
-    { key: 'colC', width: 22 }, // ძირი თანხა (GEL)
-    { key: 'colD', width: 20 }, // პროცენტი (GEL)
-    { key: 'colE', width: 24 }, // ჯამური შენატანი (GEL)
-    { key: 'colF', width: 26 }, // დარჩენილი ბალანსი (GEL)
-    { key: 'colG', width: 24 }, // სტატუსი
+    { key: 'colC', width: 24 }, // შენატანის თანხა (GEL)
+    { key: 'colD', width: 26 }, // დარჩენილი ბალანსი (GEL)
+    { key: 'colE', width: 24 }, // სტატუსი
   ];
 
   // Title Banner (Row 1)
-  ws.mergeCells('A1:G1');
+  ws.mergeCells('A1:E1');
   const titleCell = ws.getCell('A1');
   titleCell.value = 'DEBITINFO.GE • ოფიციალური ამონაწერი და დაფარვის გრაფიკი';
   titleCell.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -749,7 +745,7 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
   ws.getRow(1).height = 36;
 
   // Subtitle Banner (Row 2)
-  ws.mergeCells('A2:G2');
+  ws.mergeCells('A2:E2');
   const subCell = ws.getCell('A2');
   subCell.value = `საქმის № ${params.caseNumber} • ხელშეკრულების № ${params.agreementNumber || 'AGR-8841'} • გენერირების თარიღი: ${new Date().toLocaleDateString('ka-GE')}`;
   subCell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FFE0E7FF' } };
@@ -778,13 +774,11 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
   ws.getCell('A4').style = metaStyleLabel as any;
   ws.getCell('B4').value = params.debtorName;
   ws.getCell('B4').style = metaStyleVal as any;
-  ws.mergeCells('B4:C4');
 
-  ws.getCell('E4').value = 'კრედიტორი:';
-  ws.getCell('E4').style = metaStyleLabel as any;
-  ws.getCell('F4').value = params.creditorName;
-  ws.getCell('F4').style = metaStyleVal as any;
-  ws.mergeCells('F4:G4');
+  ws.getCell('D4').value = 'კრედიტორი:';
+  ws.getCell('D4').style = metaStyleLabel as any;
+  ws.getCell('E4').value = params.creditorName;
+  ws.getCell('E4').style = metaStyleVal as any;
 
   ws.getCell('A5').value = 'პირადი ნომერი:';
   ws.getCell('A5').style = metaStyleLabel as any;
@@ -792,20 +786,20 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
   ws.getCell('B5').numFmt = '@';
   ws.getCell('B5').style = metaStyleVal as any;
 
-  ws.getCell('E5').value = 'საწყისი დავალიანება:';
-  ws.getCell('E5').style = metaStyleLabel as any;
-  ws.getCell('F5').value = `₾ ${Number(params.totalInitial).toLocaleString('ka-GE')}.00`;
-  ws.getCell('F5').style = metaStyleVal as any;
+  ws.getCell('D5').value = 'საწყისი დავალიანება:';
+  ws.getCell('D5').style = metaStyleLabel as any;
+  ws.getCell('E5').value = `₾ ${Number(params.totalInitial).toLocaleString('ka-GE')}.00`;
+  ws.getCell('E5').style = metaStyleVal as any;
 
   ws.getCell('A6').value = 'საქმის სტატუსი:';
   ws.getCell('A6').style = metaStyleLabel as any;
   ws.getCell('B6').value = 'აქტიური (დამტკიცებული გრაფიკი)';
   ws.getCell('B6').style = metaStyleVal as any;
 
-  ws.getCell('E6').value = 'დარჩენილი ბალანსი:';
-  ws.getCell('E6').style = metaStyleLabel as any;
-  ws.getCell('F6').value = `₾ ${Number(params.totalRemaining).toLocaleString('ka-GE')}.00`;
-  ws.getCell('F6').font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFD97706' } };
+  ws.getCell('D6').value = 'დარჩენილი ბალანსი:';
+  ws.getCell('D6').style = metaStyleLabel as any;
+  ws.getCell('E6').value = `₾ ${Number(params.totalRemaining).toLocaleString('ka-GE')}.00`;
+  ws.getCell('E6').font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFD97706' } };
 
   [4, 5, 6].forEach((r) => {
     ws.getRow(r).height = 20;
@@ -817,9 +811,7 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
   const headers = [
     '№',
     'გადახდის ვადა',
-    'ძირი თანხა (GEL)',
-    'პროცენტი (GEL)',
-    'ჯამური შენატანი (GEL)',
+    'შენატანის თანხა (GEL)',
     'დარჩენილი ბალანსი (GEL)',
     'სტატუსი',
   ];
@@ -835,7 +827,7 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
     };
     cell.alignment = {
       vertical: 'middle',
-      horizontal: idx === 0 || idx === 1 || idx === 6 ? 'center' : 'right',
+      horizontal: idx === 0 || idx === 1 || idx === 4 ? 'center' : 'right',
       wrapText: true,
     };
     cell.border = {
@@ -847,8 +839,6 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
   });
 
   // Data Rows (Row 8 onwards)
-  let sumPrincipal = 0;
-  let sumInterest = 0;
   let sumAmount = 0;
 
   params.installments.forEach((inst, idx) => {
@@ -862,30 +852,24 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
       return parseFloat(cleaned) || 0;
     };
 
-    const p = parseNum(inst.principal);
-    const i = parseNum(inst.interest);
     const a = parseNum(inst.amount);
     const rem = parseNum(inst.remaining);
 
-    sumPrincipal += p;
-    sumInterest += i;
     sumAmount += a;
 
     const statusText = inst.statusText || (inst.isPaid ? 'გადახდილი' : inst.isNextDue ? 'მომდევნო გადასახდელი' : 'დაგეგმილი');
 
     r.getCell(1).value = inst.installmentNo;
     r.getCell(2).value = inst.dueDate;
-    r.getCell(3).value = p;
-    r.getCell(4).value = i;
-    r.getCell(5).value = a;
-    r.getCell(6).value = rem;
-    r.getCell(7).value = statusText;
+    r.getCell(3).value = a;
+    r.getCell(4).value = rem;
+    r.getCell(5).value = statusText;
 
     // Zebra striping
     const isEven = idx % 2 === 1;
     const baseBg = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
 
-    for (let c = 1; c <= 7; c++) {
+    for (let c = 1; c <= 5; c++) {
       const cell = r.getCell(c);
       cell.font = { name: 'Segoe UI', size: 9.5 };
       cell.border = {
@@ -902,11 +886,11 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
 
       if (c === 1 || c === 2) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      } else if (c >= 3 && c <= 6) {
+      } else if (c === 3 || c === 4) {
         cell.alignment = { vertical: 'middle', horizontal: 'right' };
         cell.numFmt = '#,##0.00';
-        if (c === 5) cell.font = { name: 'Segoe UI', size: 9.5, bold: true };
-      } else if (c === 7) {
+        if (c === 3) cell.font = { name: 'Segoe UI', size: 9.5, bold: true };
+      } else if (c === 5) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
         if (inst.isPaid) {
           cell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: 'FF166534' } };
@@ -930,14 +914,12 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
   totRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' };
   totRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
 
-  totRow.getCell(3).value = Math.round(sumPrincipal * 100) / 100;
-  totRow.getCell(4).value = Math.round(sumInterest * 100) / 100;
-  totRow.getCell(5).value = Math.round(sumAmount * 100) / 100;
-  totRow.getCell(6).value = 0.0;
-  totRow.getCell(7).value = 'სრული დაფარვა';
-  totRow.getCell(7).alignment = { vertical: 'middle', horizontal: 'center' };
+  totRow.getCell(3).value = Math.round(sumAmount * 100) / 100;
+  totRow.getCell(4).value = 0.0;
+  totRow.getCell(5).value = 'სრული დაფარვა';
+  totRow.getCell(5).alignment = { vertical: 'middle', horizontal: 'center' };
 
-  for (let c = 1; c <= 7; c++) {
+  for (let c = 1; c <= 5; c++) {
     const cell = totRow.getCell(c);
     cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
     cell.fill = {
@@ -951,7 +933,7 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
       left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
       right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
     };
-    if (c >= 3 && c <= 6) {
+    if (c === 3 || c === 4) {
       cell.alignment = { vertical: 'middle', horizontal: 'right' };
       cell.numFmt = '#,##0.00';
     }
@@ -959,7 +941,7 @@ export async function downloadDebtorScheduleStatementXLSX(params: DebtorSchedule
 
   // Footer Row
   const footerRowNum = totalRowNum + 2;
-  ws.mergeCells(`A${footerRowNum}:G${footerRowNum}`);
+  ws.mergeCells(`A${footerRowNum}:E${footerRowNum}`);
   const footCell = ws.getCell(`A${footerRowNum}`);
   footCell.value = 'დოკუმენტი დაგენერირებულია Debitinfo.GE ფინანსური პლატფორმის მიერ და წარმოადგენს ოფიციალურ ამონაწერს.';
   footCell.font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FF64748B' } };
