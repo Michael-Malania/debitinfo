@@ -33,7 +33,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickFill = (type: 'regular' | 'regular_company' | 'creditor' | 'debtor' | 'accountant') => {
+  const handleQuickFill = (type: 'regular' | 'regular_company' | 'creditor' | 'debtor') => {
     if (type === 'regular') {
       setEntityType('physical');
       setIdentifier('01024089123'); // დავით კვირიკაშვილი
@@ -49,10 +49,6 @@ export default function LoginPage() {
     } else if (type === 'debtor') {
       setEntityType('physical');
       setIdentifier('01019012345');
-      setPassword('Debitinfo2024!');
-    } else if (type === 'accountant') {
-      setEntityType('physical');
-      setIdentifier('accountant@debitinfo.ge');
       setPassword('Debitinfo2024!');
     }
     setError('');
@@ -172,15 +168,6 @@ export default function LoginPage() {
                 title="შპს ჯეო ტრეიდინგი (კრედიტორი)"
               >
                 🏢 კრედიტორი
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickFill('accountant')}
-                className="col-span-2 px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-300 hover:bg-amber-100 text-amber-900 font-bold transition shadow-2xs text-[11px] truncate flex items-center justify-center gap-1.5"
-                title="მთავარი ბუღალტერი (მარიამ წიკლაური) — საგადახდო დავალებები & გადახდების დასტური"
-              >
-                <span>💼 მთავარი ბუღალტერი (Accountant)</span>
-                <span className="text-[10px] text-amber-800 bg-amber-200/80 px-1.5 py-0.2 rounded font-mono font-semibold">.Finance</span>
               </button>
             </div>
           </div>
