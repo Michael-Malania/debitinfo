@@ -16,7 +16,7 @@ export default function ProfilePage() {
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo */}
       <div className="flex items-center gap-3">
-        <a className="flex items-center gap-2 group" href="/">
+        <Link className="flex items-center gap-2 group" href="/dashboard">
           <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm shadow-primary/30 transition-transform group-hover:scale-105">
             <span className="material-symbols-outlined text-[20px]" style={{fontVariationSettings: '"FILL" 1'}}>assured_workload</span>
           </div>
@@ -24,7 +24,7 @@ export default function ProfilePage() {
             <span className="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">Debitinfo</span>
             <span className="font-headline-sm text-headline-sm font-bold text-secondary-container">.GE</span>
           </div>
-        </a>
+        </Link>
         <div className="hidden sm:flex items-center gap-1.5 ml-2 pl-3 border-l border-border-subtle">
           <span className="w-2 h-2 rounded-full bg-accent-mint custom-pulse-ring" />
           <span className="font-label-sm text-label-sm text-text-muted tracking-tight">RS.GE LIVE SYNC</span>
@@ -32,14 +32,10 @@ export default function ProfilePage() {
       </div>
       {/* Main Navigation Links */}
       <nav className="hidden md:flex items-center gap-8">
-        <a className="text-text-muted font-label-md text-label-md hover:text-primary transition-colors duration-150" href="#">მთავარი</a>
-        <a className="text-primary font-label-md text-label-md border-b-2 border-primary pb-1 flex items-center gap-1.5" href="#">
+        <Link className="text-primary font-label-md text-label-md border-b-2 border-primary pb-1 flex items-center gap-1.5" href="/dashboard">
           <span>ჩემი პროფილი</span>
           <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-        </a>
-        <a className="text-text-muted font-label-md text-label-md hover:text-primary transition-colors duration-150" href="#">შემოწმების ისტორია</a>
-        <a className="text-text-muted font-label-md text-label-md hover:text-primary transition-colors duration-150" href="#">სერვისები</a>
-        <a className="text-text-muted font-label-md text-label-md hover:text-primary transition-colors duration-150" href="#">დახმარება</a>
+        </Link>
       </nav>
       {/* Right Actions / User Cluster */}
       <div className="flex items-center gap-3">
@@ -168,7 +164,7 @@ export default function ProfilePage() {
             თქვენს სახელზე აქტიური დავალიანება ან საკრედიტო ვალდებულება არ მოიძებნა
           </h2>
           <p className="font-body-md text-body-md text-text-muted max-w-xl mx-auto leading-relaxed">
-            მონაცემთა ბაზაში რაიმე ვალდებულების ან დავალების დაფიქსირების შემთხვევაში, თქვენი კაბინეტი ავტომატურად განახლდება და მოგენიჭებათ შესაბამისი სტატუსი.
+            თქვენ რეგისტრირებული ხართ როგორც აქტიური მომხმარებელი. მონაცემთა ბაზაში რაიმე ვალდებულების ან კრედიტორული მოთხოვნის დაფიქსირების შემთხვევაში, debitinfo.ge-ის მიერ მოხდება თქვენი კაბინეტის ავტომატურად განახლება და თქვენთვის განახლების შესახებ ინფორმაციის შეტყობინება.
           </p>
         </div>
         {/* Telemetry / Live Scan Info Bar */}

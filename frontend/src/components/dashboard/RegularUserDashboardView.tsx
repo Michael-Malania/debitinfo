@@ -127,7 +127,7 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
         <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
           {/* Brand Logo */}
           <div className="flex items-center gap-3">
-            <Link className="flex items-center gap-2 group" href="/">
+            <Link className="flex items-center gap-2 group" href="/dashboard">
               <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm shadow-primary/30 transition-transform group-hover:scale-105">
                 <span className="material-symbols-outlined text-[20px]">assured_workload</span>
               </div>
@@ -147,12 +147,6 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
             <Link className="text-primary font-label-md text-label-md border-b-2 border-primary pb-1 flex items-center gap-1.5" href="/dashboard">
               <span>ჩემი პროფილი</span>
               <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-            </Link>
-            <Link className="text-text-muted font-label-md text-label-md hover:text-primary transition-colors duration-150" href="/#services">
-              სერვისები
-            </Link>
-            <Link className="text-text-muted font-label-md text-label-md hover:text-primary transition-colors duration-150" href="/contact">
-              დახმარება &amp; ცხელი ხაზი
             </Link>
           </nav>
 
@@ -197,7 +191,7 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <nav className="flex items-center gap-2 text-text-muted font-body-sm text-body-sm mb-1">
-              <Link className="hover:text-primary transition-colors" href="/">მთავარი</Link>
+              <Link className="hover:text-primary transition-colors" href="/dashboard">მთავარი</Link>
               <span className="material-symbols-outlined text-[14px]">chevron_right</span>
               <span className="text-text-primary font-medium">მომხმარებლის პროფილი &amp; მონიტორინგი</span>
             </nav>
@@ -296,7 +290,7 @@ export default function RegularUserDashboardView({ user }: RegularUserDashboardV
                 თქვენს სახელზე აქტიური დავალიანება ან საკრედიტო ვალდებულება არ მოიძებნა
               </h2>
               <p className="font-body-md text-body-md text-text-muted max-w-xl mx-auto leading-relaxed">
-                თქვენ რეგისტრირებული ხართ როგორც აქტიური მომხმარებელი. მონაცემთა ბაზაში რაიმე ვალდებულების ან კრედიტორული მოთხოვნის დაფიქსირების შემთხვევაში, ანალიტიკოსის მიერ მოხდება საქმის სინქრონიზაცია და თქვენი კაბინეტი ავტომატურად განახლდება.
+                თქვენ რეგისტრირებული ხართ როგორც აქტიური მომხმარებელი. მონაცემთა ბაზაში რაიმე ვალდებულების ან კრედიტორული მოთხოვნის დაფიქსირების შემთხვევაში, debitinfo.ge-ის მიერ მოხდება თქვენი კაბინეტის ავტომატურად განახლება და თქვენთვის განახლების შესახებ ინფორმაციის შეტყობინება.
               </p>
             </div>
 

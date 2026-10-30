@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import OpsPage from './ops/page';
+import { authService, AuthUser } from '@/services';
 
 export default function LandingPage() {
   const [isOps, setIsOps] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -19,6 +21,14 @@ export default function LandingPage() {
         setIsOps(true);
       }
     }
+
+    const stored = authService.getCurrentUser();
+    if (stored) {
+      setCurrentUser(stored);
+    }
+    authService.getMe().then((fresh) => {
+      if (fresh) setCurrentUser(fresh);
+    }).catch(() => {});
   }, []);
 
   const [currentSlide, setCurrentSlide] = useState(1);
@@ -38,7 +48,7 @@ export default function LandingPage() {
   <header className="bg-surface-card sticky top-0 z-50 shadow-sm border-b border-border-subtle">
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo */}
-      <a className="flex items-center gap-2 group" href="/">
+      <Link className="flex items-center gap-2 group" href={currentUser ? "/dashboard" : "/"}>
         <div className="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary font-bold shadow-sm">
           <span className="material-symbols-outlined text-lg">assured_workload</span>
         </div>
@@ -46,7 +56,7 @@ export default function LandingPage() {
           Debitinfo<span className="text-primary-container">.GE</span>
         </span>
         <span className="w-2 h-2 rounded-full bg-accent-mint animate-pulse ml-0.5" />
-      </a>
+      </Link>
       {/* Desktop Navigation Menu */}
       <nav className="hidden md:flex items-center space-x-6 lg:space-x-8">
         <Link className="text-primary-container border-b-2 border-primary-container pb-1 font-label-md text-label-md" href="/">მთავარი გვერდი</Link>
@@ -65,13 +75,25 @@ export default function LandingPage() {
         </div>
         {/* Auth Actions */}
         <div className="flex items-center gap-2">
-          <Link className="px-3 py-1.5 rounded-lg text-body-md font-body-md text-text-primary hover:bg-surface-bg transition-colors duration-150 active:scale-95" href="/login">
-            შესვლა
-          </Link>
-          <Link className="px-4 py-1.5 rounded-lg text-body-md font-body-md bg-primary-container text-on-primary hover:bg-primary transition-colors duration-150 shadow-sm font-medium active:scale-95 flex items-center gap-1" href="/register">
-            <span>რეგისტრაცია</span>
-            <span className="material-symbols-outlined text-sm">arrow_forward</span>
-          </Link>
+          {currentUser ? (
+            <Link
+              className="px-4 py-2 rounded-xl text-body-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-all shadow-sm flex items-center gap-2 active:scale-95"
+              href="/dashboard"
+            >
+              <span className="material-symbols-outlined text-[18px]">account_circle</span>
+              <span>პირადი კაბინეტი</span>
+            </Link>
+          ) : (
+            <>
+              <Link className="px-3 py-1.5 rounded-lg text-body-md font-body-md text-text-primary hover:bg-surface-bg transition-colors duration-150 active:scale-95" href="/login">
+                შესვლა
+              </Link>
+              <Link className="px-4 py-1.5 rounded-lg text-body-md font-body-md bg-primary-container text-on-primary hover:bg-primary transition-colors duration-150 shadow-sm font-medium active:scale-95 flex items-center gap-1" href="/register">
+                <span>რეგისტრაცია</span>
+                <span className="material-symbols-outlined text-sm">arrow_forward</span>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

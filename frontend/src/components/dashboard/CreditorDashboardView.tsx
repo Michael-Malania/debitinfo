@@ -433,7 +433,7 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
     <div className="w-full px-4 lg:px-8 max-w-7xl mx-auto flex items-center justify-between h-16">
       {/* Brand Logo + Segment Indicator */}
       <div className="flex items-center gap-6">
-        <Link className="flex items-center gap-2 group" href="/">
+        <Link className="flex items-center gap-2 group" href="/dashboard">
           <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
             <span className="material-symbols-outlined text-[20px]" data-icon="account_balance">account_balance</span>
           </div>
