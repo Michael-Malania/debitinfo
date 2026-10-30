@@ -175,6 +175,11 @@ model CompanyProfile {
   directorPhone    String
   directorEmail    String
 
+  // Founder (დამფუძნებელი)
+  founderFirstName   String?
+  founderLastName    String?
+  founderPin         String?
+
   // Optional Accountant
   accountantName     String?
   accountantLastName String?
@@ -278,6 +283,15 @@ model DebtClaim {
   rating          RiskRating      @default(B)
   riskScore       Int             @default(50) // 0 - 100
 
+  // Analytics & Classification Fields
+  debtOriginationDate DateTime? // ვალის წარმოქმნის თარიღი
+  statuteExpiredAt    DateTime? // ხანდაზმულობის დადგომის თარიღი (3 წელი)
+  productType         String?   @default("B2B_SUPPLY") // B2B_SUPPLY, LOAN, LEASING, SERVICE
+  branch              String?   @default("თბილისი - ცენტრალური") // ფილიალი
+  sourceFile          String?   // წყარო ფაილი
+  assignedOperatorId  String?   // კრედიტ მენეჯერი / ოპერატორი
+  teamLeadId          String?   // ჯგუფის უფროსი
+
   // Schedules & Repayments
   scheduleType    ScheduleType    @default(STANDARD)
   schedules       RepaymentSchedule[]
@@ -299,6 +313,9 @@ model DebtClaim {
   @@index([caseNumber])
   @@index([status])
   @@index([rating])
+  @@index([debtOriginationDate])
+  @@index([productType])
+  @@index([branch])
 }
 
 model RepaymentSchedule {
@@ -441,6 +458,14 @@ model LegalCase {
   hasSequestration     Boolean         @default(false)
   settlementTerms      String?         // e.g. "გრაფიკი: 4 თვე"
 
+  // Lawyer KPIs and Outcome Tracking
+  outcome                 String?      @default("IN_PROGRESS") // IN_PROGRESS, WON, SETTLED, LOST
+  lawsuitFiledAt          DateTime?    // სარჩელის შეტანის თარიღი
+  sequestrationAppliedAt  DateTime?    // ყადაღის დადების თარიღი
+  enforcedAt              DateTime?    // აღსრულებაში გადაცემის თარიღი
+  resolvedAt              DateTime?    // დასრულების / მოგების თარიღი
+  recoveredAmount         Decimal?     @db.Decimal(12, 2) // ამოღებული / მოგებული თანხა
+
   nextHearingDate      DateTime?
   deadlineDate         DateTime?
   executionSheetNumber String?
@@ -461,6 +486,8 @@ model LegalCase {
   @@index([assignedLawyerId])
   @@index([status])
   @@index([stage])
+  @@index([outcome])
+  @@index([lawsuitFiledAt])
 }
 
 model LegalDocument {
@@ -508,12 +535,17 @@ model CrmCallLog {
   disposition    CallDisposition
   promisedDate   DateTime?
   promisedAmount Decimal?        @db.Decimal(12, 2)
+  durationSeconds Int            @default(45)
+  callHour        Int            @default(12) // 0 - 23
+  teamLeadId      String?
   notes          String
 
   createdAt      DateTime        @default(now())
 
   @@index([operatorId])
   @@index([claimId])
+  @@index([callHour])
+  @@index([createdAt])
 }
 
 model FieldVisitTask {
@@ -607,6 +639,11 @@ model StagedRegistryItem {
   directorPersonalId  String?   // დირექტორის პირადი ნომერი (არასავალდებულო, for LEGAL)
   directorEmail       String?   // დირექტორის ემაილი (for LEGAL)
   directorPhone       String?   // დირექტორის ტელეფონის ნომერი (for LEGAL)
+  founderFirstName    String?   // დამფუძნებლის სახელი
+  founderLastName     String?   // დამფუძნებლის გვარი
+  founderPin          String?   // დამფუძნებლის პირადი ნომერი
+  branch              String?   @default("თბილისი - ცენტრალური") // ფილიალი
+  productType         String?   @default("B2B_SUPPLY") // პროდუქტის ტიპი
   companyOrPerson     String?   // Optional employer or contact person tag
   agreementNumber     String?   // Contract/Agreement reference
   creditorName        String?   // Name of creditor for debt claim

@@ -347,6 +347,13 @@ export default function AnalystPage() {
           <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 font-label-sm text-label-sm uppercase tracking-wider font-semibold">
             ანალიტიკოსის კონსოლი
           </span>
+          <Link
+            href="/analyst/analytics"
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all shadow-2xs"
+          >
+            <span className="material-symbols-outlined text-sm">query_stats</span>
+            <span>BI &amp; ღრმა ანალიტიკა</span>
+          </Link>
           <span className="text-text-muted text-body-sm font-body-sm hidden md:inline">v2.4 Live</span>
         </div>
       </div>
@@ -449,6 +456,15 @@ export default function AnalystPage() {
               </div>
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             </a>
+            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-900 hover:from-indigo-100 hover:to-blue-100 transition-all font-body-md font-semibold border border-indigo-200/80 shadow-2xs" href="/analyst/analytics">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[20px] text-indigo-600">query_stats</span>
+                <span>ღრმა ანალიტიკა (BI Hub)</span>
+              </div>
+              <span className="px-1.5 py-0.2 rounded bg-indigo-600 text-white text-[10px] font-mono font-bold">
+                NEW
+              </span>
+            </Link>
             <a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#excel-registry-section">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-[20px] text-sky-600">badge</span>

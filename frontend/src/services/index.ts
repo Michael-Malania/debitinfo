@@ -847,6 +847,69 @@ export const analystBackendService = {
       body: JSON.stringify({ debtors }),
     });
   },
+
+  // --------------------------------------------------
+  // SMART BI & MULTI-PARAMETER ANALYTICS
+  // --------------------------------------------------
+  async getBiMetadata(): Promise<any> {
+    return await apiFetch('/api/v1/analyst/bi/metadata');
+  },
+
+  async queryBi(filters: any): Promise<any> {
+    return await apiFetch('/api/v1/analyst/bi/query', {
+      method: 'POST',
+      body: JSON.stringify(filters),
+    });
+  },
+
+  async getSchedulesComparison(params?: { dateFrom?: string; dateTo?: string; compareYoY?: boolean }): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params?.dateFrom) qs.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.append('dateTo', params.dateTo);
+    if (params?.compareYoY) qs.append('compareYoY', 'true');
+    return await apiFetch(`/api/v1/analyst/bi/schedules-comparison${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+
+  async getLegalPerformance(params?: { dateFrom?: string; dateTo?: string; lawyerId?: string }): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params?.dateFrom) qs.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.append('dateTo', params.dateTo);
+    if (params?.lawyerId) qs.append('lawyerId', params.lawyerId);
+    return await apiFetch(`/api/v1/analyst/bi/legal-performance${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+
+  async getVisitorsPerformance(params?: { dateFrom?: string; dateTo?: string; officerId?: string }): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params?.dateFrom) qs.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.append('dateTo', params.dateTo);
+    if (params?.officerId) qs.append('officerId', params.officerId);
+    return await apiFetch(`/api/v1/analyst/bi/visitors-performance${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+
+  async getCallCenterPerformance(params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    hourFrom?: number;
+    hourTo?: number;
+    operatorId?: string;
+    teamLeadId?: string;
+  }): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params?.dateFrom) qs.append('dateFrom', params.dateFrom);
+    if (params?.dateTo) qs.append('dateTo', params.dateTo);
+    if (params?.hourFrom !== undefined) qs.append('hourFrom', String(params.hourFrom));
+    if (params?.hourTo !== undefined) qs.append('hourTo', String(params.hourTo));
+    if (params?.operatorId) qs.append('operatorId', params.operatorId);
+    if (params?.teamLeadId) qs.append('teamLeadId', params.teamLeadId);
+    return await apiFetch(`/api/v1/analyst/bi/call-center-performance${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+
+  async getStatuteLimitations(params?: { monthsLookback?: number; monthsLookahead?: number }): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params?.monthsLookback) qs.append('monthsLookback', String(params.monthsLookback));
+    if (params?.monthsLookahead) qs.append('monthsLookahead', String(params.monthsLookahead));
+    return await apiFetch(`/api/v1/analyst/bi/statute-limitations${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
 };
 
 export const visitsBackendService = {

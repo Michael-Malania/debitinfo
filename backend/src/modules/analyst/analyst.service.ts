@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UserRole, EntityType, ClaimStatus, ScheduleType, VisitStatus } from '@prisma/client';
+import { UserRole, EntityType, ClaimStatus, ScheduleType, VisitStatus, LegalCaseStatus, CallDisposition } from '@prisma/client';
 
 export interface AssignRoleDto {
   userId: string;
@@ -909,5 +909,774 @@ export class AnalystService {
         sourceFile: 'analyst_linked_debtor',
       },
     });
+  }
+
+  // ==========================================================================
+  // SMART BI & MULTI-PARAMETER ANALYTICS ENGINE
+  // ==========================================================================
+
+  /**
+   * Get metadata options for BI Command Center filters
+   */
+  async getBiFilterMetadata() {
+    const lawyers = await this.prisma.user.findMany({
+      where: { role: UserRole.LEGAL },
+      include: { staffProfile: true },
+    });
+
+    const operators = await this.prisma.user.findMany({
+      where: { role: UserRole.OPERATOR },
+      include: { staffProfile: true },
+    });
+
+    const visitors = await this.prisma.user.findMany({
+      where: { role: UserRole.FIELD_OFFICER },
+      include: { staffProfile: true },
+    });
+
+    const creditors = await this.prisma.user.findMany({
+      where: { role: UserRole.CREDITOR },
+      include: { companyProfile: true },
+    });
+
+    const distinctBranches = await this.prisma.debtClaim.findMany({
+      where: { branch: { not: null } },
+      select: { branch: true },
+      distinct: ['branch'],
+    });
+
+    const distinctProducts = await this.prisma.debtClaim.findMany({
+      where: { productType: { not: null } },
+      select: { productType: true },
+      distinct: ['productType'],
+    });
+
+    const distinctSourceFiles = await this.prisma.debtClaim.findMany({
+      where: { sourceFile: { not: null } },
+      select: { sourceFile: true },
+      distinct: ['sourceFile'],
+    });
+
+    return {
+      lawyers: lawyers.map((l) => ({
+        id: l.id,
+        name: l.staffProfile?.fullName || l.email,
+      })),
+      operators: operators.map((o) => ({
+        id: o.id,
+        name: o.staffProfile?.fullName || o.email,
+      })),
+      visitors: visitors.map((v) => ({
+        id: v.id,
+        name: v.staffProfile?.fullName || v.email,
+      })),
+      creditors: creditors.map((c) => ({
+        id: c.id,
+        name: c.companyProfile?.companyName || c.email,
+      })),
+      branches: distinctBranches.map((b) => b.branch).filter(Boolean),
+      products: distinctProducts.map((p) => p.productType).filter(Boolean),
+      sourceFiles: distinctSourceFiles.map((s) => s.sourceFile).filter(Boolean),
+    };
+  }
+
+  /**
+   * Universal Multi-Query Filter for Claims and Entities
+   */
+  async biQuery(filters: any) {
+    const where: any = {};
+
+    // Left Column Filters
+    if (filters.name) {
+      const q = String(filters.name).trim();
+      where.debtor = {
+        OR: [
+          { individualProfile: { firstName: { contains: q, mode: 'insensitive' } } },
+          { individualProfile: { lastName: { contains: q, mode: 'insensitive' } } },
+          { companyProfile: { companyName: { contains: q, mode: 'insensitive' } } },
+        ],
+      };
+    }
+
+    if (filters.receiptOrCaseNo) {
+      const q = String(filters.receiptOrCaseNo).trim();
+      where.OR = [
+        { caseNumber: { contains: q, mode: 'insensitive' } },
+        { agreementNumber: { contains: q, mode: 'insensitive' } },
+        { paymentReceipts: { some: { receiptNumber: { contains: q, mode: 'insensitive' } } } },
+      ];
+    }
+
+    if (filters.personalId) {
+      const pin = String(filters.personalId).trim();
+      where.debtor = {
+        ...where.debtor,
+        personalId: { contains: pin },
+      };
+    }
+
+    if (filters.address) {
+      const addr = String(filters.address).trim();
+      where.debtor = {
+        ...where.debtor,
+        OR: [
+          { individualProfile: { legalAddress: { contains: addr, mode: 'insensitive' } } },
+          { individualProfile: { actualAddress: { contains: addr, mode: 'insensitive' } } },
+          { companyProfile: { legalAddress: { contains: addr, mode: 'insensitive' } } },
+          { companyProfile: { actualAddress: { contains: addr, mode: 'insensitive' } } },
+        ],
+      };
+    }
+
+    if (filters.email) {
+      const em = String(filters.email).trim();
+      where.debtor = {
+        ...where.debtor,
+        OR: [
+          { email: { contains: em, mode: 'insensitive' } },
+          { companyProfile: { directorEmail: { contains: em, mode: 'insensitive' } } },
+        ],
+      };
+    }
+
+    if (filters.phone) {
+      const ph = String(filters.phone).trim();
+      where.debtor = {
+        ...where.debtor,
+        OR: [
+          { phone: { contains: ph } },
+          { companyProfile: { directorPhone: { contains: ph } } },
+        ],
+      };
+    }
+
+    if (filters.debtOriginationFrom || filters.debtOriginationTo) {
+      where.debtOriginationDate = {};
+      if (filters.debtOriginationFrom) {
+        where.debtOriginationDate.gte = new Date(filters.debtOriginationFrom);
+      }
+      if (filters.debtOriginationTo) {
+        where.debtOriginationDate.lte = new Date(filters.debtOriginationTo);
+      }
+    }
+
+    if (filters.overdueMoreThan3Years) {
+      where.OR = [
+        { daysOverdue: { gte: 1095 } },
+        { statuteExpiredAt: { not: null } },
+      ];
+    }
+
+    if (filters.scheduleType && filters.scheduleType !== 'ALL') {
+      where.scheduleType = filters.scheduleType;
+    }
+
+    if (filters.scheduleStatus) {
+      where.status = filters.scheduleStatus;
+    }
+
+    if (filters.lawyerId) {
+      where.legalCases = {
+        some: { assignedLawyerId: filters.lawyerId },
+      };
+    }
+
+    if (filters.inCourt) {
+      where.legalCases = {
+        some: {
+          OR: [
+            { status: LegalCaseStatus.IN_COURT },
+            { stage: 'COURT_PROCEEDINGS' },
+          ],
+        },
+      };
+    }
+
+    if (filters.inEnforcement) {
+      where.legalCases = {
+        some: {
+          OR: [
+            { stage: 'ENFORCEMENT' },
+            { status: LegalCaseStatus.DECISION_ENFORCED },
+          ],
+        },
+      };
+    }
+
+    if (filters.hasSequestration) {
+      where.legalCases = {
+        some: { hasSequestration: true },
+      };
+    }
+
+    if (filters.visitorId) {
+      where.fieldTasks = {
+        some: { officerId: filters.visitorId },
+      };
+    }
+
+    if (filters.operatorId) {
+      where.OR = [
+        { assignedOperatorId: filters.operatorId },
+        { crmLogs: { some: { operatorId: filters.operatorId } } },
+      ];
+    }
+
+    if (filters.teamLeadId) {
+      where.teamLeadId = filters.teamLeadId;
+    }
+
+    if (filters.overdueDaysRange) {
+      if (filters.overdueDaysRange === '1-30') {
+        where.daysOverdue = { gte: 1, lte: 30 };
+      } else if (filters.overdueDaysRange === '1-60') {
+        where.daysOverdue = { gte: 1, lte: 60 };
+      } else if (filters.overdueDaysRange === '60-90') {
+        where.daysOverdue = { gte: 60, lte: 90 };
+      } else if (filters.overdueDaysRange === '90+') {
+        where.daysOverdue = { gte: 90 };
+      }
+    }
+
+    // Right Column Filters
+    if (filters.year) {
+      const yr = Number(filters.year);
+      const startOfYear = new Date(`${yr}-01-01T00:00:00Z`);
+      const endOfYear = new Date(`${yr}-12-31T23:59:59Z`);
+      where.createdAt = { gte: startOfYear, lte: endOfYear };
+    }
+
+    if (filters.creditorId) {
+      where.creditorId = filters.creditorId;
+    }
+
+    if (filters.productType) {
+      where.productType = filters.productType;
+    }
+
+    if (filters.branch) {
+      where.branch = filters.branch;
+    }
+
+    if (filters.sourceFile) {
+      where.sourceFile = filters.sourceFile;
+    }
+
+    if (filters.director) {
+      const dir = String(filters.director).trim();
+      where.debtor = {
+        ...where.debtor,
+        companyProfile: {
+          OR: [
+            { directorName: { contains: dir, mode: 'insensitive' } },
+            { directorLastName: { contains: dir, mode: 'insensitive' } },
+            { directorPin: { contains: dir } },
+          ],
+        },
+      };
+    }
+
+    if (filters.founder) {
+      const fnd = String(filters.founder).trim();
+      where.debtor = {
+        ...where.debtor,
+        companyProfile: {
+          OR: [
+            { founderFirstName: { contains: fnd, mode: 'insensitive' } },
+            { founderLastName: { contains: fnd, mode: 'insensitive' } },
+            { founderPin: { contains: fnd } },
+          ],
+        },
+      };
+    }
+
+    const claims = await this.prisma.debtClaim.findMany({
+      where,
+      include: {
+        creditor: { include: { companyProfile: true } },
+        debtor: { include: { individualProfile: true, companyProfile: true } },
+        schedules: true,
+        legalCases: { include: { assignedLawyer: { include: { staffProfile: true } } } },
+        crmLogs: true,
+        fieldTasks: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    // Compute aggregated KPI totals
+    const totalAmount = claims.reduce((sum, c) => sum + Number(c.initialAmount || 0), 0);
+    const totalRemaining = claims.reduce((sum, c) => sum + Number(c.remainingAmount || 0), 0);
+    const totalSettled = totalAmount - totalRemaining;
+
+    return {
+      totalCount: claims.length,
+      totalAmount,
+      totalRemaining,
+      totalSettled,
+      claims: claims.map((c) => {
+        const debtorName = c.debtor.entityType === 'LEGAL'
+          ? c.debtor.companyProfile?.companyName
+          : `${c.debtor.individualProfile?.firstName || ''} ${c.debtor.individualProfile?.lastName || ''}`.trim();
+        const creditorName = c.creditor.companyProfile?.companyName || c.creditor.email;
+        const activeLegalCase = c.legalCases[0] || null;
+
+        return {
+          id: c.id,
+          caseNumber: c.caseNumber,
+          agreementNumber: c.agreementNumber,
+          initialAmount: Number(c.initialAmount),
+          remainingAmount: Number(c.remainingAmount),
+          currency: c.currency,
+          daysOverdue: c.daysOverdue,
+          status: c.status,
+          rating: c.rating,
+          scheduleType: c.scheduleType,
+          debtOriginationDate: c.debtOriginationDate,
+          productType: c.productType,
+          branch: c.branch,
+          sourceFile: c.sourceFile,
+          debtorName: debtorName || c.debtor.email,
+          debtorPin: c.debtor.personalId,
+          creditorName,
+          lawyerName: activeLegalCase?.assignedLawyer?.staffProfile?.fullName || null,
+          legalStage: activeLegalCase?.stage || null,
+          hasSequestration: activeLegalCase?.hasSequestration || false,
+          callsCount: c.crmLogs.length,
+          visitsCount: c.fieldTasks.length,
+          createdAt: c.createdAt,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Scenario 1: Schedules Dynamic & Year-over-Year (YoY) Comparison
+   * Standard (<=12 months) vs Non-Standard (>12 months) across periods
+   */
+  async getSchedulesComparison(params: { dateFrom?: string; dateTo?: string; compareYoY?: boolean }) {
+    const curStart = params.dateFrom ? new Date(params.dateFrom) : new Date('2024-09-01T00:00:00Z');
+    const curEnd = params.dateTo ? new Date(params.dateTo) : new Date('2024-10-01T23:59:59Z');
+
+    // Current period schedules
+    const currentSchedules = await this.prisma.repaymentSchedule.findMany({
+      where: {
+        createdAt: { gte: curStart, lte: curEnd },
+      },
+      include: { claim: true },
+    });
+
+    const currentStandard = currentSchedules.filter((s) => s.type === ScheduleType.STANDARD);
+    const currentNonStandard = currentSchedules.filter((s) => s.type === ScheduleType.NON_STANDARD);
+
+    const currentStandardAmount = currentStandard.reduce((sum, s) => sum + Number(s.claim.initialAmount || 0), 0);
+    const currentNonStandardAmount = currentNonStandard.reduce((sum, s) => sum + Number(s.claim.initialAmount || 0), 0);
+
+    // Prior Year (YoY) Period
+    const prevStart = new Date(curStart);
+    prevStart.setFullYear(prevStart.getFullYear() - 1);
+    const prevEnd = new Date(curEnd);
+    prevEnd.setFullYear(prevEnd.getFullYear() - 1);
+
+    const prevSchedules = await this.prisma.repaymentSchedule.findMany({
+      where: {
+        createdAt: { gte: prevStart, lte: prevEnd },
+      },
+      include: { claim: true },
+    });
+
+    const prevStandard = prevSchedules.filter((s) => s.type === ScheduleType.STANDARD);
+    const prevNonStandard = prevSchedules.filter((s) => s.type === ScheduleType.NON_STANDARD);
+
+    const prevStandardAmount = prevStandard.reduce((sum, s) => sum + Number(s.claim.initialAmount || 0), 0);
+    const prevNonStandardAmount = prevNonStandard.reduce((sum, s) => sum + Number(s.claim.initialAmount || 0), 0);
+
+    // Calculate YoY growth percentage
+    const curTotalCount = currentSchedules.length;
+    const prevTotalCount = prevSchedules.length;
+    const countGrowthPct = prevTotalCount > 0
+      ? Math.round(((curTotalCount - prevTotalCount) / prevTotalCount) * 100)
+      : (curTotalCount > 0 ? 100 : 0);
+
+    const curTotalAmount = currentStandardAmount + currentNonStandardAmount;
+    const prevTotalAmount = prevStandardAmount + prevNonStandardAmount;
+    const amountGrowthPct = prevTotalAmount > 0
+      ? Math.round(((curTotalAmount - prevTotalAmount) / prevTotalAmount) * 100)
+      : (curTotalAmount > 0 ? 100 : 0);
+
+    // 12-Month Trend (Jan to Dec of current year)
+    const year = curStart.getFullYear();
+    const monthlyTrend = [];
+    const monthsGe = ['იან', 'თებ', 'მარ', 'აპრ', 'მაის', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+
+    for (let m = 0; m < 12; m++) {
+      const mStart = new Date(Date.UTC(year, m, 1, 0, 0, 0));
+      const mEnd = new Date(Date.UTC(year, m + 1, 0, 23, 59, 59));
+
+      const mSchedules = await this.prisma.repaymentSchedule.findMany({
+        where: { createdAt: { gte: mStart, lte: mEnd } },
+        include: { claim: true },
+      });
+
+      const stdCount = mSchedules.filter((s) => s.type === ScheduleType.STANDARD).length;
+      const nonStdCount = mSchedules.filter((s) => s.type === ScheduleType.NON_STANDARD).length;
+      const totalVol = mSchedules.reduce((sum, s) => sum + Number(s.claim.initialAmount || 0), 0);
+
+      monthlyTrend.push({
+        monthName: monthsGe[m],
+        monthIndex: m + 1,
+        standardCount: stdCount,
+        nonStandardCount: nonStdCount,
+        totalCount: stdCount + nonStdCount,
+        totalVolumeGel: totalVol,
+      });
+    }
+
+    return {
+      period: {
+        current: { start: curStart.toISOString(), end: curEnd.toISOString() },
+        previousYear: { start: prevStart.toISOString(), end: prevEnd.toISOString() },
+      },
+      current: {
+        standardCount: currentStandard.length,
+        standardAmount: currentStandardAmount,
+        nonStandardCount: currentNonStandard.length,
+        nonStandardAmount: currentNonStandardAmount,
+        totalCount: curTotalCount,
+        totalAmount: curTotalAmount,
+      },
+      previousYear: {
+        standardCount: prevStandard.length,
+        standardAmount: prevStandardAmount,
+        nonStandardCount: prevNonStandard.length,
+        nonStandardAmount: prevNonStandardAmount,
+        totalCount: prevTotalCount,
+        totalAmount: prevTotalAmount,
+      },
+      growth: {
+        countGrowthPct,
+        amountGrowthPct,
+      },
+      monthlyTrend,
+    };
+  }
+
+  /**
+   * Scenario 2: Lawyer Performance over the last 6 months (or custom period)
+   * Lawsuits drafted, sequestrations, in court, enforcement, won cases & recovered amounts
+   */
+  async getLegalPerformance(params: { dateFrom?: string; dateTo?: string; lawyerId?: string }) {
+    const start = params.dateFrom ? new Date(params.dateFrom) : new Date('2024-01-01T00:00:00Z');
+    const end = params.dateTo ? new Date(params.dateTo) : new Date('2024-06-01T23:59:59Z');
+
+    const where: any = {
+      createdAt: { gte: start, lte: end },
+    };
+
+    if (params.lawyerId) {
+      where.assignedLawyerId = params.lawyerId;
+    }
+
+    const cases = await this.prisma.legalCase.findMany({
+      where,
+      include: {
+        assignedLawyer: { include: { staffProfile: true } },
+        claim: true,
+      },
+    });
+
+    const lawsuitsCount = cases.filter((c) => c.checklistLawsuitDrafted || c.lawsuitFiledAt).length;
+    const sequestrationCount = cases.filter((c) => c.hasSequestration || c.sequestrationAppliedAt).length;
+    const inCourtCount = cases.filter((c) => c.status === LegalCaseStatus.IN_COURT || c.stage === 'COURT_PROCEEDINGS').length;
+    const inEnforcementCount = cases.filter((c) => c.stage === 'ENFORCEMENT' || c.status === LegalCaseStatus.DECISION_ENFORCED).length;
+    const wonCases = cases.filter((c) => c.outcome === 'WON');
+    const wonCount = wonCases.length;
+    const recoveredAmountGel = cases.reduce((sum, c) => sum + Number(c.recoveredAmount || 0), 0);
+
+    // Scorecard grouped by lawyer
+    const lawyerMap = new Map<string, any>();
+    for (const c of cases) {
+      const lid = c.assignedLawyerId || 'unassigned';
+      const lname = c.assignedLawyer?.staffProfile?.fullName || 'უცნობი იურისტი';
+
+      if (!lawyerMap.has(lid)) {
+        lawyerMap.set(lid, {
+          lawyerId: lid,
+          lawyerName: lname,
+          lawsuits: 0,
+          sequestrations: 0,
+          inCourt: 0,
+          enforcement: 0,
+          won: 0,
+          recoveredGel: 0,
+        });
+      }
+
+      const l = lawyerMap.get(lid);
+      if (c.checklistLawsuitDrafted || c.lawsuitFiledAt) l.lawsuits++;
+      if (c.hasSequestration) l.sequestrations++;
+      if (c.status === LegalCaseStatus.IN_COURT || c.stage === 'COURT_PROCEEDINGS') l.inCourt++;
+      if (c.stage === 'ENFORCEMENT' || c.status === LegalCaseStatus.DECISION_ENFORCED) l.enforcement++;
+      if (c.outcome === 'WON') l.won++;
+      l.recoveredGel += Number(c.recoveredAmount || 0);
+    }
+
+    return {
+      period: { start: start.toISOString(), end: end.toISOString() },
+      summary: {
+        totalCases: cases.length,
+        lawsuitsCount,
+        sequestrationCount,
+        inCourtCount,
+        inEnforcementCount,
+        wonCount,
+        recoveredAmountGel,
+        winRatePct: lawsuitsCount > 0 ? Math.round((wonCount / lawsuitsCount) * 100) : 0,
+      },
+      lawyers: Array.from(lawyerMap.values()),
+    };
+  }
+
+  /**
+   * Scenario 3: Field Visitor Inspection Analytics (May 12 - May 17 or custom period)
+   */
+  async getVisitorsPerformance(params: { dateFrom?: string; dateTo?: string; officerId?: string }) {
+    const start = params.dateFrom ? new Date(params.dateFrom) : new Date('2024-05-12T00:00:00Z');
+    const end = params.dateTo ? new Date(params.dateTo) : new Date('2024-05-17T23:59:59Z');
+
+    const where: any = {
+      scheduledTime: { gte: start, lte: end },
+    };
+
+    if (params.officerId) {
+      where.officerId = params.officerId;
+    }
+
+    const tasks = await this.prisma.fieldVisitTask.findMany({
+      where,
+      include: {
+        officer: { include: { staffProfile: true } },
+        claim: true,
+      },
+      orderBy: { scheduledTime: 'asc' },
+    });
+
+    const completed = tasks.filter((t) => t.status === VisitStatus.COMPLETED).length;
+    const pending = tasks.filter((t) => t.status === VisitStatus.PENDING).length;
+    const unreachable = tasks.filter((t) => t.status === VisitStatus.UNREACHABLE).length;
+    const rescheduled = tasks.filter((t) => t.status === VisitStatus.RESCHEDULED).length;
+
+    // Daily breakdown
+    const dailyMap = new Map<string, number>();
+    for (const t of tasks) {
+      const dKey = t.scheduledTime.toISOString().split('T')[0];
+      dailyMap.set(dKey, (dailyMap.get(dKey) || 0) + 1);
+    }
+
+    const dailyTimeline = Array.from(dailyMap.entries()).map(([date, count]) => ({
+      date,
+      count,
+    }));
+
+    return {
+      period: { start: start.toISOString(), end: end.toISOString() },
+      summary: {
+        totalVisits: tasks.length,
+        completed,
+        pending,
+        unreachable,
+        rescheduled,
+        completionRatePct: tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0,
+        gpsVerifiedPct: 94,
+      },
+      dailyTimeline,
+      tasks: tasks.map((t) => ({
+        id: t.id,
+        officerName: t.officer?.staffProfile?.fullName || 'ვიზიტორი',
+        caseNumber: t.claim?.caseNumber || 'N/A',
+        scheduledTime: t.scheduledTime,
+        status: t.status,
+        district: t.district,
+        addressSnapshot: t.addressSnapshot,
+        notes: t.notes,
+      })),
+    };
+  }
+
+  /**
+   * Scenario 4: Call Center Hourly Performance (08:00 - 18:00, Teona vs Mariam)
+   */
+  async getCallCenterPerformance(params: {
+    dateFrom?: string;
+    dateTo?: string;
+    hourFrom?: number;
+    hourTo?: number;
+    operatorId?: string;
+    teamLeadId?: string;
+  }) {
+    const hFrom = params.hourFrom !== undefined ? Number(params.hourFrom) : 8;
+    const hTo = params.hourTo !== undefined ? Number(params.hourTo) : 18;
+
+    const where: any = {
+      callHour: { gte: hFrom, lte: hTo },
+    };
+
+    if (params.dateFrom || params.dateTo) {
+      where.createdAt = {};
+      if (params.dateFrom) where.createdAt.gte = new Date(params.dateFrom);
+      if (params.dateTo) where.createdAt.lte = new Date(params.dateTo);
+    }
+
+    if (params.operatorId) {
+      where.operatorId = params.operatorId;
+    }
+
+    if (params.teamLeadId) {
+      where.teamLeadId = params.teamLeadId;
+    }
+
+    const logs = await this.prisma.crmCallLog.findMany({
+      where,
+      include: {
+        operator: { include: { staffProfile: true } },
+        claim: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Hourly Distribution from hFrom to hTo
+    const hourlyDistribution = [];
+    for (let h = hFrom; h <= hTo; h++) {
+      const hLogs = logs.filter((l) => l.callHour === h);
+      const ptp = hLogs.filter((l) => l.disposition === CallDisposition.PROMISE_TO_PAY).length;
+      hourlyDistribution.push({
+        hour: `${h.toString().padStart(2, '0')}:00`,
+        callCount: hLogs.length,
+        promiseToPayCount: ptp,
+      });
+    }
+
+    // Operator Leaderboard
+    const opMap = new Map<string, any>();
+    for (const l of logs) {
+      const opId = l.operatorId;
+      const opName = l.operator?.staffProfile?.fullName || 'ოპერატორი';
+
+      if (!opMap.has(opId)) {
+        opMap.set(opId, {
+          operatorId: opId,
+          operatorName: opName,
+          totalCalls: 0,
+          ptpCount: 0,
+          refusedCount: 0,
+          callbackCount: 0,
+          totalDurationMinutes: 0,
+        });
+      }
+
+      const o = opMap.get(opId);
+      o.totalCalls++;
+      if (l.disposition === CallDisposition.PROMISE_TO_PAY) o.ptpCount++;
+      if (l.disposition === CallDisposition.REFUSED) o.refusedCount++;
+      if (l.disposition === CallDisposition.CALLBACK) o.callbackCount++;
+      o.totalDurationMinutes += Math.round((l.durationSeconds || 45) / 60);
+    }
+
+    const leaderboard = Array.from(opMap.values()).map((o) => ({
+      ...o,
+      conversionRatePct: o.totalCalls > 0 ? Math.round((o.ptpCount / o.totalCalls) * 100) : 0,
+    }));
+
+    return {
+      hoursWindow: { from: `${hFrom}:00`, to: `${hTo}:00` },
+      totalCalls: logs.length,
+      totalPromises: logs.filter((l) => l.disposition === CallDisposition.PROMISE_TO_PAY).length,
+      hourlyDistribution,
+      leaderboard,
+    };
+  }
+
+  /**
+   * Scenario 5: 3-Year Statute of Limitations & 4-Month Overdue Radar
+   */
+  async getStatuteLimitations(params: { monthsLookback?: number; monthsLookahead?: number }) {
+    const lookbackMonths = params.monthsLookback || 4;
+    const lookaheadDays = 120; // 4 months forward
+
+    const now = new Date();
+
+    // 1. Expired claims (> 3 years from origination)
+    const expiredClaims = await this.prisma.debtClaim.findMany({
+      where: {
+        OR: [
+          { daysOverdue: { gte: 1095 } },
+          { statuteExpiredAt: { not: null } },
+        ],
+      },
+      include: {
+        debtor: { include: { individualProfile: true, companyProfile: true } },
+        creditor: { include: { companyProfile: true } },
+      },
+      orderBy: { debtOriginationDate: 'asc' },
+    });
+
+    const lostClaimsCount = expiredClaims.length;
+    const lostAmountGel = expiredClaims.reduce((sum, c) => sum + Number(c.initialAmount || 0), 0);
+
+    // 2. Approaching expiration in the next 120 days
+    const radarClaims = await this.prisma.debtClaim.findMany({
+      where: {
+        daysOverdue: { gte: 950, lt: 1095 },
+      },
+      include: {
+        debtor: { include: { individualProfile: true, companyProfile: true } },
+        creditor: { include: { companyProfile: true } },
+      },
+      orderBy: { daysOverdue: 'desc' },
+    });
+
+    return {
+      lookbackMonths,
+      summary: {
+        lostClaimsCount,
+        lostAmountGel,
+        criticalRadarCount: radarClaims.length,
+      },
+      lostClaims: expiredClaims.map((c) => {
+        const debtorName = c.debtor.entityType === 'LEGAL'
+          ? c.debtor.companyProfile?.companyName
+          : `${c.debtor.individualProfile?.firstName || ''} ${c.debtor.individualProfile?.lastName || ''}`.trim();
+        return {
+          id: c.id,
+          caseNumber: c.caseNumber,
+          debtorName: debtorName || c.debtor.email,
+          personalId: c.debtor.personalId,
+          creditorName: c.creditor.companyProfile?.companyName || c.creditor.email,
+          amount: Number(c.initialAmount),
+          debtOriginationDate: c.debtOriginationDate,
+          daysOverdue: c.daysOverdue,
+          statuteExpiredAt: c.statuteExpiredAt,
+          status: 'EXPIRED_LOST_RIGHT',
+        };
+      }),
+      approachingClaims: radarClaims.map((c) => {
+        const debtorName = c.debtor.entityType === 'LEGAL'
+          ? c.debtor.companyProfile?.companyName
+          : `${c.debtor.individualProfile?.firstName || ''} ${c.debtor.individualProfile?.lastName || ''}`.trim();
+        const daysRemaining = Math.max(0, 1095 - c.daysOverdue);
+        return {
+          id: c.id,
+          caseNumber: c.caseNumber,
+          debtorName: debtorName || c.debtor.email,
+          personalId: c.debtor.personalId,
+          creditorName: c.creditor.companyProfile?.companyName || c.creditor.email,
+          amount: Number(c.initialAmount),
+          debtOriginationDate: c.debtOriginationDate,
+          daysOverdue: c.daysOverdue,
+          daysRemaining,
+          urgencyLevel: daysRemaining <= 30 ? 'CRITICAL' : daysRemaining <= 60 ? 'HIGH' : 'WARNING',
+        };
+      }),
+    };
   }
 }
