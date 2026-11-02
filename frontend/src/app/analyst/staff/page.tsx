@@ -45,9 +45,11 @@ export default function StaffRegistryPage() {
   const [recComment, setRecComment] = useState('');
   const [isSubmittingRec, setIsSubmittingRec] = useState(false);
   const [recSuccessMessage, setRecSuccessMessage] = useState<string | null>(null);
+  const [recError, setRecError] = useState<string | null>(null);
 
   // Impersonation state
   const [isImpersonatingLoading, setIsImpersonatingLoading] = useState(false);
+  const [impersonationError, setImpersonationError] = useState<string | null>(null);
 
   // Load Staff Registry Data
   const loadRegistry = async () => {
@@ -122,10 +124,11 @@ export default function StaffRegistryPage() {
   const handleSubmitRecommendation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStaff || !recComment.trim()) {
-      alert('გთხოვთ შეიყვანოთ რეკომენდაციის ტექსტი');
+      setRecError('გთხოვთ შეიყვანოთ რეკომენდაციის ტექსტი');
       return;
     }
 
+    setRecError(null);
     setIsSubmittingRec(true);
     try {
       const res = await analystBackendService.addStaffRecommendation({
@@ -143,28 +146,30 @@ export default function StaffRegistryPage() {
       // Refresh registry
       await loadRegistry();
     } catch (err: any) {
-      alert(err?.message || 'რეკომენდაციის შენახვა ვერ მოხერხდა');
+      setRecError(err?.message || 'რეკომენდაციის შენახვა ვერ მოხერხდა');
     } finally {
       setIsSubmittingRec(false);
     }
   };
 
-  // Handle Impersonation
+  // Handle Impersonation (Direct instant switch without browser confirm/alert)
   const handleStartImpersonation = async () => {
     if (!selectedStaff) return;
-    const confirmMessage = `გსურთ სისტემაში შესვლა თანამშრომელ ${selectedStaff.fullName}-ს (${getRoleMeta(selectedStaff.role).title}) პროფილით?`;
-    if (!window.confirm(confirmMessage)) return;
-
+    setImpersonationError(null);
     setIsImpersonatingLoading(true);
+
     try {
       const res = await analystBackendService.impersonateStaff(selectedStaff.id);
       if (res && res.tokens && res.user) {
         authService.startImpersonation(res.user, res.tokens, '/analyst/staff');
         window.dispatchEvent(new Event('impersonation-changed'));
-        window.location.href = res.redirectUrl || authService.getPortalRouteForRole(selectedStaff.role);
+        const targetRoute = res.redirectUrl || authService.getPortalRouteForRole(selectedStaff.role);
+        window.location.href = targetRoute;
+      } else {
+        throw new Error('ავტორიზაციის პასუხი არასრულია');
       }
     } catch (err: any) {
-      alert(err?.message || 'თანამშრომლის რეჟიმში შესვლა ვერ მოხერხდა');
+      setImpersonationError(err?.message || 'თანამშრომლის რეჟიმში შესვლა ვერ მოხერხდა');
       setIsImpersonatingLoading(false);
     }
   };
@@ -486,6 +491,22 @@ export default function StaffRegistryPage() {
               <div className="space-y-6 animate-fadeIn">
                 {/* 1. Employee Header Card with Impersonation Action */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs relative overflow-hidden">
+                  {impersonationError && (
+                    <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-rose-600 text-base">error</span>
+                        <span>{impersonationError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setImpersonationError(null)}
+                        className="text-rose-600 hover:text-rose-800 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
                     <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary to-indigo-600 text-white font-bold text-xl flex items-center justify-center shadow-md">
@@ -739,9 +760,25 @@ export default function StaffRegistryPage() {
                   </div>
 
                   {recSuccessMessage && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
-                      <span className="material-symbols-outlined text-sm">check_circle</span>
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+                      <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
                       <span>{recSuccessMessage}</span>
+                    </div>
+                  )}
+
+                  {recError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center justify-between animate-fadeIn">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-sm text-rose-600">error</span>
+                        <span>{recError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setRecError(null)}
+                        className="text-rose-600 hover:text-rose-800 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-base">close</span>
+                      </button>
                     </div>
                   )}
 

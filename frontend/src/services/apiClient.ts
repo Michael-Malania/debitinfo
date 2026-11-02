@@ -17,6 +17,16 @@ export async function apiFetch<T>(endpoint: string, options?: RequestInit): Prom
     token = localStorage.getItem('debitinfo_access_token');
   }
 
+  const method = (options?.method || 'GET').toUpperCase();
+  const hasBody = options?.body !== undefined && options?.body !== null;
+  let finalBody = options?.body;
+
+  // Fastify throws 400/500 if Content-Type is application/json but body is empty.
+  // Supply an empty JSON object {} for POST/PUT/PATCH when no body was passed.
+  if (['POST', 'PUT', 'PATCH'].includes(method) && !hasBody) {
+    finalBody = JSON.stringify({});
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -27,6 +37,7 @@ export async function apiFetch<T>(endpoint: string, options?: RequestInit): Prom
     const res = await fetch(url, {
       credentials: 'include',
       ...options,
+      body: finalBody,
       headers,
     });
 

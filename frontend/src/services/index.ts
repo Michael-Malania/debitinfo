@@ -994,6 +994,7 @@ export const analystBackendService = {
   async impersonateStaff(userId: string): Promise<any> {
     return await apiFetch(`/api/v1/analyst/impersonate/${userId}`, {
       method: 'POST',
+      body: JSON.stringify({}),
     });
   },
 
