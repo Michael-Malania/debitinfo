@@ -123,7 +123,7 @@ export default function AnalystPage() {
   const loadAnalystData = async () => {
     setLoadingData(true);
     try {
-      const [u, d, c, staff, claims, workload, pendingDebtors] = await Promise.all([
+      const [uRes, dRes, cRes, staffRes, claimsRes, workloadRes, pendingRes] = await Promise.allSettled([
         analystBackendService.getUsers(),
         analystBackendService.getExcelDebtors(),
         analystBackendService.getExcelCreditors(),
@@ -132,6 +132,15 @@ export default function AnalystPage() {
         analystBackendService.getWorkloadStats(),
         analystBackendService.getPendingDebtors(),
       ]);
+
+      const u = uRes.status === 'fulfilled' ? uRes.value : [];
+      const d = dRes.status === 'fulfilled' ? dRes.value : [];
+      const c = cRes.status === 'fulfilled' ? cRes.value : [];
+      const staff = staffRes.status === 'fulfilled' ? staffRes.value : [];
+      const claims = claimsRes.status === 'fulfilled' ? claimsRes.value : [];
+      const workload = workloadRes.status === 'fulfilled' ? workloadRes.value : null;
+      const pendingDebtors = pendingRes.status === 'fulfilled' ? pendingRes.value : [];
+
       setUsers(u || []);
       setExcelDebtors(d || []);
       setExcelCreditors(c || []);
