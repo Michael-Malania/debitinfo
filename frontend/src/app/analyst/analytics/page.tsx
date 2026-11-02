@@ -62,6 +62,32 @@ export default function AnalystAnalyticsHub() {
   const [isFilterPanelExpanded, setIsFilterPanelExpanded] = useState(true);
 
   // -------------------------------------------------------------------------
+  // DYNAMIC TAB FILTERS (NO STATIC/HARDCODED DATES)
+  // -------------------------------------------------------------------------
+  const [schedDateFrom, setSchedDateFrom] = useState('2024-09-01');
+  const [schedDateTo, setSchedDateTo] = useState('2024-10-01');
+  const [loadingSched, setLoadingSched] = useState(false);
+
+  const [legalDateFrom, setLegalDateFrom] = useState('2024-01-01');
+  const [legalDateTo, setLegalDateTo] = useState('2024-06-01');
+  const [legalLawyerFilter, setLegalLawyerFilter] = useState('');
+  const [loadingLegal, setLoadingLegal] = useState(false);
+
+  const [visitorDateFrom, setVisitorDateFrom] = useState('2024-05-12');
+  const [visitorDateTo, setVisitorDateTo] = useState('2024-05-17');
+  const [visitorOfficerFilter, setVisitorOfficerFilter] = useState('');
+  const [loadingVisitor, setLoadingVisitor] = useState(false);
+
+  const [callHourFrom, setCallHourFrom] = useState('8');
+  const [callHourTo, setCallHourTo] = useState('18');
+  const [callOperatorFilter, setCallOperatorFilter] = useState('');
+  const [loadingCalls, setLoadingCalls] = useState(false);
+
+  const [statuteLookback, setStatuteLookback] = useState('4');
+  const [statuteLookahead, setStatuteLookahead] = useState('4');
+  const [loadingStatute, setLoadingStatute] = useState(false);
+
+  // -------------------------------------------------------------------------
   // DATA STATES FOR THE 5 SCENARIOS
   // -------------------------------------------------------------------------
   const [schedulesData, setSchedulesData] = useState<any>(null);
@@ -80,28 +106,28 @@ export default function AnalystAnalyticsHub() {
       const [meta, sched, leg, vis, calls, stat, qResult] = await Promise.all([
         analystBackendService.getBiMetadata(),
         analystBackendService.getSchedulesComparison({
-          dateFrom: datePreset === 'sep_oct' ? '2024-09-01' : undefined,
-          dateTo: datePreset === 'sep_oct' ? '2024-10-01' : undefined,
+          dateFrom: schedDateFrom || undefined,
+          dateTo: schedDateTo || undefined,
           compareYoY: filterCompareYoY,
         }),
         analystBackendService.getLegalPerformance({
-          dateFrom: '2024-01-01',
-          dateTo: '2024-06-01',
-          lawyerId: filterLawyerId || undefined,
+          dateFrom: legalDateFrom || undefined,
+          dateTo: legalDateTo || undefined,
+          lawyerId: legalLawyerFilter || filterLawyerId || undefined,
         }),
         analystBackendService.getVisitorsPerformance({
-          dateFrom: '2024-05-12',
-          dateTo: '2024-05-17',
-          officerId: filterVisitorId || undefined,
+          dateFrom: visitorDateFrom || undefined,
+          dateTo: visitorDateTo || undefined,
+          officerId: visitorOfficerFilter || filterVisitorId || undefined,
         }),
         analystBackendService.getCallCenterPerformance({
-          hourFrom: Number(filterHourFrom) || 8,
-          hourTo: Number(filterHourTo) || 18,
-          operatorId: filterOperatorId || undefined,
+          hourFrom: Number(callHourFrom) || 8,
+          hourTo: Number(callHourTo) || 18,
+          operatorId: callOperatorFilter || filterOperatorId || undefined,
         }),
         analystBackendService.getStatuteLimitations({
-          monthsLookback: 4,
-          monthsLookahead: 4,
+          monthsLookback: Number(statuteLookback) || 4,
+          monthsLookahead: Number(statuteLookahead) || 4,
         }),
         analystBackendService.queryBi({
           name: filterName || undefined,
@@ -236,17 +262,83 @@ export default function AnalystAnalyticsHub() {
     loadAllAnalytics();
   };
 
-  // Quick Preset Actions
-  const handleSelectPreset = (preset: 'sep_oct' | 'last_6m' | 'may_week' | 'year') => {
-    setDatePreset(preset);
-    if (preset === 'sep_oct') {
-      setActiveTab('schedules');
-    } else if (preset === 'last_6m') {
-      setActiveTab('lawyers');
-    } else if (preset === 'may_week') {
-      setActiveTab('visitors');
-    } else if (preset === 'year') {
-      setActiveTab('schedules');
+  // Individual Tab Data Reload Functions
+  const handleReloadSchedules = async () => {
+    setLoadingSched(true);
+    try {
+      const data = await analystBackendService.getSchedulesComparison({
+        dateFrom: schedDateFrom || undefined,
+        dateTo: schedDateTo || undefined,
+        compareYoY: filterCompareYoY,
+      });
+      setSchedulesData(data);
+    } catch (err) {
+      console.error('Failed to reload schedules:', err);
+    } finally {
+      setLoadingSched(false);
+    }
+  };
+
+  const handleReloadLegal = async () => {
+    setLoadingLegal(true);
+    try {
+      const data = await analystBackendService.getLegalPerformance({
+        dateFrom: legalDateFrom || undefined,
+        dateTo: legalDateTo || undefined,
+        lawyerId: legalLawyerFilter || filterLawyerId || undefined,
+      });
+      setLegalData(data);
+    } catch (err) {
+      console.error('Failed to reload legal:', err);
+    } finally {
+      setLoadingLegal(false);
+    }
+  };
+
+  const handleReloadVisitors = async () => {
+    setLoadingVisitor(true);
+    try {
+      const data = await analystBackendService.getVisitorsPerformance({
+        dateFrom: visitorDateFrom || undefined,
+        dateTo: visitorDateTo || undefined,
+        officerId: visitorOfficerFilter || filterVisitorId || undefined,
+      });
+      setVisitorsData(data);
+    } catch (err) {
+      console.error('Failed to reload visitors:', err);
+    } finally {
+      setLoadingVisitor(false);
+    }
+  };
+
+  const handleReloadCalls = async () => {
+    setLoadingCalls(true);
+    try {
+      const data = await analystBackendService.getCallCenterPerformance({
+        hourFrom: Number(callHourFrom) || 8,
+        hourTo: Number(callHourTo) || 18,
+        operatorId: callOperatorFilter || filterOperatorId || undefined,
+      });
+      setCallCenterData(data);
+    } catch (err) {
+      console.error('Failed to reload calls:', err);
+    } finally {
+      setLoadingCalls(false);
+    }
+  };
+
+  const handleReloadStatute = async () => {
+    setLoadingStatute(true);
+    try {
+      const data = await analystBackendService.getStatuteLimitations({
+        monthsLookback: Number(statuteLookback) || 4,
+        monthsLookahead: Number(statuteLookahead) || 4,
+      });
+      setStatuteData(data);
+    } catch (err) {
+      console.error('Failed to reload statute:', err);
+    } finally {
+      setLoadingStatute(false);
     }
   };
 
@@ -375,39 +467,39 @@ export default function AnalystAnalyticsHub() {
               </p>
             </div>
 
-            {/* Quick Scenario Buttons (Directly answering user's handwritten business questions) */}
+            {/* Quick Scenario Navigation Buttons (Dynamic Views) */}
             <div className="flex flex-wrap gap-2.5">
               <button
                 type="button"
-                onClick={() => handleSelectPreset('sep_oct')}
+                onClick={() => setActiveTab('schedules')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                   activeTab === 'schedules' ? 'bg-white text-blue-900 shadow-md ring-2 ring-white/50' : 'bg-white/10 hover:bg-white/20 text-white'
                 }`}
               >
                 <span className="material-symbols-outlined text-[17px]">calendar_month</span>
-                <span>1 სექტ – 1 ოქტ (YoY გრაფიკები)</span>
+                <span>📊 გრაფიკების დინამიკა &amp; YoY შედარება</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSelectPreset('last_6m')}
+                onClick={() => setActiveTab('lawyers')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                   activeTab === 'lawyers' ? 'bg-white text-blue-900 shadow-md ring-2 ring-white/50' : 'bg-white/10 hover:bg-white/20 text-white'
                 }`}
               >
                 <span className="material-symbols-outlined text-[17px]">gavel</span>
-                <span>იურისტის 6 თვის შედეგები</span>
+                <span>⚖️ იურისტთა შედეგიანობა &amp; სასამართლო</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSelectPreset('may_week')}
+                onClick={() => setActiveTab('visitors')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                   activeTab === 'visitors' ? 'bg-white text-blue-900 shadow-md ring-2 ring-white/50' : 'bg-white/10 hover:bg-white/20 text-white'
                 }`}
               >
                 <span className="material-symbols-outlined text-[17px]">directions_walk</span>
-                <span>ვიზიტორი (12 მაისი – 17 მაისი)</span>
+                <span>🚶 საველე ვიზიტორთა ანალიტიკა</span>
               </button>
 
               <button
@@ -418,7 +510,7 @@ export default function AnalystAnalyticsHub() {
                 }`}
               >
                 <span className="material-symbols-outlined text-[17px]">call</span>
-                <span>ზარები (08:00 – 18:00 ცვლა)</span>
+                <span>📞 ქოლ-ცენტრი &amp; საათობრივი მონიტორინგი</span>
               </button>
 
               <button
@@ -429,7 +521,7 @@ export default function AnalystAnalyticsHub() {
                 }`}
               >
                 <span className="material-symbols-outlined text-[17px]">warning</span>
-                <span>3-წლიანი ხანდაზმულობის რადარი</span>
+                <span>⚠️ 3-წლიანი ხანდაზმულობის რადარი</span>
               </button>
             </div>
           </div>
@@ -930,7 +1022,7 @@ export default function AnalystAnalyticsHub() {
               }`}
             >
               <span className="material-symbols-outlined text-[18px]">calendar_month</span>
-              <span>1. გრაფიკების დინამიკა &amp; YoY ზრდა</span>
+              <span>1. გრაფიკების დინამიკა &amp; YoY შედარება</span>
             </button>
 
             <button
@@ -942,7 +1034,7 @@ export default function AnalystAnalyticsHub() {
               }`}
             >
               <span className="material-symbols-outlined text-[18px]">gavel</span>
-              <span>2. იურისტების მიღწევები &amp; სასამართლო</span>
+              <span>2. იურისტების შედეგიანობა &amp; სასამართლო</span>
             </button>
 
             <button
@@ -954,7 +1046,7 @@ export default function AnalystAnalyticsHub() {
               }`}
             >
               <span className="material-symbols-outlined text-[18px]">directions_walk</span>
-              <span>3. საველე ვიზიტორები (კვირის ჭრილი)</span>
+              <span>3. საველე ვიზიტორთა ანალიტიკა</span>
             </button>
 
             <button
@@ -966,7 +1058,7 @@ export default function AnalystAnalyticsHub() {
               }`}
             >
               <span className="material-symbols-outlined text-[18px]">call</span>
-              <span>4. ქოლ-ცენტრი (08:00–18:00 &amp; თეონა)</span>
+              <span>4. ქოლ-ცენტრი &amp; საათობრივი მონიტორინგი</span>
             </button>
 
             <button
@@ -1002,6 +1094,52 @@ export default function AnalystAnalyticsHub() {
         {/* 5. TAB 1: SCHEDULES DYNAMICS & YoY COMPARISON */}
         {activeTab === 'schedules' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Dynamic Filter Bar */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-xl">tune</span>
+                <span className="text-xs font-bold text-slate-800">გრაფიკების პერიოდის დინამიური ფილტრი:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">დან:</span>
+                  <input
+                    type="date"
+                    value={schedDateFrom}
+                    onChange={(e) => setSchedDateFrom(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">მდე:</span>
+                  <input
+                    type="date"
+                    value={schedDateTo}
+                    onChange={(e) => setSchedDateTo(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer font-medium">
+                  <input
+                    type="checkbox"
+                    checked={filterCompareYoY}
+                    onChange={(e) => setFilterCompareYoY(e.target.checked)}
+                    className="rounded text-primary focus:ring-primary"
+                  />
+                  <span>YoY შედარება</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleReloadSchedules}
+                  disabled={loadingSched}
+                  className="px-3.5 py-1.5 rounded-lg bg-primary hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">{loadingSched ? 'sync' : 'refresh'}</span>
+                  <span>{loadingSched ? 'იტვირთება...' : 'მონაცემების განახლება'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* KPI Cards Row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
@@ -1014,7 +1152,7 @@ export default function AnalystAnalyticsHub() {
                     {Number(schedulesData?.current?.standardAmount || 0).toLocaleString()} ₾
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400 mt-2 block">1 სექტემბერი – 1 ოქტომბერი, 2024</span>
+                <span className="text-[11px] text-slate-400 mt-2 block">{schedDateFrom} – {schedDateTo}</span>
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
@@ -1031,7 +1169,7 @@ export default function AnalystAnalyticsHub() {
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                <span className="text-xs font-semibold text-slate-500 block mb-1">წინა წლის იგივე პერიოდი (2023)</span>
+                <span className="text-xs font-semibold text-slate-500 block mb-1">წინა წლის იგივე პერიოდი</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-bold text-slate-600 font-mono">
                     {schedulesData?.previousYear?.totalCount || 0} საქმე
@@ -1040,7 +1178,7 @@ export default function AnalystAnalyticsHub() {
                     {Number(schedulesData?.previousYear?.totalAmount || 0).toLocaleString()} ₾
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400 mt-2 block">1 სექტემბერი – 1 ოქტომბერი, 2023</span>
+                <span className="text-[11px] text-slate-400 mt-2 block">წინა წლის ანალოგიური ინტერვალი</span>
               </div>
 
               <div className="bg-gradient-to-br from-emerald-500 to-teal-700 text-white rounded-xl p-5 shadow-sm">
@@ -1109,9 +1247,56 @@ export default function AnalystAnalyticsHub() {
           </div>
         )}
 
-        {/* 6. TAB 2: LAWYER PERFORMANCE (JAN 1 - JUN 1 / 6 MONTHS) */}
+        {/* 6. TAB 2: LAWYER PERFORMANCE */}
         {activeTab === 'lawyers' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Dynamic Filter Bar */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-indigo-600 text-xl">gavel</span>
+                <span className="text-xs font-bold text-slate-800">იურისტთა შედეგების დინამიური ფილტრი:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">დან:</span>
+                  <input
+                    type="date"
+                    value={legalDateFrom}
+                    onChange={(e) => setLegalDateFrom(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">მდე:</span>
+                  <input
+                    type="date"
+                    value={legalDateTo}
+                    onChange={(e) => setLegalDateTo(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <select
+                  value={legalLawyerFilter}
+                  onChange={(e) => setLegalLawyerFilter(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                >
+                  <option value="">ყველა იურისტი</option>
+                  {metadata.lawyers?.map((l: any) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleReloadLegal}
+                  disabled={loadingLegal}
+                  className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">{loadingLegal ? 'sync' : 'refresh'}</span>
+                  <span>{loadingLegal ? 'იტვირთება...' : 'შედეგების განახლება'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* KPI Row */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
               <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs">
@@ -1153,7 +1338,7 @@ export default function AnalystAnalyticsHub() {
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-slate-800">
-                    იურისტთა შედარებითი შედეგები (1 იანვარი – 1 ივნისი / ბოლო 6 თვე)
+                    იურისტთა შედარებითი შედეგები ({legalDateFrom} – {legalDateTo})
                   </h3>
                   <p className="text-xs text-slate-500">ინდივიდუალური KPI, სარჩელები, ყადაღები და ამოღებული მოცულობები</p>
                 </div>
@@ -1198,13 +1383,60 @@ export default function AnalystAnalyticsHub() {
           </div>
         )}
 
-        {/* 7. TAB 3: FIELD VISITOR PERFORMANCE (MAY 12 - MAY 17) */}
+        {/* 7. TAB 3: FIELD VISITOR PERFORMANCE */}
         {activeTab === 'visitors' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Dynamic Filter Bar */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-emerald-600 text-xl">directions_walk</span>
+                <span className="text-xs font-bold text-slate-800">საველე ვიზიტების დინამიური პერიოდი:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">დან:</span>
+                  <input
+                    type="date"
+                    value={visitorDateFrom}
+                    onChange={(e) => setVisitorDateFrom(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">მდე:</span>
+                  <input
+                    type="date"
+                    value={visitorDateTo}
+                    onChange={(e) => setVisitorDateTo(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                  />
+                </div>
+                <select
+                  value={visitorOfficerFilter}
+                  onChange={(e) => setVisitorOfficerFilter(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                >
+                  <option value="">ყველა ვიზიტორი</option>
+                  {metadata.visitors?.map((v: any) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleReloadVisitors}
+                  disabled={loadingVisitor}
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">{loadingVisitor ? 'sync' : 'refresh'}</span>
+                  <span>{loadingVisitor ? 'იტვირთება...' : 'ვიზიტების განახლება'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* KPI Row */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
-                <span className="text-xs font-semibold text-slate-500 block mb-1">სულ ვიზიტები (12–17 მაისი)</span>
+                <span className="text-xs font-semibold text-slate-500 block mb-1">სულ ვიზიტები ({visitorDateFrom} – {visitorDateTo})</span>
                 <span className="text-2xl font-bold font-mono text-slate-900">{visitorsData?.summary?.totalVisits || 0}</span>
                 <span className="text-[11px] text-slate-400 block mt-1">დაგეგმილი ინსპექტირება</span>
               </div>
@@ -1230,7 +1462,7 @@ export default function AnalystAnalyticsHub() {
             {/* Daily Visit Distribution */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
               <h3 className="text-sm font-bold text-slate-800 mb-4">
-                დღიური ვიზიტები კვირის განმავლობაში (12 მაისიდან 17 მაისის ჩათვლით)
+                დღიური ვიზიტები არჩეული პერიოდის განმავლობაში ({visitorDateFrom} – {visitorDateTo})
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                 {visitorsData?.dailyTimeline?.map((d: any, idx: number) => (
@@ -1281,15 +1513,66 @@ export default function AnalystAnalyticsHub() {
           </div>
         )}
 
-        {/* 8. TAB 4: CALL CENTER & TEONA (08:00 - 18:00) */}
+        {/* 8. TAB 4: CALL CENTER & HOURLY MONITORING */}
         {activeTab === 'calls' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Dynamic Filter Bar */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600 text-xl">call</span>
+                <span className="text-xs font-bold text-slate-800">ქოლ-ცენტრის საათობრივი &amp; ოპერატორის ფილტრი:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">საათი დან:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={callHourFrom}
+                    onChange={(e) => setCallHourFrom(e.target.value)}
+                    className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary font-mono font-bold"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">საათი მდე:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={callHourTo}
+                    onChange={(e) => setCallHourTo(e.target.value)}
+                    className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary font-mono font-bold"
+                  />
+                </div>
+                <select
+                  value={callOperatorFilter}
+                  onChange={(e) => setCallOperatorFilter(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary"
+                >
+                  <option value="">ყველა ოპერატორი</option>
+                  {metadata.operators?.map((op: any) => (
+                    <option key={op.id} value={op.id}>{op.name}</option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleReloadCalls}
+                  disabled={loadingCalls}
+                  className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">{loadingCalls ? 'sync' : 'refresh'}</span>
+                  <span>{loadingCalls ? 'იტვირთება...' : 'ზარების განახლება'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* KPI Row */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
                 <span className="text-xs font-semibold text-slate-500 block mb-1">სულ გამოსული ზარები</span>
                 <span className="text-2xl font-bold font-mono text-blue-700">{callCenterData?.totalCalls || 0}</span>
-                <span className="text-[11px] text-slate-400 block mt-1">08:00-დან 18:00-მდე შუალედი</span>
+                <span className="text-[11px] text-slate-400 block mt-1">{callHourFrom}:00-დან {callHourTo}:00-მდე შუალედი</span>
               </div>
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
                 <span className="text-xs font-semibold text-slate-500 block mb-1">გადახდის დაპირება (PTP)</span>
@@ -1308,16 +1591,16 @@ export default function AnalystAnalyticsHub() {
               <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
                 <span className="text-xs font-semibold text-slate-500 block mb-1">სამუშაო ცვლის ინტერვალი</span>
                 <span className="text-2xl font-bold font-mono text-slate-800">
-                  {callCenterData?.hoursWindow?.from} — {callCenterData?.hoursWindow?.to}
+                  {callHourFrom}:00 — {callHourTo}:00
                 </span>
                 <span className="text-[11px] text-slate-400 block mt-1">აქტიური სატელეფონო საათები</span>
               </div>
             </div>
 
-            {/* Hourly Distribution Grid (08:00 - 18:00) */}
+            {/* Hourly Distribution Grid */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
               <h3 className="text-sm font-bold text-slate-800 mb-2">
-                ზარების საათობრივი განაწილება დილის 08:00-დან საღამოს 18:00-მდე
+                ზარების საათობრივი განაწილება {callHourFrom}:00-დან {callHourTo}:00-მდე
               </h3>
               <p className="text-xs text-slate-500 mb-6">
                 აჩვენებს დატვირთვის პიკურ საათებს და გადახდის დაპირებების (PTP) ეფექტურობას
@@ -1376,9 +1659,50 @@ export default function AnalystAnalyticsHub() {
           </div>
         )}
 
-        {/* 9. TAB 5: 3-YEAR STATUTE OF LIMITATIONS & 4-MONTH OVERDUE RADAR */}
+        {/* 9. TAB 5: 3-YEAR STATUTE OF LIMITATIONS & OVERDUE RADAR */}
         {activeTab === 'statute' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* Dynamic Filter Bar */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-rose-600 text-xl">alarm_on</span>
+                <span className="text-xs font-bold text-slate-800">ხანდაზმულობის რადარის დიაპაზონი:</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">გასული თვეები:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={statuteLookback}
+                    onChange={(e) => setStatuteLookback(e.target.value)}
+                    className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary font-mono font-bold"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500 font-medium">მომავალი თვეები:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={statuteLookahead}
+                    onChange={(e) => setStatuteLookahead(e.target.value)}
+                    className="w-16 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-800 bg-slate-50 focus:bg-white focus:outline-none focus:border-primary font-mono font-bold"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleReloadStatute}
+                  disabled={loadingStatute}
+                  className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-sm">{loadingStatute ? 'sync' : 'refresh'}</span>
+                  <span>{loadingStatute ? 'იტვირთება...' : 'რადარის განახლება'}</span>
+                </button>
+              </div>
+            </div>
+
             {/* Top Critical Alert Banner */}
             <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-6 text-rose-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start gap-4">
@@ -1403,13 +1727,13 @@ export default function AnalystAnalyticsHub() {
               </div>
             </div>
 
-            {/* Expired Claims Table (Lost Right of Claim in the Last 4 Months) */}
+            {/* Expired Claims Table */}
             <div className="bg-white rounded-2xl border border-rose-200 overflow-hidden shadow-xs">
               <div className="p-4 bg-rose-100/40 border-b border-rose-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-rose-700 text-lg">cancel</span>
                   <h4 className="text-sm font-bold text-rose-950">
-                    ბოლო 4 თვის განმავლობაში ხანდაზმულობაგასული საქმეები (3 წელი გასულია)
+                    ბოლო {statuteLookback} თვის განმავლობაში ხანდაზმულობაგასული საქმეები (3 წელი გასულია)
                   </h4>
                 </div>
                 <span className="text-xs text-rose-700 font-bold">

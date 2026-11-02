@@ -3,6 +3,7 @@ import {
   ConflictException,
   UnauthorizedException,
   BadRequestException,
+  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -395,6 +396,58 @@ export class AuthService {
     }
 
     return this.sanitizeUser(user);
+  }
+
+  /**
+   * Impersonate User (for Analyst or Admin monitoring / audit)
+   */
+  async impersonateUser(targetUserId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      include: {
+        individualProfile: true,
+        companyProfile: true,
+        staffProfile: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('მომხმარებელი ვერ მოიძებნა');
+    }
+
+    const tokens = await this.generateTokens(user);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+    let redirectUrl = '/dashboard';
+    switch (user.role) {
+      case UserRole.LEGAL:
+        redirectUrl = '/legal';
+        break;
+      case UserRole.OPERATOR:
+        redirectUrl = '/crm';
+        break;
+      case UserRole.FIELD_OFFICER:
+        redirectUrl = '/field-officer';
+        break;
+      case UserRole.ACCOUNTANT:
+        redirectUrl = '/accountant';
+        break;
+      case UserRole.ANALYST:
+        redirectUrl = '/analyst';
+        break;
+      case UserRole.ADMIN:
+        redirectUrl = '/ops';
+        break;
+      default:
+        redirectUrl = '/dashboard';
+        break;
+    }
+
+    return {
+      user: this.sanitizeUser(user),
+      tokens,
+      redirectUrl,
+    };
   }
 
   // ---------------------------------------------------------------------------

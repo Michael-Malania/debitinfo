@@ -58,6 +58,7 @@ export class OpsService {
       UserRole.OPERATOR,
       UserRole.FIELD_OFFICER,
       UserRole.LEGAL,
+      UserRole.ACCOUNTANT,
     ];
 
     const users = await this.prisma.user.findMany({

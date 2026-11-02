@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import PortalSwitcher from '@/components/PortalSwitcher';
+import ImpersonationBanner from '@/components/ImpersonationBanner';
 
 export const metadata: Metadata = {
   title: 'Debitinfo.GE — დებიტორთა რეესტრი და საკრედიტო რისკების მართვა',
@@ -27,6 +28,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen flex flex-col bg-surface-bg text-text-primary antialiased" suppressHydrationWarning>
+        <ImpersonationBanner />
         <PortalSwitcher />
         <div className="flex-1 flex flex-col" suppressHydrationWarning>{children}</div>
       </body>

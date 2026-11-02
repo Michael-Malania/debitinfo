@@ -586,7 +586,70 @@ export const authService = {
       default:
         return '/dashboard';
     }
-  }
+  },
+
+  startImpersonation(
+    targetUser: AuthUser,
+    tokens: { accessToken: string; refreshToken: string },
+    returnUrl = '/analyst/staff',
+  ) {
+    if (typeof window !== 'undefined') {
+      const origUser = this.getCurrentUser();
+      const origToken = this.getToken();
+      const origRefresh = localStorage.getItem('debitinfo_refresh_token') || '';
+      localStorage.setItem(
+        'debitinfo_impersonation_original',
+        JSON.stringify({
+          user: origUser,
+          tokens: { accessToken: origToken, refreshToken: origRefresh },
+          returnUrl,
+          targetUser,
+        }),
+      );
+      this.saveSession(targetUser, tokens);
+    }
+  },
+
+  stopImpersonation(): string {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('debitinfo_impersonation_original');
+      if (stored) {
+        try {
+          const orig = JSON.parse(stored);
+          if (orig.user && orig.tokens) {
+            this.saveSession(orig.user, orig.tokens);
+          }
+          localStorage.removeItem('debitinfo_impersonation_original');
+          return orig.returnUrl || '/analyst/staff';
+        } catch (e) {
+          console.error('Error stopping impersonation:', e);
+        }
+      }
+    }
+    return '/analyst/staff';
+  },
+
+  isImpersonating(): boolean {
+    if (typeof window === 'undefined') return false;
+    return !!localStorage.getItem('debitinfo_impersonation_original');
+  },
+
+  getImpersonationInfo(): { isImpersonating: boolean; originalUser: any | null; targetUser: any | null; returnUrl: string } {
+    if (typeof window === 'undefined') return { isImpersonating: false, originalUser: null, targetUser: null, returnUrl: '/analyst/staff' };
+    const stored = localStorage.getItem('debitinfo_impersonation_original');
+    if (!stored) return { isImpersonating: false, originalUser: null, targetUser: null, returnUrl: '/analyst/staff' };
+    try {
+      const parsed = JSON.parse(stored);
+      return {
+        isImpersonating: true,
+        originalUser: parsed.user || null,
+        targetUser: parsed.targetUser || null,
+        returnUrl: parsed.returnUrl || '/analyst/staff',
+      };
+    } catch {
+      return { isImpersonating: false, originalUser: null, targetUser: null, returnUrl: '/analyst/staff' };
+    }
+  },
 };
 
 // ==========================================
@@ -909,6 +972,28 @@ export const analystBackendService = {
     if (params?.monthsLookback) qs.append('monthsLookback', String(params.monthsLookback));
     if (params?.monthsLookahead) qs.append('monthsLookahead', String(params.monthsLookahead));
     return await apiFetch(`/api/v1/analyst/bi/statute-limitations${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+
+  async getStaffRegistry(): Promise<any[]> {
+    return await apiFetch('/api/v1/analyst/staff-registry');
+  },
+
+  async addStaffRecommendation(data: {
+    staffUserId: string;
+    rating?: string;
+    title?: string;
+    comment: string;
+  }): Promise<any> {
+    return await apiFetch('/api/v1/analyst/staff-recommendation', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async impersonateStaff(userId: string): Promise<any> {
+    return await apiFetch(`/api/v1/analyst/impersonate/${userId}`, {
+      method: 'POST',
+    });
   },
 };
 

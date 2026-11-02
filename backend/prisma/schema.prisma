@@ -132,6 +132,8 @@ model User {
   assignedLegalCases LegalCase[]         @relation("LawyerLegalCases")
   timelineEvents     CaseTimelineEvent[] @relation("UserTimelineEvents")
   contactPersons     ContactPerson[]
+  staffRecommendations StaffRecommendation[] @relation("StaffReceivedRecommendations")
+  givenRecommendations StaffRecommendation[] @relation("AnalystGivenRecommendations")
 
   @@index([personalId])
   @@index([email])
@@ -659,5 +661,21 @@ model StagedRegistryItem {
   @@index([taxId])
   @@index([type])
   @@index([status])
+}
+
+model StaffRecommendation {
+  id          String   @id @default(uuid())
+  staffUserId String
+  staffUser   User     @relation("StaffReceivedRecommendations", fields: [staffUserId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User     @relation("AnalystGivenRecommendations", fields: [authorId], references: [id], onDelete: Cascade)
+  rating      String   @default("POSITIVE") // POSITIVE, NEUTRAL, WARNING, CRITICAL
+  title       String?
+  comment     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([staffUserId])
+  @@index([authorId])
 }
 

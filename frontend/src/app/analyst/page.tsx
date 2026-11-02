@@ -483,21 +483,32 @@ export default function AnalystPage() {
                 {excelCreditors.length}
               </span>
             </a>
-            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/crm">
+            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#portfolio-dispatch-section">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-purple-600">assignment</span>
-                <span>დავალებები &amp; CRM</span>
+                <span className="material-symbols-outlined text-[20px] text-indigo-600">send_time_extension</span>
+                <span>სამართავი პორტფელის განაწილება</span>
               </div>
-              <span className="material-symbols-outlined text-text-muted text-[16px]">open_in_new</span>
-            </Link>
-            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/ops">
+            </a>
+            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/analyst/staff">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-text-muted">groups</span>
-                <span>თანამშრომელთა გუნდი</span>
+                <span className="material-symbols-outlined text-[20px] text-emerald-600">badge</span>
+                <span>თანამშრომელთა რეესტრი</span>
               </div>
-              <span className="material-symbols-outlined text-text-muted text-[16px]">open_in_new</span>
+              <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-mono font-semibold">
+                HR
+              </span>
             </Link>
           </nav>
+          <div className="pt-3 px-1">
+            <button
+              type="button"
+              onClick={() => setIsRegistrationOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-primary hover:bg-[#0A37CA] text-white font-semibold text-xs shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
+            >
+              <span className="material-symbols-outlined text-[18px]">domain_add</span>
+              <span>+ კრედიტორის რეგისტრაცია</span>
+            </button>
+          </div>
         </div>
         {/* Quick Access Filters */}
         <div className="pt-2 border-t border-border-subtle">
@@ -565,32 +576,19 @@ export default function AnalystPage() {
     {/* MAIN CONTENT CANVAS */}
     {/* ========================================================================= */}
     <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 space-y-8 bg-surface-bg">
-      {/* Operational Header Row with Breadcrumb & Quick Actions */}
+      {/* Operational Header Row with Breadcrumb */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-border-subtle">
         <div>
           <div className="flex items-center gap-2 text-label-sm font-label-sm text-text-muted mb-1">
-            <span >პლატფორმა</span>
-            <span >/</span>
-            <span >ოპერაციული ცენტრი</span>
-            <span >/</span>
+            <span>პლატფორმა</span>
+            <span>/</span>
+            <span>ოპერაციული ცენტრი</span>
+            <span>/</span>
             <span className="text-primary font-medium">სამართავი პანელი</span>
           </div>
           <h1 className="text-headline-lg font-headline-lg text-text-primary tracking-tight font-bold">
             ფინანსური ანალიტიკოსის მთავარი დაფა
           </h1>
-          <p className="text-body-md font-body-md text-text-muted mt-0.5">
-            საქართველოს იურიდიულ პირთა დავალიანების მონიტორინგი, რისკ-შეფასება და დავალებების დისპეტჩერიზაცია
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-card border border-border-subtle text-text-primary hover:bg-slate-50 transition-colors text-body-md font-body-md shadow-sm">
-            <span className="material-symbols-outlined text-[18px] text-text-muted">download</span>
-            <span className="">ექსპორტი (XLSX)</span>
-          </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white transition-all shadow-md shadow-primary/20 hover:shadow-primary/30 active:scale-95 text-body-md font-body-md font-semibold cursor-pointer" onClick={() => setIsRegistrationOpen(true)}>
-            <span className="material-symbols-outlined text-[19px]">domain_add</span>
-            <span className="">+ კრედიტორის რეგისტრაცია</span>
-          </button>
         </div>
       </div>
       {/* ========================================================================= */}
@@ -1095,7 +1093,7 @@ export default function AnalystPage() {
       {/* ========================================================================= */}
       {/* 5. TASK DISPATCHER & PORTFOLIO ALLOCATION PANEL */}
       {/* ========================================================================= */}
-      <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm">
+      <section id="portfolio-dispatch-section" className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm scroll-mt-20">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-5 border-b border-border-subtle">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-primary">
@@ -1103,7 +1101,7 @@ export default function AnalystPage() {
             </div>
             <div>
               <h2 className="text-headline-sm font-headline-sm text-text-primary font-bold">
-                საქმის (პორტფელის) განაწილება
+                სამართავი პორტფელის განაწილება
               </h2>
               <p className="text-body-sm font-body-sm text-text-muted">
                 მიამაგრეთ საქმე პასუხისმგებელ თანამშრომელს (ოპერატორი, ველის შემმოწმებელი, იურისტი) და გაუნაწილეთ შესასრულებელი ამოცანები

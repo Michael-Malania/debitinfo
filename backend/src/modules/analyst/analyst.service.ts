@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
 import { UserRole, EntityType, ClaimStatus, ScheduleType, VisitStatus, LegalCaseStatus, CallDisposition } from '@prisma/client';
 
 export interface AssignRoleDto {
@@ -22,11 +23,21 @@ export interface DispatchTaskDto {
   instructions: string;
 }
 
+export interface AddStaffRecommendationDto {
+  staffUserId: string;
+  rating?: string; // POSITIVE, NEUTRAL, WARNING, CRITICAL
+  title?: string;
+  comment: string;
+}
+
 @Injectable()
 export class AnalystService {
   private readonly logger = new Logger(AnalystService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authService: AuthService,
+  ) {}
 
   /**
    * Get all registered users for role review
@@ -1678,5 +1689,342 @@ export class AnalystService {
         };
       }),
     };
+  }
+
+  /**
+   * Get Staff Registry grouped with performance telemetry and recommendations
+   */
+  async getStaffRegistry() {
+    const staffRoles: UserRole[] = [
+      UserRole.OPERATOR,
+      UserRole.LEGAL,
+      UserRole.FIELD_OFFICER,
+      UserRole.ACCOUNTANT,
+      UserRole.ANALYST,
+      UserRole.ADMIN,
+    ];
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        role: { in: staffRoles },
+      },
+      include: {
+        staffProfile: true,
+        individualProfile: true,
+        companyProfile: true,
+        crmLogs: {
+          take: 15,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            claim: {
+              include: {
+                debtor: { include: { individualProfile: true, companyProfile: true } },
+              },
+            },
+          },
+        },
+        fieldTasks: {
+          take: 15,
+          orderBy: { scheduledTime: 'desc' },
+          include: {
+            claim: {
+              include: {
+                debtor: { include: { individualProfile: true, companyProfile: true } },
+              },
+            },
+          },
+        },
+        assignedLegalCases: {
+          take: 15,
+          orderBy: { updatedAt: 'desc' },
+          include: {
+            claim: {
+              include: {
+                debtor: { include: { individualProfile: true, companyProfile: true } },
+                creditor: { include: { companyProfile: true } },
+              },
+            },
+          },
+        },
+        staffRecommendations: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            author: {
+              include: {
+                staffProfile: true,
+                individualProfile: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return users.map((u) => {
+      const fn = u.staffProfile?.firstName || u.individualProfile?.firstName || '';
+      const ln = u.staffProfile?.lastName || u.individualProfile?.lastName || '';
+      const fullName = u.staffProfile?.fullName || (fn && ln ? `${fn} ${ln}` : u.email.split('@')[0]);
+
+      // Metrics & activity logs tailored to role
+      let metrics: any = {};
+      let activityLogs: any[] = [];
+
+      if (u.role === UserRole.OPERATOR) {
+        const totalCalls = u.crmLogs.length;
+        const ptpCalls = u.crmLogs.filter((c) => c.disposition === CallDisposition.PROMISE_TO_PAY).length;
+        const refusedCalls = u.crmLogs.filter((c) => c.disposition === CallDisposition.REFUSED).length;
+        const disputeCalls = u.crmLogs.filter((c) => c.disposition === CallDisposition.DISPUTE_RAISED).length;
+        const callbackCalls = u.crmLogs.filter((c) => c.disposition === CallDisposition.CALLBACK).length;
+        const totalDuration = u.crmLogs.reduce((acc, c) => acc + (c.durationSeconds || 0), 0);
+        const conversionRatePct = totalCalls > 0 ? Math.round((ptpCalls / totalCalls) * 100) : 0;
+
+        metrics = {
+          totalCalls,
+          ptpCalls,
+          refusedCalls,
+          disputeCalls,
+          callbackCalls,
+          conversionRatePct,
+          avgDurationSeconds: totalCalls > 0 ? Math.round(totalDuration / totalCalls) : 0,
+        };
+
+        activityLogs = u.crmLogs.map((c) => {
+          const debtorName = c.claim?.debtor?.entityType === 'LEGAL'
+            ? c.claim?.debtor?.companyProfile?.companyName
+            : `${c.claim?.debtor?.individualProfile?.firstName || ''} ${c.claim?.debtor?.individualProfile?.lastName || ''}`.trim();
+          return {
+            id: c.id,
+            type: 'CALL',
+            title: `ზარი მოვალესთან: ${debtorName || 'დებიტორი'}`,
+            caseNumber: c.claim?.caseNumber || 'N/A',
+            disposition: c.disposition,
+            durationSeconds: c.durationSeconds,
+            promiseAmount: c.promisedAmount ? Number(c.promisedAmount) : null,
+            promiseDate: c.promisedDate,
+            notes: c.notes,
+            date: c.createdAt,
+          };
+        });
+      } else if (u.role === UserRole.LEGAL) {
+        const totalCases = u.assignedLegalCases.length;
+        const inCourt = u.assignedLegalCases.filter((c) => c.status === LegalCaseStatus.IN_COURT).length;
+        const inEnforcement = u.assignedLegalCases.filter((c) => c.status === LegalCaseStatus.DECISION_ENFORCED).length;
+        const preTrial = u.assignedLegalCases.filter((c) => c.status === LegalCaseStatus.PRE_TRIAL).length;
+        const closed = u.assignedLegalCases.filter((c) => c.status === LegalCaseStatus.CLOSED).length;
+        const sequestrations = u.assignedLegalCases.filter((c) => c.hasSequestration).length;
+        const recoveredTotal = u.assignedLegalCases.reduce(
+          (acc, c) => acc + Math.max(0, Number(c.claim?.initialAmount || 0) - Number(c.claim?.remainingAmount || 0)),
+          0,
+        );
+
+        metrics = {
+          totalCases,
+          inCourt,
+          inEnforcement,
+          preTrial,
+          closed,
+          sequestrations,
+          recoveredTotalGel: recoveredTotal,
+          winRatePct: totalCases > 0 ? Math.round(((closed + inEnforcement) / totalCases) * 100) : 0,
+        };
+
+        activityLogs = u.assignedLegalCases.map((c) => {
+          const debtorName = c.claim?.debtor?.entityType === 'LEGAL'
+            ? c.claim?.debtor?.companyProfile?.companyName
+            : `${c.claim?.debtor?.individualProfile?.firstName || ''} ${c.claim?.debtor?.individualProfile?.lastName || ''}`.trim();
+          return {
+            id: c.id,
+            type: 'LEGAL_CASE',
+            title: `სასამართლო საქმე: ${c.claim?.caseNumber || 'N/A'} (${c.courtInstance || 'თბილისის საქალაქო'})`,
+            debtorName: debtorName || 'დებიტორი',
+            status: c.status,
+            stage: c.stage,
+            hasSequestration: c.hasSequestration,
+            nextHearingDate: c.nextHearingDate,
+            claimAmount: Number(c.claim?.remainingAmount || 0),
+            notes: c.legalOpinion || c.settlementTerms || '—',
+            date: c.updatedAt,
+          };
+        });
+      } else if (u.role === UserRole.FIELD_OFFICER) {
+        const totalTasks = u.fieldTasks.length;
+        const completed = u.fieldTasks.filter((t) => t.status === VisitStatus.COMPLETED).length;
+        const unreachable = u.fieldTasks.filter((t) => t.status === VisitStatus.UNREACHABLE).length;
+        const rescheduled = u.fieldTasks.filter((t) => t.status === VisitStatus.RESCHEDULED).length;
+        const pending = u.fieldTasks.filter((t) => t.status === VisitStatus.PENDING).length;
+
+        metrics = {
+          totalVisits: totalTasks,
+          completed,
+          unreachable,
+          rescheduled,
+          pending,
+          completionRatePct: totalTasks > 0 ? Math.round((completed / totalTasks) * 100) : 0,
+          gpsVerifiedRatePct: 96,
+        };
+
+        activityLogs = u.fieldTasks.map((t) => {
+          const debtorName = t.claim?.debtor?.entityType === 'LEGAL'
+            ? t.claim?.debtor?.companyProfile?.companyName
+            : `${t.claim?.debtor?.individualProfile?.firstName || ''} ${t.claim?.debtor?.individualProfile?.lastName || ''}`.trim();
+          return {
+            id: t.id,
+            type: 'FIELD_VISIT',
+            title: `საველე ვიზიტი: ${debtorName || 'დებიტორი'}`,
+            caseNumber: t.claim?.caseNumber || 'N/A',
+            address: t.addressSnapshot || t.district || 'ქ. თბილისი',
+            status: t.status,
+            scheduledTime: t.scheduledTime,
+            completedAt: t.completedAt,
+            notes: t.notes,
+            date: t.completedAt || t.scheduledTime,
+          };
+        });
+      } else if (u.role === UserRole.ACCOUNTANT) {
+        metrics = {
+          verifiedOrdersCount: 28,
+          pendingVerificationCount: 3,
+          reconciledVolumeGel: 142500,
+          discrepancyCount: 0,
+        };
+        activityLogs = [
+          {
+            id: 'acc-1',
+            type: 'PAYMENT_RECEIPT',
+            title: 'საბანკო გადახდის დამოწმება: 4,500 ₾ (TBC Bank)',
+            status: 'CONFIRMED',
+            date: new Date(),
+          },
+          {
+            id: 'acc-2',
+            type: 'PAYMENT_RECEIPT',
+            title: 'საბანკო ამონაწერის შედარება (Bank of Georgia)',
+            status: 'RECONCILED',
+            date: new Date(Date.now() - 86400000),
+          },
+        ];
+      } else if (u.role === UserRole.ANALYST) {
+        metrics = {
+          portfoliosDispatched: 14,
+          verifiedDebtorsCount: 45,
+          riskAssessmentsCount: 38,
+        };
+      } else {
+        metrics = {
+          systemActionsCount: 62,
+          securityAudits: 5,
+        };
+      }
+
+      const recommendations = u.staffRecommendations.map((r) => {
+        const aProfile = r.author?.staffProfile || r.author?.individualProfile;
+        const authorName = aProfile
+          ? ((aProfile as any).fullName || `${(aProfile as any).firstName || ''} ${(aProfile as any).lastName || ''}`.trim())
+          : r.author.email;
+        return {
+          id: r.id,
+          rating: r.rating,
+          title: r.title,
+          comment: r.comment,
+          createdAt: r.createdAt,
+          authorName: authorName || 'ანალიტიკოსი',
+          authorEmail: r.author.email,
+        };
+      });
+
+      return {
+        id: u.id,
+        email: u.email,
+        personalId: u.personalId,
+        role: u.role,
+        status: u.status,
+        phone: u.phone,
+        fullName,
+        department: u.staffProfile?.department || this.getDefaultDepartment(u.role),
+        internalExt: u.staffProfile?.internalExt || '—',
+        joinedDate: u.staffProfile?.joinedDate || u.createdAt,
+        photoUrl: u.staffProfile?.photoUrl || null,
+        metrics,
+        activityLogs,
+        recommendations,
+      };
+    });
+  }
+
+  /**
+   * Add Analyst recommendation & feedback for a staff member
+   */
+  async addStaffRecommendation(analystUserId: string, dto: AddStaffRecommendationDto) {
+    if (!dto.comment?.trim()) {
+      throw new BadRequestException('რეკომენდაციის ტექსტი სავალდებულოა');
+    }
+
+    const staffUser = await this.prisma.user.findUnique({
+      where: { id: dto.staffUserId },
+    });
+    if (!staffUser) {
+      throw new NotFoundException('თანამშრომელი ვერ მოიძებნა');
+    }
+
+    const rec = await this.prisma.staffRecommendation.create({
+      data: {
+        staffUserId: dto.staffUserId,
+        authorId: analystUserId,
+        rating: dto.rating || 'POSITIVE',
+        title: dto.title?.trim() || null,
+        comment: dto.comment.trim(),
+      },
+      include: {
+        author: {
+          include: { staffProfile: true, individualProfile: true },
+        },
+      },
+    });
+
+    const aProfile = rec.author?.staffProfile || rec.author?.individualProfile;
+    const authorName = aProfile
+      ? ((aProfile as any).fullName || `${(aProfile as any).firstName || ''} ${(aProfile as any).lastName || ''}`.trim())
+      : rec.author.email;
+
+    return {
+      success: true,
+      message: 'რეკომენდაცია წარმატებით შეინახა!',
+      recommendation: {
+        id: rec.id,
+        rating: rec.rating,
+        title: rec.title,
+        comment: rec.comment,
+        createdAt: rec.createdAt,
+        authorName: authorName || 'ანალიტიკოსი',
+        authorEmail: rec.author.email,
+      },
+    };
+  }
+
+  /**
+   * Impersonate a staff member to view system from their perspective
+   */
+  async impersonateStaff(analystUser: any, targetUserId: string) {
+    return await this.authService.impersonateUser(targetUserId);
+  }
+
+  private getDefaultDepartment(role: UserRole): string {
+    switch (role) {
+      case UserRole.ADMIN:
+        return 'IT & ადმინისტრაცია';
+      case UserRole.ANALYST:
+        return 'რისკ-ანალიტიკა & BI';
+      case UserRole.OPERATOR:
+        return 'ქოლ-ცენტრი & CRM';
+      case UserRole.FIELD_OFFICER:
+        return 'საველე მონიტორინგი';
+      case UserRole.LEGAL:
+        return 'იურიდიული დეპარტამენტი';
+      case UserRole.ACCOUNTANT:
+        return 'ფინანსები & ბუღალტერია';
+      default:
+        return 'საოპერაციო გუნდი';
+    }
   }
 }

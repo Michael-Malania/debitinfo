@@ -165,4 +165,29 @@ export class AnalystController {
       monthsLookahead: monthsLookahead ? Number(monthsLookahead) : undefined,
     });
   }
+
+  // ==========================================================================
+  // STAFF REGISTRY, MONITORING & IMPERSONATION
+  // ==========================================================================
+
+  @Get('staff-registry')
+  async getStaffRegistry() {
+    return await this.analystService.getStaffRegistry();
+  }
+
+  @Post('staff-recommendation')
+  async addStaffRecommendation(
+    @Body() dto: any,
+    @CurrentUser() user: any,
+  ) {
+    return await this.analystService.addStaffRecommendation(user.id, dto);
+  }
+
+  @Post('impersonate/:userId')
+  async impersonateStaff(
+    @Param('userId') userId: string,
+    @CurrentUser() user: any,
+  ) {
+    return await this.analystService.impersonateStaff(user, userId);
+  }
 }
