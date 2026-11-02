@@ -41,6 +41,74 @@ export default function AnalystPage() {
   const [registeringCreditor, setRegisteringCreditor] = useState(false);
   const [creditorFormErrors, setCreditorFormErrors] = useState<{ [key: string]: string }>({});
 
+  // Creditor Document Attachments State
+  const [attachedDocuments, setAttachedDocuments] = useState<any[]>([
+    {
+      id: 'doc_init_1',
+      name: 'rs_waybill_8841.pdf',
+      sizeFormatted: '1.2 MB',
+      sizeBytes: 1258291,
+      category: 'სასაქონლო ზედნადები (RS.GE)',
+      fileType: 'application/pdf',
+      uploadedAt: '12:40',
+    },
+    {
+      id: 'doc_init_2',
+      name: 'brunviti_barati_2024.xlsx',
+      sizeFormatted: '480 KB',
+      sizeBytes: 491520,
+      category: 'ბრუნვითი უწყისი / ბარათი',
+      fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      uploadedAt: '12:42',
+    },
+  ]);
+  const [isDraggingDocs, setIsDraggingDocs] = useState(false);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  const handleDocFilesSelected = (files: FileList | File[]) => {
+    const newDocs: any[] = [];
+    Array.from(files).forEach((file) => {
+      let defaultCategory = 'სასაქონლო ზედნადები (RS.GE)';
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.includes('barat') || lowerName.includes('ბარათ') || lowerName.includes('უწყის') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+        defaultCategory = 'ბრუნვითი უწყისი / ბარათი';
+      } else if (lowerName.includes('khelsh') || lowerName.includes('ხელშეკრ') || lowerName.includes('contract')) {
+        defaultCategory = 'ხელშეკრულება';
+      } else if (lowerName.includes('akt') || lowerName.includes('აქტ') || lowerName.includes('act')) {
+        defaultCategory = 'მიღება-ჩაბარების აქტი';
+      } else if (lowerName.includes('bank') || lowerName.includes('საბანკო') || lowerName.includes('amonatseri')) {
+        defaultCategory = 'საბანკო ამონაწერი';
+      }
+
+      newDocs.push({
+        id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+        name: file.name,
+        sizeFormatted: formatFileSize(file.size),
+        sizeBytes: file.size,
+        category: defaultCategory,
+        fileType: file.type || 'application/octet-stream',
+        uploadedAt: new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' }),
+      });
+    });
+
+    setAttachedDocuments((prev) => [...prev, ...newDocs]);
+  };
+
+  const handleRemoveDocument = (id: string) => {
+    setAttachedDocuments((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  const handleUpdateDocumentCategory = (id: string, category: string) => {
+    setAttachedDocuments((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, category } : d))
+    );
+  };
+
   // Dynamic Staff, Claims & Workload Dispatcher State
   const [staffOptions, setStaffOptions] = useState<any[]>([]);
   const [claimsOptions, setClaimsOptions] = useState<any[]>([]);
@@ -246,6 +314,7 @@ export default function AnalystPage() {
         email: creditorEmail.trim(),
         initialAmount: parseFloat(creditorInitialAmount) || 0,
         debtors: creditorDebtorsList,
+        supportingDocuments: attachedDocuments,
       });
 
       setIsRegistrationOpen(false);
@@ -262,6 +331,7 @@ export default function AnalystPage() {
       setCreditorEmail('');
       setCreditorInitialAmount('');
       setCreditorDebtorsList([]);
+      setAttachedDocuments([]);
 
       await loadAnalystData();
     } catch (err: any) {
@@ -483,12 +553,12 @@ export default function AnalystPage() {
                 {excelCreditors.length}
               </span>
             </a>
-            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#portfolio-dispatch-section">
+            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/analyst/portfolio">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-[20px] text-indigo-600">send_time_extension</span>
                 <span>სამართავი პორტფელის განაწილება</span>
               </div>
-            </a>
+            </Link>
             <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/analyst/staff">
               <div className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-[20px] text-emerald-600">badge</span>
@@ -496,6 +566,15 @@ export default function AnalystPage() {
               </div>
               <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-mono font-semibold">
                 HR
+              </span>
+            </Link>
+            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/analyst/written-off">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-[20px] text-rose-600">assignment_turned_in</span>
+                <span>ჩამოწერილი ვალების რეესტრი</span>
+              </div>
+              <span className="px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-mono font-bold">
+                აქტები
               </span>
             </Link>
           </nav>
@@ -1619,56 +1698,163 @@ export default function AnalystPage() {
             </div>
           </div>
 
-          {/* Proof of Debt Attachment */}
+          {/* Proof of Debt Attachment - Real Interactive Upload Panel */}
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-text-primary text-xs uppercase tracking-wider flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-base text-primary">attach_file</span>
                 დავალიანების დამადასტურებელი დოკუმენტები (სავალდებულო):
               </span>
-              <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">
-                RS.GE / საბუღალტრო დასტური
+              <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>RS.GE / საბუღალტრო დასტური</span>
               </span>
             </div>
             <p className="text-xs text-text-muted">
-              მიამაგრეთ დოკუმენტები, რაც დაადასტურებს დებიტორული დავალიანების რეალურ არსებობას (სასაქონლო ზედნადები, ბრუნვითი ბარათი ან ხელშეკრულება).
+              ატვირთეთ ნამდვილი დოკუმენტები, რაც დაადასტურებს დებიტორული დავალიანების რეალურ არსებობას (სასაქონლო ზედნადები, საბუღალტრო ბრუნვითი ბარათი, ხელშეკრულება, მიღება-ჩაბარების აქტი ან საბანკო ამონაწერი).
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {/* Document 1 */}
-              <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-text-primary flex items-center gap-1">
-                    <span className="material-symbols-outlined text-rose-600 text-[16px]">description</span>
-                    სასაქონლო ზედნადები (PDF)
-                  </span>
-                  <span className="text-emerald-700 text-[11px] font-semibold">მიბმულია</span>
+            {/* Drag & Drop Upload Zone */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDraggingDocs(true);
+              }}
+              onDragLeave={() => setIsDraggingDocs(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingDocs(false);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  handleDocFilesSelected(e.dataTransfer.files);
+                }
+              }}
+              className={`border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer ${
+                isDraggingDocs
+                  ? 'border-primary bg-primary/5 ring-4 ring-primary/10'
+                  : 'border-slate-300 hover:border-primary/60 bg-white'
+              }`}
+            >
+              <input
+                type="file"
+                id="analyst-creditor-doc-upload"
+                multiple
+                accept=".pdf,.xlsx,.xls,.docx,.doc,.png,.jpg,.jpeg,.csv"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleDocFilesSelected(e.target.files);
+                    e.target.value = '';
+                  }
+                }}
+              />
+              <label
+                htmlFor="analyst-creditor-doc-upload"
+                className="cursor-pointer flex flex-col items-center justify-center gap-1.5"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shadow-2xs">
+                  <span className="material-symbols-outlined text-[24px]">cloud_upload</span>
                 </div>
-                <input
-                  type="text"
-                  defaultValue="rs_waybill_8841.pdf (RS.GE #WAYBILL-8841)"
-                  className="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-slate-700 focus:outline-none"
-                  placeholder="ზედნადების ფაილი..."
-                />
-              </div>
-
-              {/* Document 2 */}
-              <div className="p-3 bg-white border border-slate-200 rounded-lg space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-text-primary flex items-center gap-1">
-                    <span className="material-symbols-outlined text-emerald-600 text-[16px]">table_view</span>
-                    ბრუნვითი ბარათი (Excel/XLSX)
+                <div>
+                  <span className="text-xs font-semibold text-primary hover:underline">
+                    ჩააგდეთ ფაილები აქ
                   </span>
-                  <span className="text-emerald-700 text-[11px] font-semibold">მიბმულია</span>
+                  <span className="text-xs text-slate-500"> ან </span>
+                  <span className="text-xs font-semibold text-slate-700 underline">
+                    აირჩიეთ კომპიუტერიდან
+                  </span>
                 </div>
-                <input
-                  type="text"
-                  defaultValue="brunviti_barati_2024.xlsx (480 KB)"
-                  className="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded px-2.5 py-1.5 text-slate-700 focus:outline-none"
-                  placeholder="ბრუნვითი ბარათის ფაილი..."
-                />
-              </div>
+                <div className="text-[11px] text-slate-400">
+                  მხარდაჭერილია: PDF, Excel (.xlsx, .xls), Word (.docx), სურათები (PNG, JPG)
+                </div>
+              </label>
             </div>
+
+            {/* List of Attached Documents */}
+            {attachedDocuments.length > 0 ? (
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 px-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[16px] text-emerald-600">task_alt</span>
+                    ატვირთული დოკუმენტები ({attachedDocuments.length})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachedDocuments([])}
+                    className="text-[11px] text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                  >
+                    ყველას გასუფთავება
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto pr-1">
+                  {attachedDocuments.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="p-3 bg-white border border-slate-200 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-2xs hover:border-slate-300 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                          {doc.name.toLowerCase().endsWith('.pdf') ? (
+                            <span className="material-symbols-outlined text-rose-600 text-[20px]">picture_as_pdf</span>
+                          ) : doc.name.toLowerCase().endsWith('.xlsx') || doc.name.toLowerCase().endsWith('.xls') || doc.name.toLowerCase().endsWith('.csv') ? (
+                            <span className="material-symbols-outlined text-emerald-600 text-[20px]">table_view</span>
+                          ) : doc.name.toLowerCase().endsWith('.docx') || doc.name.toLowerCase().endsWith('.doc') ? (
+                            <span className="material-symbols-outlined text-blue-600 text-[20px]">article</span>
+                          ) : (
+                            <span className="material-symbols-outlined text-indigo-600 text-[20px]">description</span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-semibold text-slate-800 truncate" title={doc.name}>
+                            {doc.name}
+                          </div>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-2">
+                            <span>{doc.sizeFormatted}</span>
+                            <span>•</span>
+                            <span>ატვირთულია: {doc.uploadedAt}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+                        <select
+                          value={doc.category}
+                          onChange={(e) => handleUpdateDocumentCategory(doc.id, e.target.value)}
+                          className="text-xs bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-slate-700 font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                        >
+                          <option value="სასაქონლო ზედნადები (RS.GE)">ზედნადები (RS.GE)</option>
+                          <option value="ბრუნვითი უწყისი / ბარათი">ბრუნვითი ბარათი</option>
+                          <option value="ხელშეკრულება">ხელშეკრულება</option>
+                          <option value="მიღება-ჩაბარების აქტი">მიღება-ჩაბარება</option>
+                          <option value="საბანკო ამონაწერი">საბანკო ამონაწერი</option>
+                          <option value="სასამართლო / სააღსრულებო აქტი">სასამართლო/სააღსრულებო</option>
+                          <option value="სხვა დამადასტურებელი დოკუმენტი">სხვა დოკუმენტი</option>
+                        </select>
+
+                        <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200 whitespace-nowrap">
+                          ✓ ატვირთულია
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDocument(doc.id)}
+                          className="w-7 h-7 rounded-md hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center transition-colors cursor-pointer"
+                          title="დოკუმენტის წაშლა"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-lg flex items-center gap-2 text-xs text-amber-800">
+                <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">info</span>
+                <span>
+                  გთხოვთ მიაბათ მინიმუმ ერთი დამადასტურებელი დოკუმენტი (RS.GE ზედნადები ან ბრუნვითი ბარათი) მოთხოვნის ვალიდურობისთვის.
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

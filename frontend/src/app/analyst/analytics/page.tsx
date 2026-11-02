@@ -413,6 +413,22 @@ export default function AnalystAnalyticsHub() {
           </div>
 
           <div className="flex items-center gap-3">
+            <Link
+              href="/analyst/written-off"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-semibold transition-all shadow-2xs"
+            >
+              <span className="material-symbols-outlined text-base text-rose-600">assignment_turned_in</span>
+              <span>ჩამოწერილი ვალები</span>
+            </Link>
+
+            <Link
+              href="/analyst/staff"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold transition-all shadow-2xs"
+            >
+              <span className="material-symbols-outlined text-base text-emerald-600">badge</span>
+              <span>თანამშრომელთა რეესტრი</span>
+            </Link>
+
             {/* Quick Link back to Analyst Dashboard */}
             <Link
               href="/analyst"

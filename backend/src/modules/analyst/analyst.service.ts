@@ -751,6 +751,7 @@ export class AnalystService {
     email?: string;
     initialAmount?: number;
     debtors?: any[];
+    supportingDocuments?: any[];
   }) {
     if (!dto.taxId || !dto.companyName) {
       throw new BadRequestException('საიდენტიფიკაციო კოდი და კომპანიის დასახელება სავალდებულოა');
@@ -819,6 +820,7 @@ export class AnalystService {
             agreementNumber: dto.agreementNumber || `PORT-${cleanTaxId.slice(-4)}`,
             amount: Number(dto.initialAmount) || 0,
             status: 'VERIFIED',
+            supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
           },
         })
       : await this.prisma.stagedRegistryItem.create({
@@ -833,6 +835,7 @@ export class AnalystService {
             overdueDays: 0,
             status: 'VERIFIED',
             sourceFile: 'analyst_registration',
+            supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
           },
         });
 
@@ -2025,6 +2028,348 @@ export class AnalystService {
         return 'ფინანსები & ბუღალტერია';
       default:
         return 'საოპერაციო გუნდი';
+    }
+  }
+
+  // =========================================================================
+  // WRITTEN-OFF DEBTS REGISTRY (ჩამოწერილი ვალების რეესტრი)
+  // =========================================================================
+
+  /**
+   * Get list of Written Off Debts with aggregate statistics
+   */
+  async getWrittenOffDebts(filters?: {
+    search?: string;
+    category?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+  }) {
+    // Auto-seed sample realistic records if empty
+    const count = await this.prisma.writtenOffDebt.count();
+    if (count === 0) {
+      await this.seedInitialWrittenOffDebts();
+    }
+
+    const where: any = {};
+
+    if (filters?.category && filters.category !== 'ALL') {
+      where.reasonCategory = filters.category;
+    }
+
+    if (filters?.status && filters.status !== 'ALL') {
+      where.status = filters.status;
+    }
+
+    if (filters?.search && filters.search.trim()) {
+      const q = filters.search.trim();
+      where.OR = [
+        { debtorName: { contains: q, mode: 'insensitive' } },
+        { personalId: { contains: q } },
+        { caseNumber: { contains: q, mode: 'insensitive' } },
+        { actNumber: { contains: q, mode: 'insensitive' } },
+        { creditorName: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.writtenOffDate = {};
+      if (filters.dateFrom) {
+        where.writtenOffDate.gte = new Date(filters.dateFrom);
+      }
+      if (filters.dateTo) {
+        const to = new Date(filters.dateTo);
+        to.setHours(23, 59, 59, 999);
+        where.writtenOffDate.lte = to;
+      }
+    }
+
+    const items = await this.prisma.writtenOffDebt.findMany({
+      where,
+      orderBy: { writtenOffDate: 'desc' },
+      include: {
+        writtenOffBy: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    const allRecords = await this.prisma.writtenOffDebt.findMany();
+    const totalAmount = allRecords.reduce((sum, item) => sum + Number(item.writtenOffAmount), 0);
+    const totalOriginalAmount = allRecords.reduce((sum, item) => sum + Number(item.originalAmount), 0);
+    const totalCount = allRecords.length;
+
+    const byCategory: Record<string, { count: number; amount: number }> = {};
+    for (const r of allRecords) {
+      if (!byCategory[r.reasonCategory]) {
+        byCategory[r.reasonCategory] = { count: 0, amount: 0 };
+      }
+      byCategory[r.reasonCategory].count++;
+      byCategory[r.reasonCategory].amount += Number(r.writtenOffAmount);
+    }
+
+    return {
+      items,
+      stats: {
+        totalAmount,
+        totalOriginalAmount,
+        totalCount,
+        socialVulnerableCount: byCategory['SOCIAL_VULNERABLE']?.count || 0,
+        socialVulnerableAmount: byCategory['SOCIAL_VULNERABLE']?.amount || 0,
+        disabilityCount: byCategory['DISABILITY_HEALTH']?.count || 0,
+        disabilityAmount: byCategory['DISABILITY_HEALTH']?.amount || 0,
+        bankruptcyCount: byCategory['INSOLVENCY_BANKRUPTCY']?.count || 0,
+        bankruptcyAmount: byCategory['INSOLVENCY_BANKRUPTCY']?.amount || 0,
+        statuteExpiredCount: byCategory['STATUTE_EXPIRED']?.count || 0,
+        statuteExpiredAmount: byCategory['STATUTE_EXPIRED']?.amount || 0,
+        uncollectibleNapeCount: byCategory['UNCOLLECTIBLE_NAPE']?.count || 0,
+        uncollectibleNapeAmount: byCategory['UNCOLLECTIBLE_NAPE']?.amount || 0,
+        deceasedCount: byCategory['DECEASED']?.count || 0,
+        deceasedAmount: byCategory['DECEASED']?.amount || 0,
+        creditorForgivenessCount: byCategory['CREDITOR_FORGIVENESS']?.count || 0,
+        creditorForgivenessAmount: byCategory['CREDITOR_FORGIVENESS']?.amount || 0,
+        byCategory,
+      },
+    };
+  }
+
+  /**
+   * Create a new Written Off Debt Act
+   */
+  async createWrittenOffDebt(
+    dto: {
+      caseNumber?: string;
+      debtorName: string;
+      personalId: string;
+      entityType?: string;
+      creditorName: string;
+      creditorTaxId?: string;
+      claimId?: string;
+      originalAmount: number;
+      writtenOffAmount: number;
+      currency?: string;
+      reasonCategory: string;
+      reasonDescription: string;
+      actNumber?: string;
+      proofDocumentName?: string;
+      proofDocumentUrl?: string;
+      proofDocumentType?: string;
+      writtenOffByName?: string;
+      writtenOffDate?: string;
+    },
+    userId?: string,
+  ) {
+    if (!dto.debtorName || !dto.personalId || !dto.creditorName) {
+      throw new BadRequestException('მოვალის დასახელება, პირადი/საიდენტიფიკაციო კოდი და კრედიტორი სავალდებულოა');
+    }
+
+    if (!dto.writtenOffAmount || Number(dto.writtenOffAmount) <= 0) {
+      throw new BadRequestException('ჩამოსაწერი თანხა უნდა აღემატებოდეს 0-ს');
+    }
+
+    const currentYear = new Date().getFullYear();
+    const actNumber = dto.actNumber || `ACT-WO-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const caseNumber = dto.caseNumber || `WO-${Date.now().toString().slice(-6)}`;
+
+    const record = await this.prisma.writtenOffDebt.create({
+      data: {
+        caseNumber,
+        debtorName: dto.debtorName.trim(),
+        personalId: dto.personalId.trim(),
+        entityType: dto.entityType || (dto.personalId.length === 9 ? 'LEGAL' : 'PHYSICAL'),
+        creditorName: dto.creditorName.trim(),
+        creditorTaxId: dto.creditorTaxId?.trim() || null,
+        claimId: dto.claimId || null,
+        originalAmount: Number(dto.originalAmount) || Number(dto.writtenOffAmount),
+        writtenOffAmount: Number(dto.writtenOffAmount),
+        currency: dto.currency || 'GEL',
+        reasonCategory: dto.reasonCategory,
+        reasonDescription: dto.reasonDescription,
+        actNumber,
+        proofDocumentName: dto.proofDocumentName || null,
+        proofDocumentUrl: dto.proofDocumentUrl || null,
+        proofDocumentType: dto.proofDocumentType || null,
+        status: 'APPROVED',
+        writtenOffByUserId: userId || null,
+        writtenOffByName: dto.writtenOffByName || 'უფროსი ფინანსური ანალიტიკოსი',
+        writtenOffDate: dto.writtenOffDate ? new Date(dto.writtenOffDate) : new Date(),
+      },
+    });
+
+    if (dto.claimId) {
+      try {
+        const claim = await this.prisma.debtClaim.findUnique({ where: { id: dto.claimId } });
+        if (claim) {
+          const newRemaining = Math.max(0, Number(claim.remainingAmount) - Number(dto.writtenOffAmount));
+          await this.prisma.debtClaim.update({
+            where: { id: dto.claimId },
+            data: {
+              remainingAmount: newRemaining,
+              status: newRemaining === 0 ? 'SETTLED' : claim.status,
+            },
+          });
+        }
+      } catch (e) {
+        // Continue if claim update fails
+      }
+    }
+
+    return {
+      success: true,
+      message: `ვალი წარმატებით ჩამოიწერა! გაფორმდა აქტი № ${record.actNumber}`,
+      record,
+    };
+  }
+
+  /**
+   * Seed realistic initial data for Written Off Debts
+   */
+  private async seedInitialWrittenOffDebts() {
+    const seedRecords = [
+      {
+        caseNumber: 'DI-WO-2026-0041',
+        debtorName: 'თენგიზ მახარაძე',
+        personalId: '01008019482',
+        entityType: 'PHYSICAL',
+        creditorName: 'შპს სილქნეტი',
+        creditorTaxId: '204566978',
+        originalAmount: 850.0,
+        writtenOffAmount: 850.0,
+        currency: 'GEL',
+        reasonCategory: 'SOCIAL_VULNERABLE',
+        reasonDescription: 'სოციალურად დაუცველთა ერთიან ბაზაში რეგისტრაციის ცნობა № SOC-8819. სარეიტინგო ქულა 54,200. საარსებო შემწეობის მიმღები ოჯახი, უკიდურესი მატერიალური გაჭირვება.',
+        actNumber: 'ACT-WO-2026-0041',
+        proofDocumentName: 'social_certificate_54200.pdf',
+        proofDocumentType: 'application/pdf',
+        status: 'APPROVED',
+        writtenOffByName: 'გიორგი მაისურაძე (უფროსი ანალიტიკოსი)',
+        writtenOffDate: new Date('2026-02-14'),
+      },
+      {
+        caseNumber: 'DI-WO-2026-0042',
+        debtorName: 'მაია ბერიძე',
+        personalId: '01024049182',
+        entityType: 'PHYSICAL',
+        creditorName: 'სს ენერგო-პრო ჯორჯია',
+        creditorTaxId: '205124346',
+        originalAmount: 1420.0,
+        writtenOffAmount: 1420.0,
+        currency: 'GEL',
+        reasonCategory: 'DISABILITY_HEALTH',
+        reasonDescription: 'სამედიცინო-სოციალური ექსპერტიზის აქტი № DIS-2024-912. მკვეთრად გამოხატული შეზღუდული შესაძლებლობის სტატუსი (I ჯგუფი), მუდმივი შრომისუუნარობა და მძიმე ონკოლოგიური დიაგნოზი.',
+        actNumber: 'ACT-WO-2026-0042',
+        proofDocumentName: 'disability_act_912.pdf',
+        proofDocumentType: 'application/pdf',
+        status: 'APPROVED',
+        writtenOffByName: 'გიორგი მაისურაძე (უფროსი ანალიტიკოსი)',
+        writtenOffDate: new Date('2026-02-28'),
+      },
+      {
+        caseNumber: 'DI-WO-2026-0043',
+        debtorName: 'შპს გლობალ იმპექსი',
+        personalId: '405192841',
+        entityType: 'LEGAL',
+        creditorName: 'შპს ალტა რითეილ',
+        creditorTaxId: '205017578',
+        originalAmount: 42500.0,
+        writtenOffAmount: 42500.0,
+        currency: 'GEL',
+        reasonCategory: 'INSOLVENCY_BANKRUPTCY',
+        reasonDescription: 'თბილისის საქალაქო სასამართლოს კანონიერ ძალაში შესული განჩინება საქმე № 2/1948-24. გადახდისუუნარობის საქმის წარმოების და გაკოტრების რეჟიმის დასრულება, კომპანიის ლიკვიდაცია.',
+        actNumber: 'ACT-WO-2026-0043',
+        proofDocumentName: 'court_bankruptcy_ruling_1948.pdf',
+        proofDocumentType: 'application/pdf',
+        status: 'APPROVED',
+        writtenOffByName: 'მარიამ ჩხეიძე (რისკ-მენეჯერი)',
+        writtenOffDate: new Date('2026-03-12'),
+      },
+      {
+        caseNumber: 'DI-WO-2026-0044',
+        debtorName: 'ზურაბ ყიფიანი',
+        personalId: '01017032194',
+        entityType: 'PHYSICAL',
+        creditorName: 'შპს მაგთიკომი',
+        creditorTaxId: '204876606',
+        originalAmount: 380.0,
+        writtenOffAmount: 380.0,
+        currency: 'GEL',
+        reasonCategory: 'STATUTE_EXPIRED',
+        reasonDescription: 'საქართველოს სამოქალაქო კოდექსის 129-ე მუხლი — დავალიანების წარმოშობიდან (2021 წელი) გასულია 3 წელზე მეტი. ხანდაზმულობის შეჩერების/შეწყვეტის იურიდიული საფუძველი არ არსებობს.',
+        actNumber: 'ACT-WO-2026-0044',
+        proofDocumentName: 'statute_limitation_act.pdf',
+        proofDocumentType: 'application/pdf',
+        status: 'APPROVED',
+        writtenOffByName: 'დავით ნინუა (იურისტი/ანალიტიკოსი)',
+        writtenOffDate: new Date('2026-03-20'),
+      },
+      {
+        caseNumber: 'DI-WO-2026-0045',
+        debtorName: 'დავით კვირიკაშვილი',
+        personalId: '01005088219',
+        entityType: 'PHYSICAL',
+        creditorName: 'შპს ალფა დისტრიბუცია',
+        creditorTaxId: '404987654',
+        originalAmount: 2950.0,
+        writtenOffAmount: 2950.0,
+        currency: 'GEL',
+        reasonCategory: 'UNCOLLECTIBLE_NAPE',
+        reasonDescription: 'აღსრულების ეროვნული ბიუროს (NAPE) სააღსრულებო ფურცლის დაბრუნებისა და უქონლობის აქტი № NAPE-ACT-2025-48192. მოვალეს საბანკო ანგარიშებზე, უძრავ და მოძრავ ქონებაზე არ ერიცხება რესურსი.',
+        actNumber: 'ACT-WO-2026-0045',
+        proofDocumentName: 'nape_indigence_act_48192.pdf',
+        proofDocumentType: 'application/pdf',
+        status: 'APPROVED',
+        writtenOffByName: 'გიორგი მაისურაძე (უფროსი ანალიტიკოსი)',
+        writtenOffDate: new Date('2026-04-05'),
+      },
+      {
+        caseNumber: 'DI-WO-2026-0046',
+        debtorName: 'გიორგი ანდღულაძე',
+        personalId: '01011029411',
+        entityType: 'PHYSICAL',
+        creditorName: 'შპს თბილისი ენერჯი',
+        creditorTaxId: '205296375',
+        originalAmount: 640.0,
+        writtenOffAmount: 640.0,
+        currency: 'GEL',
+        reasonCategory: 'DECEASED',
+        reasonDescription: 'იუსტიციის სახლის გარდაცვალების მოწმობა № DTH-991823. სამკვიდრო საქმე არ გახსნილა, მემკვიდრეები და სამკვიდრო მასა არ არსებობს.',
+        actNumber: 'ACT-WO-2026-0046',
+        proofDocumentName: 'death_certificate_991823.pdf',
+        proofDocumentType: 'application/pdf',
+        status: 'APPROVED',
+        writtenOffByName: 'გიორგი მაისურაძე (უფროსი ანალიტიკოსი)',
+        writtenOffDate: new Date('2026-04-18'),
+      },
+      {
+        caseNumber: 'DI-WO-2026-0047',
+        debtorName: 'ნინო გელაშვილი',
+        personalId: '01029011928',
+        entityType: 'PHYSICAL',
+        creditorName: 'სს თიბისი ბანკი',
+        creditorTaxId: '204854595',
+        originalAmount: 5600.0,
+        writtenOffAmount: 3600.0,
+        currency: 'GEL',
+        reasonCategory: 'CREDITOR_FORGIVENESS',
+        reasonDescription: 'კრედიტორსა და მოვალეს შორის გაფორმებული ურთიერთშეთანხმების აქტი. ძირითადი თანხის (2,000 ლარის) ერთჯერადად დაფარვის სანაცვლოდ დარჩენილი დარიცხული პროცენტისა და პირგასამტეხლოს (3,600 ლარი) პატიება.',
+        actNumber: 'ACT-WO-2026-0047',
+        proofDocumentName: 'settlement_agreement_tbc.pdf',
+        proofDocumentType: 'application/pdf',
+        status: 'APPROVED',
+        writtenOffByName: 'მარიამ ჩხეიძე (რისკ-მენეჯერი)',
+        writtenOffDate: new Date('2026-04-22'),
+      },
+    ];
+
+    for (const record of seedRecords) {
+      await this.prisma.writtenOffDebt.create({
+        data: record,
+      });
     }
   }
 }

@@ -270,6 +270,22 @@ export default function StaffRegistryPage() {
 
           <div className="flex items-center gap-3">
             <Link
+              href="/analyst/written-off"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-semibold transition-all shadow-2xs"
+            >
+              <span className="material-symbols-outlined text-base text-rose-600">assignment_turned_in</span>
+              <span>ჩამოწერილი ვალები</span>
+            </Link>
+
+            <Link
+              href="/analyst/portfolio"
+              className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-xs font-semibold transition-all shadow-2xs"
+            >
+              <span className="material-symbols-outlined text-base text-indigo-600">send_time_extension</span>
+              <span>სამართავი პორტფელი</span>
+            </Link>
+
+            <Link
               href="/analyst"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-all shadow-2xs"
             >

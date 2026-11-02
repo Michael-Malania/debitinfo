@@ -190,4 +190,33 @@ export class AnalystController {
   ) {
     return await this.analystService.impersonateStaff(user, userId);
   }
+
+  // ==========================================================================
+  // WRITTEN-OFF DEBTS REGISTRY (ჩამოწერილი ვალების რეესტრი)
+  // ==========================================================================
+
+  @Get('written-off-debts')
+  async getWrittenOffDebts(
+    @Query('search') search?: string,
+    @Query('category') category?: string,
+    @Query('status') status?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return await this.analystService.getWrittenOffDebts({
+      search,
+      category,
+      status,
+      dateFrom,
+      dateTo,
+    });
+  }
+
+  @Post('written-off-debts')
+  async createWrittenOffDebt(
+    @Body() dto: any,
+    @CurrentUser() user: any,
+  ) {
+    return await this.analystService.createWrittenOffDebt(dto, user?.id);
+  }
 }

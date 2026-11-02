@@ -868,7 +868,7 @@ export const analystBackendService = {
     claimId: string;
     priority?: string;
     taskType?: string;
-    instructions: string;
+    instructions?: string;
   }): Promise<any> {
     return await apiFetch('/api/v1/analyst/dispatch-task', {
       method: 'POST',
@@ -897,6 +897,7 @@ export const analystBackendService = {
     email?: string;
     initialAmount?: number;
     debtors?: any[];
+    supportingDocuments?: any[];
   }): Promise<any> {
     return await apiFetch('/api/v1/analyst/register-creditor', {
       method: 'POST',
@@ -993,6 +994,52 @@ export const analystBackendService = {
   async impersonateStaff(userId: string): Promise<any> {
     return await apiFetch(`/api/v1/analyst/impersonate/${userId}`, {
       method: 'POST',
+    });
+  },
+
+  // --------------------------------------------------
+  // WRITTEN-OFF DEBTS REGISTRY (ჩამოწერილი ვალების რეესტრი)
+  // --------------------------------------------------
+  async getWrittenOffDebts(filters?: {
+    search?: string;
+    category?: string;
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<{ items: any[]; stats: any }> {
+    const params = new URLSearchParams();
+    if (filters?.search) params.append('search', filters.search);
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
+    if (filters?.dateTo) params.append('dateTo', filters.dateTo);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return await apiFetch<{ items: any[]; stats: any }>(`/api/v1/analyst/written-off-debts${qs}`);
+  },
+
+  async createWrittenOffDebt(data: {
+    caseNumber?: string;
+    debtorName: string;
+    personalId: string;
+    entityType?: string;
+    creditorName: string;
+    creditorTaxId?: string;
+    claimId?: string;
+    originalAmount: number;
+    writtenOffAmount: number;
+    currency?: string;
+    reasonCategory: string;
+    reasonDescription: string;
+    actNumber?: string;
+    proofDocumentName?: string;
+    proofDocumentUrl?: string;
+    proofDocumentType?: string;
+    writtenOffByName?: string;
+    writtenOffDate?: string;
+  }): Promise<any> {
+    return await apiFetch('/api/v1/analyst/written-off-debts', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   },
 };
