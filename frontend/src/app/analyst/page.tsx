@@ -546,39 +546,6 @@ export default function AnalystPage() {
     {/* MAIN CONTENT CANVAS */}
     {/* ========================================================================= */}
     <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 space-y-8 bg-surface-bg">
-      {/* Operational Header Row with Breadcrumb */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-border-subtle">
-        <div>
-          <div className="flex items-center gap-2 text-label-sm font-label-sm text-text-muted">
-            <span>პლატფორმა</span>
-            <span>/</span>
-            <span>ოპერაციული ცენტრი</span>
-            <span>/</span>
-            <span className="text-primary font-medium">
-              {activeView === 'pending-debtors'
-                ? 'კრედიტორების მიერ ატვირთული დებიტორები (დასადასტურებელი)'
-                : activeView === 'debtors-registry'
-                ? 'დებიტორთა რეესტრი'
-                : activeView === 'creditors-registry'
-                ? 'კრედიტორთა რეესტრი'
-                : activeView === 'portfolio-dispatch'
-                ? 'სამართავი პორტფელის განაწილება'
-                : 'მთავარი გვერდი'}
-            </span>
-          </div>
-        </div>
-        {activeView !== 'overview' && (
-          <button
-            type="button"
-            onClick={() => setActiveView('overview')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-slate-50 text-xs font-semibold text-text-primary transition-colors cursor-pointer self-start lg:self-auto"
-          >
-            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
-            <span>უკან მთავარ პანელზე</span>
-          </button>
-        )}
-      </div>
-
       {activeView === 'pending-debtors' ? (
       <>
       {actionSuccessMessage && (
