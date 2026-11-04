@@ -211,7 +211,7 @@ export default function AddDebtorModal({
         {/* Modal Header */}
         <div className="flex items-start justify-between pb-4 border-b border-border-subtle">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-primary">
               <span className="material-symbols-outlined text-[24px]">person_add</span>
             </div>
             <div>
@@ -219,7 +219,7 @@ export default function AddDebtorModal({
                 <h3 className="font-bold text-text-primary text-body-lg">
                   დებიტორის ხელით დამატება / მიბმა კრედიტორზე
                 </h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-mono font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-blue-100 text-primary text-[11px] font-mono font-bold">
                   Excel სტანდარტი
                 </span>
               </div>
@@ -251,7 +251,7 @@ export default function AddDebtorModal({
             }}
             className={`py-2 px-3 rounded-lg text-body-sm font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
               entityType === 'PHYSICAL'
-                ? 'bg-white text-emerald-700 shadow-sm border border-emerald-200/60'
+                ? 'bg-white text-primary shadow-sm'
                 : 'text-text-muted hover:text-text-primary'
             }`}
           >
@@ -267,7 +267,7 @@ export default function AddDebtorModal({
             }}
             className={`py-2 px-3 rounded-lg text-body-sm font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
               entityType === 'LEGAL'
-                ? 'bg-white text-emerald-700 shadow-sm border border-emerald-200/60'
+                ? 'bg-white text-primary shadow-sm'
                 : 'text-text-muted hover:text-text-primary'
             }`}
           >
@@ -300,7 +300,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="01019012345"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm font-mono font-bold focus:outline-none transition ${
-                      errors.personalId ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.personalId ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.personalId ? (
@@ -324,7 +324,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="მაგ: გიორგი"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm focus:outline-none transition ${
-                      errors.firstName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.firstName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.firstName && <p className="text-[11px] text-rose-500 mt-0.5">{errors.firstName}</p>}
@@ -344,7 +344,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="მაგ: ბერიძე"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm focus:outline-none transition ${
-                      errors.lastName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.lastName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.lastName && <p className="text-[11px] text-rose-500 mt-0.5">{errors.lastName}</p>}
@@ -367,7 +367,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="+995 599 123456"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm font-mono focus:outline-none transition ${
-                      errors.phone ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.phone ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.phone && <p className="text-[11px] text-rose-500 mt-0.5">{errors.phone}</p>}
@@ -387,7 +387,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="example@gmail.com"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm font-mono focus:outline-none transition ${
-                      errors.email ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.email ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.email && <p className="text-[11px] text-rose-500 mt-0.5">{errors.email}</p>}
@@ -404,7 +404,7 @@ export default function AddDebtorModal({
                   value={formData.actualAddress}
                   onChange={(e) => setFormData({ ...formData, actualAddress: e.target.value })}
                   placeholder="ქ. თბილისი, რუსთაველის გამზ. #10"
-                  className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm focus:outline-none focus:border-primary"
                 />
               </div>
 
@@ -425,7 +425,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="3500.00"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm font-mono font-bold focus:outline-none transition ${
-                      errors.amount ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.amount ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.amount && <p className="text-[11px] text-rose-500 mt-0.5">{errors.amount}</p>}
@@ -440,7 +440,7 @@ export default function AddDebtorModal({
                     type="date"
                     value={formData.debtOriginationDate}
                     onChange={(e) => handleDateChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-primary"
                   />
                 </div>
 
@@ -454,7 +454,7 @@ export default function AddDebtorModal({
                     value={formData.agreementNumber}
                     onChange={(e) => setFormData({ ...formData, agreementNumber: e.target.value })}
                     placeholder="AGR-8841"
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
@@ -483,7 +483,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="405123456"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm font-mono font-bold focus:outline-none transition ${
-                      errors.taxId ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.taxId ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.taxId ? (
@@ -507,7 +507,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="შპს ორიონ დეველოპმენტი"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm focus:outline-none transition ${
-                      errors.companyName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.companyName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.companyName && <p className="text-[11px] text-rose-500 mt-0.5">{errors.companyName}</p>}
@@ -529,7 +529,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="ნიკოლოზ ხუციშვილი"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm focus:outline-none transition ${
-                      errors.directorName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.directorName ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.directorName && <p className="text-[11px] text-rose-500 mt-0.5">{errors.directorName}</p>}
@@ -550,7 +550,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="+995 599 000000"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm font-mono focus:outline-none transition ${
-                      errors.phone ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.phone ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.phone && <p className="text-[11px] text-rose-500 mt-0.5">{errors.phone}</p>}
@@ -569,7 +569,7 @@ export default function AddDebtorModal({
                       if (errors.email) setErrors({ ...errors, email: '' });
                     }}
                     placeholder="info@company.ge"
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
@@ -589,7 +589,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="ქ. თბილისი, ჭავჭავაძის გამზ. #22"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm focus:outline-none transition ${
-                      errors.legalAddress ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.legalAddress ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.legalAddress && <p className="text-[11px] text-rose-500 mt-0.5">{errors.legalAddress}</p>}
@@ -605,7 +605,7 @@ export default function AddDebtorModal({
                     value={formData.actualAddress}
                     onChange={(e) => setFormData({ ...formData, actualAddress: e.target.value })}
                     placeholder="ქ. თბილისი, ვაჟა-ფშაველას გამზ. #14"
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
@@ -627,7 +627,7 @@ export default function AddDebtorModal({
                     }}
                     placeholder="8500.00"
                     className={`w-full px-3 py-2 bg-white border rounded-lg text-body-sm font-mono font-bold focus:outline-none transition ${
-                      errors.amount ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-emerald-500'
+                      errors.amount ? 'border-rose-500 ring-1 ring-rose-500/20' : 'border-border-subtle focus:border-primary'
                     }`}
                   />
                   {errors.amount && <p className="text-[11px] text-rose-500 mt-0.5">{errors.amount}</p>}
@@ -645,7 +645,7 @@ export default function AddDebtorModal({
                     value={formData.remainingAmount}
                     onChange={(e) => setFormData({ ...formData, remainingAmount: e.target.value })}
                     placeholder={formData.amount ? String(formData.amount) : '8500.00'}
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-primary"
                   />
                 </div>
 
@@ -658,7 +658,7 @@ export default function AddDebtorModal({
                     type="date"
                     value={formData.debtOriginationDate}
                     onChange={(e) => handleDateChange(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
@@ -674,7 +674,7 @@ export default function AddDebtorModal({
                     min="0"
                     value={formData.overdueDays}
                     onChange={(e) => setFormData({ ...formData, overdueDays: e.target.value })}
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-primary"
                   />
                 </div>
 
@@ -688,7 +688,7 @@ export default function AddDebtorModal({
                     value={formData.agreementNumber}
                     onChange={(e) => setFormData({ ...formData, agreementNumber: e.target.value })}
                     placeholder="INV-2024-8841"
-                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-white border border-border-subtle rounded-lg text-body-sm font-mono focus:outline-none focus:border-primary"
                   />
                 </div>
               </div>
