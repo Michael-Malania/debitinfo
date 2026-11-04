@@ -650,6 +650,48 @@ export const authService = {
       return { isImpersonating: false, originalUser: null, targetUser: null, returnUrl: '/analyst/staff' };
     }
   },
+
+  async getObservationStatus(): Promise<{
+    isBeingObserved: boolean;
+    observer: {
+      analystId: string;
+      analystName: string;
+      analystEmail: string;
+      startedAt: string;
+    } | null;
+  }> {
+    try {
+      return await apiFetch('/api/v1/auth/observation-status');
+    } catch {
+      return { isBeingObserved: false, observer: null };
+    }
+  },
+
+  async sendObservationHeartbeat(data: {
+    targetUserId?: string;
+    analystName?: string;
+    analystEmail?: string;
+  }): Promise<any> {
+    try {
+      return await apiFetch('/api/v1/auth/observation-heartbeat', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch {
+      return null;
+    }
+  },
+
+  async stopObservationOnBackend(targetUserId?: string): Promise<any> {
+    try {
+      return await apiFetch('/api/v1/auth/observation-stop', {
+        method: 'POST',
+        body: JSON.stringify({ targetUserId }),
+      });
+    } catch {
+      return null;
+    }
+  },
 };
 
 // ==========================================
@@ -818,37 +860,20 @@ export const creditorBackendService = {
 };
 
 export const analystBackendService = {
-  async getUsers(): Promise<any[]> {
-    return await apiFetch('/api/v1/analyst/users');
+  async getDebtorsRegistry(): Promise<any[]> {
+    return await apiFetch('/api/v1/analyst/debtors-registry');
+  },
+
+  async getCreditorsRegistry(): Promise<any[]> {
+    return await apiFetch('/api/v1/analyst/creditors-registry');
   },
 
   async getExcelDebtors(): Promise<any[]> {
-    return await apiFetch('/api/v1/analyst/excel-registry/debtors');
+    return await apiFetch('/api/v1/analyst/debtors-registry');
   },
 
   async getExcelCreditors(): Promise<any[]> {
-    return await apiFetch('/api/v1/analyst/excel-registry/creditors');
-  },
-
-  async assignRole(data: {
-    userId: string;
-    targetRole: 'DEBTOR' | 'CREDITOR';
-    registryItemId?: string;
-    agreementNumber?: string;
-    amount?: number;
-    creditorId?: string;
-  }): Promise<any> {
-    return await apiFetch('/api/v1/analyst/assign-role', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  async syncExcelData(items?: any[]): Promise<any> {
-    return await apiFetch('/api/v1/analyst/excel-sync', {
-      method: 'POST',
-      body: JSON.stringify({ items }),
-    });
+    return await apiFetch('/api/v1/analyst/creditors-registry');
   },
 
   async getStaffOptions(): Promise<any[]> {
@@ -865,7 +890,8 @@ export const analystBackendService = {
 
   async dispatchTask(data: {
     staffUserId: string;
-    claimId: string;
+    claimId?: string;
+    claimIds?: string[];
     priority?: string;
     taskType?: string;
     instructions?: string;
@@ -1041,6 +1067,13 @@ export const analystBackendService = {
     return await apiFetch('/api/v1/analyst/written-off-debts', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  },
+
+  async annulWrittenOffDebt(id: string, reason: string): Promise<any> {
+    return await apiFetch(`/api/v1/analyst/written-off-debts/${id}/annul`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     });
   },
 };

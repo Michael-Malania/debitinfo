@@ -3,24 +3,13 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { UserRole, EntityType, ClaimStatus, ScheduleType, VisitStatus, LegalCaseStatus, CallDisposition } from '@prisma/client';
 
-export interface AssignRoleDto {
-  userId: string;
-  targetRole: 'DEBTOR' | 'CREDITOR';
-  registryItemId?: string;
-  agreementNumber?: string;
-  amount?: number;
-  creditorId?: string;
-  supportingDocuments?: any[];
-  waybillFileName?: string;
-  turnoverFileName?: string;
-}
-
 export interface DispatchTaskDto {
   staffUserId: string;
-  claimId: string;
+  claimId?: string;
+  claimIds?: string[];
   priority?: string;
   taskType?: string;
-  instructions: string;
+  instructions?: string;
 }
 
 export interface AddStaffRecommendationDto {
@@ -40,42 +29,7 @@ export class AnalystService {
   ) {}
 
   /**
-   * Get all registered users for role review
-   */
-  async getRegisteredUsers() {
-    const users = await this.prisma.user.findMany({
-      include: {
-        individualProfile: true,
-        companyProfile: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return users.map((u) => {
-      const isLegal = u.entityType === EntityType.LEGAL;
-      const name = isLegal
-        ? (u.companyProfile?.companyName || u.email)
-        : (u.individualProfile
-            ? `${u.individualProfile.firstName} ${u.individualProfile.lastName}`.trim()
-            : u.email);
-
-      return {
-        id: u.id,
-        email: u.email,
-        personalId: u.personalId,
-        entityType: u.entityType,
-        role: u.role,
-        status: u.status,
-        name,
-        phone: u.phone,
-        isRsVerified: u.isRsVerified,
-        createdAt: u.createdAt,
-      };
-    });
-  }
-
-  /**
-   * Get staged Debtors registry records (from Excel import/sync)
+   * Get Debtors registry records
    */
   async getExcelDebtors() {
     const debtors = await this.prisma.stagedRegistryItem.findMany({
@@ -103,7 +57,7 @@ export class AnalystService {
   }
 
   /**
-   * Get staged Creditors registry records (from Excel import/sync)
+   * Get Creditors registry records
    */
   async getExcelCreditors() {
     // Delete any legacy misconfigured staged creditor with Batumi Trade's tax ID
@@ -144,318 +98,6 @@ export class AnalystService {
   }
 
   /**
-   * Assign a role to a registered user (Only Analyst / Admin can perform this)
-   */
-  async assignRole(dto: AssignRoleDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: dto.userId },
-      include: { individualProfile: true, companyProfile: true },
-    });
-
-    if (!user) {
-      throw new NotFoundException('მომხმარებელი ვერ მოიძებნა');
-    }
-
-    if (dto.targetRole === 'DEBTOR') {
-      // 1. Update user role
-      await this.prisma.user.update({
-        where: { id: dto.userId },
-        data: { role: UserRole.DEBTOR },
-      });
-
-      // 2. Resolve creditor (support User ID, personalId/taxId, or Staged Item ID)
-      let creditorId = dto.creditorId;
-      if (creditorId) {
-        const creditorUser = await this.prisma.user.findFirst({
-          where: {
-            OR: [
-              { id: creditorId },
-              { personalId: creditorId },
-            ],
-          },
-        });
-        if (creditorUser) {
-          creditorId = creditorUser.id;
-        } else {
-          const stagedCred = await this.prisma.stagedRegistryItem.findFirst({
-            where: {
-              OR: [
-                { id: creditorId },
-                { personalId: creditorId },
-                { name: creditorId },
-              ],
-              type: 'CREDITOR',
-            },
-          });
-          if (stagedCred) {
-            const userForStaged = await this.prisma.user.findFirst({
-              where: { personalId: stagedCred.personalId },
-            });
-            if (userForStaged) creditorId = userForStaged.id;
-          }
-        }
-      }
-      if (!creditorId) {
-        const defaultCreditor = await this.prisma.user.findFirst({
-          where: { role: UserRole.CREDITOR },
-        });
-        if (defaultCreditor) creditorId = defaultCreditor.id;
-      }
-
-      // 3. Create active debt claim if creditor exists
-      if (creditorId) {
-        const initialAmount = dto.amount || 1540;
-        const caseNumber = `DI-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-
-        const claim = await this.prisma.debtClaim.create({
-          data: {
-            caseNumber,
-            creditorId,
-            debtorId: user.id,
-            agreementNumber: dto.agreementNumber || `AGR-${Math.floor(10000 + Math.random() * 90000)}`,
-            initialAmount,
-            remainingAmount: initialAmount,
-            penaltyAmount: 0,
-            currency: 'GEL',
-            daysOverdue: 15,
-            status: ClaimStatus.ACTIVE,
-            rating: 'B',
-            riskScore: 65,
-            scheduleType: ScheduleType.STANDARD,
-            supportingDocuments: dto.supportingDocuments || [
-              {
-                id: `doc-${Date.now()}-1`,
-                title: 'სასაქონლო ზედნადები (RS.GE ელ. დოკუმენტი)',
-                docType: 'WAYBILL',
-                fileName: dto.waybillFileName || 'rs_waybill_verified.pdf',
-                fileUrl: '/documents/rs_waybill_verified.pdf',
-                fileSize: '1.2 MB',
-                uploadedAt: new Date().toISOString(),
-                description: 'დამოწმებული ელექტრონული სასაქონლო ზედნადები',
-              },
-              {
-                id: `doc-${Date.now()}-2`,
-                title: 'ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი',
-                docType: 'ACCOUNT_TURNOVER',
-                fileName: dto.turnoverFileName || 'account_turnover_verified.xlsx',
-                fileUrl: '/documents/account_turnover_verified.xlsx',
-                fileSize: '450 KB',
-                uploadedAt: new Date().toISOString(),
-                description: 'საბუღალტრო ურთიერთშედარების ბარათი',
-              },
-            ],
-          },
-        });
-
-        // Create 12-month standard schedule
-        await this.prisma.repaymentSchedule.create({
-          data: {
-            claimId: claim.id,
-            type: ScheduleType.STANDARD,
-            totalMonths: 12,
-            monthlyAmount: Math.round(initialAmount / 12),
-            startDate: new Date(),
-            isActive: true,
-          },
-        });
-      }
-
-      // 4. Update staged item if provided
-      if (dto.registryItemId) {
-        await this.prisma.stagedRegistryItem.update({
-          where: { id: dto.registryItemId },
-          data: {
-            status: 'ASSIGNED',
-            matchedUserId: user.id,
-          },
-        });
-      }
-    } else if (dto.targetRole === 'CREDITOR') {
-      // 1. Update user role
-      await this.prisma.user.update({
-        where: { id: dto.userId },
-        data: { role: UserRole.CREDITOR },
-      });
-
-      // 2. If entity type was physical, ensure it has company profile capability or keep as individual creditor
-      if (dto.registryItemId) {
-        await this.prisma.stagedRegistryItem.update({
-          where: { id: dto.registryItemId },
-          data: {
-            status: 'ASSIGNED',
-            matchedUserId: user.id,
-          },
-        });
-      }
-    }
-
-    this.logger.log(`User ${user.email} (${user.personalId}) role upgraded to ${dto.targetRole} by Analyst`);
-
-    return {
-      success: true,
-      message: `მომხმარებელს წარმატებით მიენიჭა ${dto.targetRole === 'DEBTOR' ? 'დებიტორის' : 'კრედიტორის'} სტატუსი`,
-      userId: user.id,
-      newRole: dto.targetRole,
-    };
-  }
-
-  /**
-   * Sync Excel records into database
-   */
-  async syncExcelData(items?: any[]) {
-    if (items && Array.isArray(items) && items.length > 0) {
-      for (const item of items) {
-        const debtOrigDate = item.debtOriginationDate ? new Date(item.debtOriginationDate) : null;
-        let overdueDays = Number(item.overdueDays) || 0;
-        if (!overdueDays && debtOrigDate && !isNaN(debtOrigDate.getTime())) {
-          const diffMs = Date.now() - debtOrigDate.getTime();
-          overdueDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-        }
-        const entityType = item.entityType === 'LEGAL' || item.taxId ? 'LEGAL' : 'PHYSICAL';
-
-        await this.prisma.stagedRegistryItem.create({
-          data: {
-            type: item.type || 'DEBTOR',
-            entityType,
-            personalId: item.personalId || item.taxId || item.directorPersonalId || '01019012345',
-            taxId: item.taxId || null,
-            name: item.name || (item.firstName ? `${item.firstName} ${item.lastName || ''}`.trim() : 'დებიტორი'),
-            firstName: item.firstName || null,
-            lastName: item.lastName || null,
-            phone: item.phone || '+995 599 00 00 00',
-            email: item.email || null,
-            legalAddress: item.legalAddress || null,
-            actualAddress: item.actualAddress || item.legalAddress || null,
-            amount: Number(item.amount) || 0,
-            debtOriginationDate: debtOrigDate && !isNaN(debtOrigDate.getTime()) ? debtOrigDate : null,
-            directorFirstName: item.directorFirstName || null,
-            directorLastName: item.directorLastName || null,
-            directorPersonalId: item.directorPersonalId || null,
-            directorEmail: item.directorEmail || null,
-            directorPhone: item.directorPhone || null,
-            companyOrPerson: entityType === 'LEGAL' ? 'იურიდიული პირი' : 'ფიზიკური პირი',
-            agreementNumber: item.agreementNumber || `AGR-${Date.now().toString().slice(-5)}`,
-            creditorName: item.creditorName || 'სისტემური იმპორტი',
-            overdueDays,
-            status: item.status || 'VERIFIED',
-            sourceFile: item.sourceFile || 'excel_registry_sync.xlsx',
-          },
-        });
-      }
-      return { success: true, count: items.length };
-    }
-
-    // Default Seed / Excel Pre-population with realistic Georgian financial records
-    const sampleDebtors = [
-      {
-        type: 'DEBTOR',
-        personalId: '01019012345',
-        name: 'გიორგი ბერიძე',
-        companyOrPerson: 'შპს ევროკრედიტი',
-        agreementNumber: 'AGR-99214',
-        amount: 1540,
-        creditorName: 'შპს ჯეო ტრეიდინგი',
-        overdueDays: 45,
-        status: 'ASSIGNED',
-        sourceFile: 'debtors_registry_2026.xlsx',
-      },
-      {
-        type: 'DEBTOR',
-        personalId: '01024089123',
-        name: 'დავით კვირიკაშვილი',
-        companyOrPerson: 'სს საქართველოს ბანკი',
-        agreementNumber: 'AGR-77142',
-        amount: 3200,
-        creditorName: 'სს ლიდერ კრედიტი',
-        overdueDays: 62,
-        status: 'PENDING',
-        sourceFile: 'debtors_registry_2026.xlsx',
-      },
-      {
-        type: 'DEBTOR',
-        personalId: '01008034561',
-        name: 'ნინო ლომიძე',
-        companyOrPerson: 'შპს ექსპრეს რითეილი',
-        agreementNumber: 'AGR-33109',
-        amount: 890,
-        creditorName: 'შპს ალფა ფინანსი',
-        overdueDays: 28,
-        status: 'PENDING',
-        sourceFile: 'debtors_registry_2026.xlsx',
-      },
-      {
-        type: 'DEBTOR',
-        personalId: '01015099882',
-        name: 'ლევან მაისურაძე',
-        companyOrPerson: 'შპს თეგეტა მოტორსი',
-        agreementNumber: 'AGR-88451',
-        amount: 4500,
-        creditorName: 'შპს ჯეო ტრეიდინგი',
-        overdueDays: 90,
-        status: 'PENDING',
-        sourceFile: 'debtors_registry_2026.xlsx',
-      },
-    ];
-
-    const sampleCreditors = [
-      {
-        type: 'CREDITOR',
-        personalId: '405123456',
-        name: 'შპს ჯეო ტრეიდინგი',
-        companyOrPerson: 'ირაკლი ნადირაძე',
-        agreementNumber: 'PORT-GEO-01',
-        amount: 250000,
-        creditorName: null,
-        overdueDays: 0,
-        status: 'ASSIGNED',
-        sourceFile: 'creditors_registry_2026.xlsx',
-      },
-      {
-        type: 'CREDITOR',
-        personalId: '406112233',
-        name: 'შპს ალფა ფინანსი',
-        companyOrPerson: 'გიორგი კანდელაკი',
-        agreementNumber: 'PORT-ALF-02',
-        amount: 180000,
-        creditorName: null,
-        overdueDays: 0,
-        status: 'PENDING',
-        sourceFile: 'creditors_registry_2026.xlsx',
-      },
-      {
-        type: 'CREDITOR',
-        personalId: '405332114',
-        name: 'სს ლიდერ კრედიტი',
-        companyOrPerson: 'მარიამ ჯაფარიძე',
-        agreementNumber: 'PORT-LDR-03',
-        amount: 420000,
-        creditorName: null,
-        overdueDays: 0,
-        status: 'PENDING',
-        sourceFile: 'creditors_registry_2026.xlsx',
-      },
-    ];
-
-    const all = [...sampleDebtors, ...sampleCreditors];
-    for (const record of all) {
-      const existing = await this.prisma.stagedRegistryItem.findFirst({
-        where: { personalId: record.personalId, type: record.type },
-      });
-      if (!existing) {
-        await this.prisma.stagedRegistryItem.create({
-          data: record,
-        });
-      }
-    }
-
-    return {
-      success: true,
-      message: 'Excel-ის რეესტრი წარმატებით დასინქრონირდა ბაზასთან',
-      syncedCount: all.length,
-    };
-  }
-
-  /**
    * Get all real operational staff options for task dispatch
    */
   async getStaffOptions() {
@@ -466,6 +108,7 @@ export class AnalystService {
             UserRole.FIELD_OFFICER,
             UserRole.LEGAL,
             UserRole.OPERATOR,
+            UserRole.ACCOUNTANT,
             UserRole.ANALYST,
             UserRole.ADMIN,
           ],
@@ -502,9 +145,10 @@ export class AnalystService {
       }
 
       const roleTitles: Record<string, string> = {
-        FIELD_OFFICER: 'საველე ვიზიტორი',
+        OPERATOR: 'კრედიტ-მენეჯერი / ოპერატორი',
         LEGAL: 'იურისტი',
-        OPERATOR: 'ქოლ-ცენტრის ოპერატორი',
+        FIELD_OFFICER: 'საველე ვიზიტორი / კურიერი',
+        ACCOUNTANT: 'ბუღალტერი',
         ANALYST: 'რისკ-ანალიტიკოსი',
         ADMIN: 'ადმინისტრატორი',
       };
@@ -526,7 +170,7 @@ export class AnalystService {
   }
 
   /**
-   * Get real active claims & cases options for task dispatch
+   * Get real active claims & cases options for task dispatch (grouped/enriched with creditor info)
    */
   async getClaimsOptions() {
     const claims = await this.prisma.debtClaim.findMany({
@@ -542,6 +186,12 @@ export class AnalystService {
         },
       },
       include: {
+        creditor: {
+          include: {
+            companyProfile: true,
+            individualProfile: true,
+          },
+        },
         debtor: {
           include: {
             companyProfile: true,
@@ -550,7 +200,6 @@ export class AnalystService {
         },
       },
       orderBy: { daysOverdue: 'desc' },
-      take: 50,
     });
 
     return claims.map((c) => {
@@ -565,24 +214,40 @@ export class AnalystService {
         ? (c.debtor.companyProfile?.actualAddress || c.debtor.companyProfile?.legalAddress)
         : (c.debtor.individualProfile?.actualAddress || c.debtor.individualProfile?.legalAddress);
 
+      const creditorName =
+        c.creditor?.companyProfile?.companyName ||
+        (c.creditor?.individualProfile
+          ? `${c.creditor.individualProfile.firstName} ${c.creditor.individualProfile.lastName}`.trim()
+          : c.creditor?.email) ||
+        'შპს ჯეო ტრეიდინგი';
+
+      const creditorTaxId =
+        c.creditor?.companyProfile?.taxId || c.creditor?.personalId || '405123456';
+
       return {
         id: c.id,
         caseNumber: c.caseNumber,
         agreementNumber: c.agreementNumber,
+        creditorId: c.creditorId,
+        creditorName,
+        creditorTaxId,
         debtorName,
+        debtorEntityType: c.debtor.entityType,
         debtorPersonalId: c.debtor.personalId,
         debtorPhone: c.debtor.phone || '',
         debtorAddress: address || 'ქ. თბილისი',
+        initialAmount: Number(c.initialAmount),
         remainingAmount: Number(c.remainingAmount),
         daysOverdue: c.daysOverdue,
         rating: c.rating,
+        status: c.status,
         label: `საქმე #${c.caseNumber} (${debtorName} — ${Number(c.remainingAmount).toLocaleString('ka-GE')} ₾)`,
       };
     });
   }
 
   /**
-   * Dispatch a real task to a staff employee
+   * Dispatch single or multiple portfolio claims to a staff employee
    */
   async dispatchTask(dto: DispatchTaskDto, user: any) {
     const targetUser = await this.prisma.user.findUnique({
@@ -594,8 +259,19 @@ export class AnalystService {
       throw new NotFoundException(`Staff user ${dto.staffUserId} not found`);
     }
 
-    const claim = await this.prisma.debtClaim.findUnique({
-      where: { id: dto.claimId },
+    const rawIds =
+      dto.claimIds && dto.claimIds.length > 0
+        ? dto.claimIds
+        : dto.claimId
+        ? [dto.claimId]
+        : [];
+
+    if (rawIds.length === 0) {
+      throw new BadRequestException('გთხოვთ მონიშნოთ მინიმუმ ერთი დებიტორი / საქმე');
+    }
+
+    const claims = await this.prisma.debtClaim.findMany({
+      where: { id: { in: rawIds } },
       include: {
         debtor: {
           include: {
@@ -606,52 +282,65 @@ export class AnalystService {
       },
     });
 
-    if (!claim) {
-      throw new NotFoundException(`Claim ${dto.claimId} not found`);
+    if (claims.length === 0) {
+      throw new NotFoundException('არჩეული საქმეები ბაზაში ვერ მოიძებნა');
     }
 
-    const isLegal = claim.debtor.entityType === EntityType.LEGAL;
-    const debtorAddress = isLegal
-      ? (claim.debtor.companyProfile?.actualAddress || claim.debtor.companyProfile?.legalAddress)
-      : (claim.debtor.individualProfile?.actualAddress || claim.debtor.individualProfile?.legalAddress);
+    const authorName =
+      user?.staffProfile?.fullName || user?.name || user?.email || 'ფინანსური ანალიტიკოსი';
+    const targetName = targetUser.staffProfile?.fullName || targetUser.email;
+    const memoText =
+      dto.instructions?.trim() ||
+      'გადაამოწმეთ მოვალის სტატუსი და განახორციელეთ შესაბამისი მოქმედება.';
 
-    // If assigned to FIELD_OFFICER, create FieldVisitTask
-    if (targetUser.role === UserRole.FIELD_OFFICER) {
-      await this.prisma.fieldVisitTask.create({
+    let totalAmount = 0;
+
+    for (const claim of claims) {
+      totalAmount += Number(claim.remainingAmount || 0);
+      const isLegal = claim.debtor.entityType === EntityType.LEGAL;
+      const debtorAddress = isLegal
+        ? claim.debtor.companyProfile?.actualAddress || claim.debtor.companyProfile?.legalAddress
+        : claim.debtor.individualProfile?.actualAddress ||
+          claim.debtor.individualProfile?.legalAddress;
+
+      // If assigned to FIELD_OFFICER, create FieldVisitTask
+      if (targetUser.role === UserRole.FIELD_OFFICER) {
+        await this.prisma.fieldVisitTask.create({
+          data: {
+            claimId: claim.id,
+            officerId: targetUser.id,
+            scheduledTime: new Date(Date.now() + 24 * 3600 * 1000),
+            priority:
+              dto.priority === 'high' ? 'URGENT' : dto.priority === 'low' ? 'REGULAR' : 'HIGH',
+            status: VisitStatus.PENDING,
+            district: 'საბურთალო',
+            addressSnapshot: debtorAddress || 'ქ. თბილისი',
+            notes: memoText,
+            latitude: 41.7151,
+            longitude: 44.8271,
+            photos: [],
+          },
+        });
+      }
+
+      // Always create a persistent CaseTimelineEvent
+      await this.prisma.caseTimelineEvent.create({
         data: {
           claimId: claim.id,
-          officerId: targetUser.id,
-          scheduledTime: new Date(Date.now() + 24 * 3600 * 1000),
-          priority: dto.priority === 'high' ? 'URGENT' : dto.priority === 'low' ? 'REGULAR' : 'HIGH',
-          status: VisitStatus.PENDING,
-          district: 'საბურთალო',
-          addressSnapshot: debtorAddress || 'ქ. თბილისი',
-          notes: dto.instructions,
-          latitude: 41.7151,
-          longitude: 44.8271,
-          photos: [],
+          authorId: user.id,
+          department: 'ANALYST',
+          authorRoleTitle: `ფინანსური ანალიტიკოსი - ${authorName}`,
+          actionType: 'HANDOFF_ANALYST',
+          description: `პორტფელი დელეგირებულია: ${targetName} (${targetUser.role}). პრიორიტეტი: ${dto.priority || 'ჩვეულებრივი'}. ინსტრუქცია: ${memoText}`,
         },
       });
     }
 
-    // Always create a persistent CaseTimelineEvent
-    const authorName = user?.staffProfile?.fullName || user?.name || user?.email || 'ფინანსური ანალიტიკოსი';
-    const targetName = targetUser.staffProfile?.fullName || targetUser.email;
-
-    await this.prisma.caseTimelineEvent.create({
-      data: {
-        claimId: claim.id,
-        authorId: user.id,
-        department: 'ANALYST',
-        authorRoleTitle: `ფინანსური ანალიტიკოსი - ${authorName}`,
-        actionType: 'HANDOFF_ANALYST',
-        description: `დავალება დელეგირებულია: ${targetName} (${targetUser.role}). პრიორიტეტი: ${dto.priority || 'ჩვეულებრივი'}. ინსტრუქცია: ${dto.instructions}`,
-      },
-    });
-
     return {
       success: true,
-      message: `დავალება წარმატებით გაეგზავნა შემსრულებელს: ${targetName}!`,
+      dispatchedCount: claims.length,
+      totalAmount,
+      message: `შერჩეული ${claims.length} დებიტორის პორტფელი (ჯამურად ${totalAmount.toLocaleString('ka-GE')} ₾) წარმატებით გადაეცა თანამშრომელს: ${targetName}!`,
     };
   }
 
@@ -712,7 +401,7 @@ export class AnalystService {
     return this.prisma.stagedRegistryItem.findMany({
       where: {
         type: 'DEBTOR',
-        status: 'PENDING_VERIFICATION',
+        status: { in: ['PENDING_VERIFICATION', 'PENDING'] },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -2009,7 +1698,7 @@ export class AnalystService {
    * Impersonate a staff member to view system from their perspective
    */
   async impersonateStaff(analystUser: any, targetUserId: string) {
-    return await this.authService.impersonateUser(targetUserId);
+    return await this.authService.impersonateUser(targetUserId, analystUser);
   }
 
   private getDefaultDepartment(role: UserRole): string {
@@ -2100,12 +1789,17 @@ export class AnalystService {
     });
 
     const allRecords = await this.prisma.writtenOffDebt.findMany();
-    const totalAmount = allRecords.reduce((sum, item) => sum + Number(item.writtenOffAmount), 0);
-    const totalOriginalAmount = allRecords.reduce((sum, item) => sum + Number(item.originalAmount), 0);
-    const totalCount = allRecords.length;
+    const activeRecords = allRecords.filter((r) => r.status !== 'REVERSED');
+    const reversedRecords = allRecords.filter((r) => r.status === 'REVERSED');
+
+    const totalAmount = activeRecords.reduce((sum, item) => sum + Number(item.writtenOffAmount), 0);
+    const totalOriginalAmount = activeRecords.reduce((sum, item) => sum + Number(item.originalAmount), 0);
+    const totalCount = activeRecords.length;
+    const reversedCount = reversedRecords.length;
+    const reversedAmount = reversedRecords.reduce((sum, item) => sum + Number(item.writtenOffAmount), 0);
 
     const byCategory: Record<string, { count: number; amount: number }> = {};
-    for (const r of allRecords) {
+    for (const r of activeRecords) {
       if (!byCategory[r.reasonCategory]) {
         byCategory[r.reasonCategory] = { count: 0, amount: 0 };
       }
@@ -2119,6 +1813,8 @@ export class AnalystService {
         totalAmount,
         totalOriginalAmount,
         totalCount,
+        reversedCount,
+        reversedAmount,
         socialVulnerableCount: byCategory['SOCIAL_VULNERABLE']?.count || 0,
         socialVulnerableAmount: byCategory['SOCIAL_VULNERABLE']?.amount || 0,
         disabilityCount: byCategory['DISABILITY_HEALTH']?.count || 0,
@@ -2223,6 +1919,263 @@ export class AnalystService {
       success: true,
       message: `ვალი წარმატებით ჩამოიწერა! გაფორმდა აქტი № ${record.actNumber}`,
       record,
+    };
+  }
+
+  /**
+   * Annul / Reverse a Written Off Debt Act and restore the debt across Debtor, Creditor, and all system registries
+   */
+  async annulWrittenOffDebt(id: string, reason?: string, analystUser?: any) {
+    const record = await this.prisma.writtenOffDebt.findUnique({
+      where: { id },
+    });
+
+    if (!record) {
+      throw new NotFoundException('ჩამოწერის აქტი ვერ მოიძებნა');
+    }
+
+    if (record.status === 'REVERSED') {
+      throw new BadRequestException('აღნიშნული ჩამოწერის აქტი უკვე ანულირებულია');
+    }
+
+    const annulReason =
+      reason?.trim() ||
+      'გამოვლინდა ახალი სამართლებრივი/ფინანსური გარემოება, რაც აბათილებს ვალის ჩამოწერის საფუძველს';
+
+    // 1. Resolve or find Creditor User so the restored claim appears on the Creditor's portal
+    let creditorUser = await this.prisma.user.findFirst({
+      where: {
+        role: UserRole.CREDITOR,
+        OR: [
+          ...(record.creditorTaxId ? [{ personalId: record.creditorTaxId }] : []),
+          { companyProfile: { companyName: { contains: record.creditorName, mode: 'insensitive' } } },
+        ],
+      },
+    });
+
+    if (!creditorUser) {
+      creditorUser = await this.prisma.user.findFirst({
+        where: { role: UserRole.CREDITOR },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    // 2. Resolve or create Debtor User so the restored debt appears on the Debtor's portal
+    let debtorUser = await this.prisma.user.findUnique({
+      where: { personalId: record.personalId },
+    });
+
+    const isLegalDebtor =
+      record.entityType === 'LEGAL' || record.personalId.trim().length === 9;
+
+    if (!debtorUser) {
+      const nameParts = record.debtorName.trim().split(/\s+/);
+      const firstName = nameParts[0] || record.debtorName;
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      debtorUser = await this.prisma.user.create({
+        data: {
+          email: `debtor.${record.personalId}@debitinfo.ge`,
+          passwordHash: '$2b$10$aL1aslhzSvkARi20kN52CuAca70wvfXWLY5n85LNBBC4LSfK/pXg.', // Debitinfo2024!
+          personalId: record.personalId,
+          entityType: isLegalDebtor ? EntityType.LEGAL : EntityType.PHYSICAL,
+          role: UserRole.DEBTOR,
+          isRsVerified: true,
+          status: 'ACTIVE',
+          ...(isLegalDebtor
+            ? {
+                companyProfile: {
+                  create: {
+                    companyName: record.debtorName,
+                    legalForm: 'შპს',
+                    taxId: record.personalId,
+                    legalAddress: 'ქ. თბილისი',
+                    actualAddress: 'ქ. თბილისი',
+                    directorName: 'უფლებამოსილი',
+                    directorLastName: 'დირექტორი',
+                    directorPin: '01019012345',
+                    directorPhone: '+995 599 00 00 00',
+                    directorEmail: `debtor.${record.personalId}@debitinfo.ge`,
+                  },
+                },
+              }
+            : {
+                individualProfile: {
+                  create: {
+                    firstName,
+                    lastName,
+                    legalAddress: 'ქ. თბილისი',
+                    actualAddress: 'ქ. თბილისი',
+                  },
+                },
+              }),
+        },
+      });
+    } else if (debtorUser.role === UserRole.REGULAR) {
+      await this.prisma.user.update({
+        where: { id: debtorUser.id },
+        data: { role: UserRole.DEBTOR },
+      });
+    }
+
+    // 3. Restore or create the active DebtClaim
+    let restoredClaim: any = null;
+
+    if (record.claimId) {
+      restoredClaim = await this.prisma.debtClaim.findUnique({
+        where: { id: record.claimId },
+      });
+    }
+
+    if (!restoredClaim && debtorUser) {
+      restoredClaim = await this.prisma.debtClaim.findFirst({
+        where: {
+          OR: [
+            { caseNumber: record.caseNumber },
+            { debtorId: debtorUser.id },
+          ],
+        },
+      });
+    }
+
+    const restoredAmount = Number(record.writtenOffAmount) || Number(record.originalAmount);
+    const originalAmt = Math.max(Number(record.originalAmount), restoredAmount);
+
+    if (restoredClaim) {
+      const updatedRemaining = Math.min(
+        Math.max(Number(restoredClaim.initialAmount), originalAmt),
+        Number(restoredClaim.remainingAmount) + restoredAmount,
+      );
+      restoredClaim = await this.prisma.debtClaim.update({
+        where: { id: restoredClaim.id },
+        data: {
+          remainingAmount: updatedRemaining > 0 ? updatedRemaining : restoredAmount,
+          initialAmount: Math.max(Number(restoredClaim.initialAmount), originalAmt),
+          status: ClaimStatus.OVERDUE,
+          daysOverdue: Math.max(restoredClaim.daysOverdue || 0, 35),
+          lastActivityAt: new Date(),
+        },
+      });
+    } else if (creditorUser && debtorUser) {
+      const uniqueCaseNo = record.caseNumber.startsWith('DI-')
+        ? record.caseNumber
+        : `DI-REST-${Date.now().toString().slice(-6)}`;
+
+      restoredClaim = await this.prisma.debtClaim.create({
+        data: {
+          caseNumber: uniqueCaseNo,
+          creditorId: creditorUser.id,
+          debtorId: debtorUser.id,
+          agreementNumber: `AGR-${record.actNumber}`,
+          initialAmount: originalAmt,
+          remainingAmount: restoredAmount,
+          penaltyAmount: 0,
+          currency: record.currency || 'GEL',
+          daysOverdue: 45,
+          status: ClaimStatus.OVERDUE,
+          rating: 'C',
+          riskScore: 72,
+          scheduleType: ScheduleType.STANDARD,
+          supportingDocuments: [
+            {
+              id: `doc-restored-${Date.now()}`,
+              title: `აღდგენილი ვალდებულება (ანულირებული აქტი № ${record.actNumber})`,
+              docType: 'ACT_ANNULMENT',
+              fileName: record.proofDocumentName || 'restored_debt_act.pdf',
+              fileUrl: '/documents/restored_debt_act.pdf',
+              fileSize: '420 KB',
+              uploadedAt: new Date().toISOString(),
+              description: annulReason,
+            },
+          ],
+        },
+      });
+
+      // Create 12-month standard repayment schedule for the restored claim
+      const monthlyAmt = Math.round((restoredAmount / 12) * 100) / 100;
+      await this.prisma.repaymentSchedule.create({
+        data: {
+          claimId: restoredClaim.id,
+          type: ScheduleType.STANDARD,
+          totalMonths: 12,
+          monthlyAmount: monthlyAmt,
+          startDate: new Date(),
+          isActive: true,
+        },
+      });
+    }
+
+    // 4. Add Timeline Event on the restored claim
+    if (restoredClaim) {
+      const authorId = analystUser?.id || creditorUser?.id || debtorUser.id;
+      const authorName =
+        analystUser?.name || analystUser?.email || 'უფროსი ფინანსური ანალიტიკოსი';
+
+      await this.prisma.caseTimelineEvent.create({
+        data: {
+          claimId: restoredClaim.id,
+          authorId,
+          department: 'ANALYST',
+          authorRoleTitle: `ფინანსური ანალიტიკოსი - ${authorName}`,
+          actionType: 'STATUS_CHANGE',
+          description: `ჩამოწერის აქტი № ${record.actNumber} ანულირებულია (${annulReason}). დავალიანება (${restoredAmount.toLocaleString('ka-GE')} ₾) სრულად აღდგენილია.`,
+        },
+      });
+    }
+
+    // 5. Restore / ensure presence in StagedRegistryItem (Analyst Debtors Registry)
+    const existingStaged = await this.prisma.stagedRegistryItem.findFirst({
+      where: {
+        type: 'DEBTOR',
+        personalId: record.personalId,
+      },
+    });
+
+    if (existingStaged) {
+      await this.prisma.stagedRegistryItem.update({
+        where: { id: existingStaged.id },
+        data: {
+          amount: restoredAmount,
+          status: 'ASSIGNED',
+          creditorName: record.creditorName,
+          matchedUserId: debtorUser?.id || existingStaged.matchedUserId,
+        },
+      });
+    } else {
+      await this.prisma.stagedRegistryItem.create({
+        data: {
+          type: 'DEBTOR',
+          entityType: isLegalDebtor ? 'LEGAL' : 'PHYSICAL',
+          personalId: record.personalId,
+          taxId: isLegalDebtor ? record.personalId : null,
+          name: record.debtorName,
+          amount: restoredAmount,
+          companyOrPerson: record.creditorName,
+          agreementNumber: record.actNumber,
+          creditorName: record.creditorName,
+          overdueDays: 45,
+          status: 'ASSIGNED',
+          sourceFile: 'restored_from_written_off.xlsx',
+          matchedUserId: debtorUser?.id || null,
+        },
+      });
+    }
+
+    // 6. Mark WrittenOffDebt act as REVERSED
+    const updatedRecord = await this.prisma.writtenOffDebt.update({
+      where: { id: record.id },
+      data: {
+        status: 'REVERSED',
+        claimId: restoredClaim?.id || record.claimId,
+        reasonDescription: `${record.reasonDescription}\n\n[აქტი ანულირებულია ${new Date().toLocaleDateString('ka-GE')}: ${annulReason}]`,
+      },
+    });
+
+    return {
+      success: true,
+      message: `აქტი № ${record.actNumber} ანულირებულია! მომხმარებელ „${record.debtorName}“-ს დავალიანება (${restoredAmount.toLocaleString('ka-GE')} ₾) სრულად აღუდგა დებიტორის, კრედიტორის და ოპერაციულ რეესტრებში.`,
+      record: updatedRecord,
+      restoredClaimId: restoredClaim?.id || null,
     };
   }
 

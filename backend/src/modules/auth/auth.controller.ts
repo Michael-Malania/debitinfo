@@ -114,6 +114,36 @@ export class AuthController {
     return this.authService.getMe(user.id);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('observation-status')
+  async getObservationStatus(@CurrentUser() user: User) {
+    return this.authService.getObservationStatus(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('observation-heartbeat')
+  @HttpCode(HttpStatus.OK)
+  async heartbeatObservation(
+    @CurrentUser() user: User,
+    @Body() body: { targetUserId?: string; analystName?: string; analystEmail?: string },
+  ) {
+    return this.authService.heartbeatObservation(
+      body?.targetUserId || user.id,
+      body?.analystName,
+      body?.analystEmail,
+    );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('observation-stop')
+  @HttpCode(HttpStatus.OK)
+  async stopObservation(
+    @CurrentUser() user: User,
+    @Body() body: { targetUserId?: string },
+  ) {
+    return this.authService.stopObservation(body?.targetUserId || user.id);
+  }
+
   private setAuthCookies(reply: FastifyReply, tokens: { accessToken: string; refreshToken: string }) {
     const isProduction = process.env.NODE_ENV === 'production';
 

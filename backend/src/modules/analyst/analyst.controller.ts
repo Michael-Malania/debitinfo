@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { AnalystService, AssignRoleDto, DispatchTaskDto } from './analyst.service';
+import { AnalystService, DispatchTaskDto } from './analyst.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -12,9 +12,14 @@ import { UserRole } from '@prisma/client';
 export class AnalystController {
   constructor(private readonly analystService: AnalystService) {}
 
-  @Get('users')
-  async getRegisteredUsers() {
-    return await this.analystService.getRegisteredUsers();
+  @Get('debtors-registry')
+  async getDebtorsRegistry() {
+    return await this.analystService.getExcelDebtors();
+  }
+
+  @Get('creditors-registry')
+  async getCreditorsRegistry() {
+    return await this.analystService.getExcelCreditors();
   }
 
   @Get('excel-registry/debtors')
@@ -40,16 +45,6 @@ export class AnalystController {
   @Get('workload-stats')
   async getWorkloadStats() {
     return await this.analystService.getWorkloadStats();
-  }
-
-  @Post('assign-role')
-  async assignRole(@Body() dto: AssignRoleDto) {
-    return await this.analystService.assignRole(dto);
-  }
-
-  @Post('excel-sync')
-  async syncExcelData(@Body() body: { items?: any[] }) {
-    return await this.analystService.syncExcelData(body?.items);
   }
 
   @Post('dispatch-task')
@@ -218,5 +213,14 @@ export class AnalystController {
     @CurrentUser() user: any,
   ) {
     return await this.analystService.createWrittenOffDebt(dto, user?.id);
+  }
+
+  @Post('written-off-debts/:id/annul')
+  async annulWrittenOffDebt(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @CurrentUser() user: any,
+  ) {
+    return await this.analystService.annulWrittenOffDebt(id, body?.reason, user);
   }
 }

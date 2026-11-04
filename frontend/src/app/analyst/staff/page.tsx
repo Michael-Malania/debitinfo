@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
+import AnalystSidebar from '@/components/analyst/AnalystSidebar';
 
 interface StaffMember {
   id: string;
@@ -26,7 +27,20 @@ export default function StaffRegistryPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('debitinfo_analyst_sidebar_open', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,6 +89,12 @@ export default function StaffRegistryPage() {
     }
     setCurrentUser(user);
     setAuthorized(true);
+    try {
+      const saved = localStorage.getItem('debitinfo_analyst_sidebar_open');
+      if (saved !== null) setIsSidebarOpen(saved === 'true');
+    } catch {
+      // ignore
+    }
     loadRegistry();
   }, [router]);
 
@@ -325,9 +345,15 @@ export default function StaffRegistryPage() {
       </header>
 
       {/* ========================================================================= */}
-      {/* MAIN TWO-COLUMN SPLIT WORKSPACE */}
+      {/* MAIN WORKSPACE WITH PERSISTENT COLLAPSIBLE CONSOLE SIDEBAR */}
       {/* ========================================================================= */}
-      <main className="max-w-[1720px] w-full mx-auto px-4 lg:px-8 py-6 flex-1 flex flex-col gap-6">
+      <div className="flex-1 flex w-full max-w-[1720px] mx-auto overflow-hidden">
+        <AnalystSidebar
+          activeView="staff"
+          isOpen={isSidebarOpen}
+          onToggleOpen={toggleSidebar}
+        />
+        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 flex flex-col gap-6">
         {/* Top Overview Banner */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1 z-10 max-w-2xl">
@@ -934,7 +960,8 @@ export default function StaffRegistryPage() {
             )}
           </div>
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

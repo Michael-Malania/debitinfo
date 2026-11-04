@@ -4,12 +4,26 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
+import AnalystSidebar from '@/components/analyst/AnalystSidebar';
 
 export default function AnalystAnalyticsHub() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<'schedules' | 'lawyers' | 'visitors' | 'calls' | 'statute' | 'filtered_table'>('schedules');
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('debitinfo_analyst_sidebar_open', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
   const [loading, setLoading] = useState(true);
   const [metadata, setMetadata] = useState<any>({
     lawyers: [],
@@ -186,6 +200,12 @@ export default function AnalystAnalyticsHub() {
     }
     setCurrentUser(u);
     setAuthorized(true);
+    try {
+      const saved = localStorage.getItem('debitinfo_analyst_sidebar_open');
+      if (saved !== null) setIsSidebarOpen(saved === 'true');
+    } catch {
+      // ignore
+    }
     loadAllAnalytics();
   }, [router]);
 
@@ -462,9 +482,15 @@ export default function AnalystAnalyticsHub() {
       </header>
 
       {/* ========================================================================= */}
-      {/* MAIN CONTAINER */}
+      {/* MAIN CONTAINER WITH PERSISTENT COLLAPSIBLE CONSOLE SIDEBAR */}
       {/* ========================================================================= */}
-      <main className="max-w-[1720px] w-full mx-auto px-4 lg:px-8 py-6 flex-1 flex flex-col gap-6">
+      <div className="flex-1 flex w-full max-w-[1720px] mx-auto overflow-hidden">
+        <AnalystSidebar
+          activeView="analytics"
+          isOpen={isSidebarOpen}
+          onToggleOpen={toggleSidebar}
+        />
+        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 flex flex-col gap-6">
 
         {/* 2. TOP BANNER & SCENARIO SHORTCUTS */}
         <section className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
@@ -1933,7 +1959,8 @@ export default function AnalystAnalyticsHub() {
             </div>
           </div>
         )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

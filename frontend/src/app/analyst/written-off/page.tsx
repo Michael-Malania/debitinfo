@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
+import AnalystSidebar from '@/components/analyst/AnalystSidebar';
 
 export interface WrittenOffDebtItem {
   id: string;
@@ -110,7 +111,20 @@ export default function WrittenOffDebtsPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [loading, setLoading] = useState(true);
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('debitinfo_analyst_sidebar_open', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
   const [items, setItems] = useState<WrittenOffDebtItem[]>([]);
   const [stats, setStats] = useState<any>(null);
 
@@ -122,6 +136,12 @@ export default function WrittenOffDebtsPage() {
 
   // Selected item for official Act preview modal
   const [previewActItem, setPreviewActItem] = useState<WrittenOffDebtItem | null>(null);
+
+  // Act Annulment (Reversal & Debt Restoration) Modal State
+  const [annulTargetItem, setAnnulTargetItem] = useState<WrittenOffDebtItem | null>(null);
+  const [annulReason, setAnnulReason] = useState('');
+  const [submittingAnnul, setSubmittingAnnul] = useState(false);
+  const [annulErrorMessage, setAnnulErrorMessage] = useState<string | null>(null);
 
   // New Write-off Modal State
   const [isNewWriteOffOpen, setIsNewWriteOffOpen] = useState(false);
@@ -153,6 +173,12 @@ export default function WrittenOffDebtsPage() {
     }
     setCurrentUser(user);
     setAuthorized(true);
+    try {
+      const saved = localStorage.getItem('debitinfo_analyst_sidebar_open');
+      if (saved !== null) setIsSidebarOpen(saved === 'true');
+    } catch {
+      // ignore
+    }
   }, [router]);
 
   // Load data
@@ -252,6 +278,44 @@ export default function WrittenOffDebtsPage() {
       alert(err?.message || 'ვალის ჩამოწერა ვერ მოხერხდა');
     } finally {
       setSubmittingWriteOff(false);
+    }
+  };
+
+  // Open Act Annulment Modal
+  const openAnnulModal = (item: WrittenOffDebtItem) => {
+    setAnnulTargetItem(item);
+    setAnnulReason('');
+    setAnnulErrorMessage(null);
+  };
+
+  // Submit Act Annulment & Restore Debt
+  const handleAnnulSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!annulTargetItem) return;
+    if (!annulReason.trim()) {
+      setAnnulErrorMessage('გთხოვთ მიუთითოთ აქტის ანულირების / გაბათილების სამართლებრივი მიზეზი.');
+      return;
+    }
+
+    setSubmittingAnnul(true);
+    setAnnulErrorMessage(null);
+    try {
+      const res = await analystBackendService.annulWrittenOffDebt(
+        annulTargetItem.id,
+        annulReason.trim(),
+      );
+      setWriteOffSuccessMessage(
+        res?.message ||
+          `აქტი № ${annulTargetItem.actNumber} ანულირებულია! დავალიანება სრულად აღუდგა დებიტორსა და კრედიტორს.`,
+      );
+      setTimeout(() => setWriteOffSuccessMessage(null), 6000);
+      setAnnulTargetItem(null);
+      setPreviewActItem(null);
+      await loadData();
+    } catch (err: any) {
+      setAnnulErrorMessage(err?.message || 'აქტის ანულირება ვერ მოხერხდა');
+    } finally {
+      setSubmittingAnnul(false);
     }
   };
 
@@ -413,8 +477,14 @@ export default function WrittenOffDebtsPage() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-[1720px] mx-auto px-4 lg:px-8 py-6 w-full flex-1 space-y-6">
+      {/* Main Content Area with Persistent Collapsible Console Sidebar */}
+      <div className="flex-1 flex w-full max-w-[1720px] mx-auto overflow-hidden">
+        <AnalystSidebar
+          activeView="written-off"
+          isOpen={isSidebarOpen}
+          onToggleOpen={toggleSidebar}
+        />
+        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 w-full space-y-6">
         {/* Success Banner */}
         {writeOffSuccessMessage && (
           <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-semibold flex items-center justify-between shadow-2xs animate-fadeIn">
@@ -731,18 +801,30 @@ export default function WrittenOffDebtsPage() {
 
                         {/* Written-off Amount */}
                         <td className="py-3 px-4">
-                          <div className="font-mono font-bold text-rose-700 text-sm">
-                            {formatGEL(item.writtenOffAmount)}
-                          </div>
-                          <span
-                            className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold mt-0.5 ${
-                              isFullyWrittenOff
-                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          <div
+                            className={`font-mono font-bold text-sm ${
+                              item.status === 'REVERSED'
+                                ? 'text-slate-400 line-through'
+                                : 'text-rose-700'
                             }`}
                           >
-                            {isFullyWrittenOff ? '100% ჩამოწერილი' : 'ნაწილობრივი ჩამოწერა'}
-                          </span>
+                            {formatGEL(item.writtenOffAmount)}
+                          </div>
+                          {item.status === 'REVERSED' ? (
+                            <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold mt-0.5 bg-amber-100 text-amber-800 border border-amber-300">
+                              ანულირებულია (ვალი აღდგა)
+                            </span>
+                          ) : (
+                            <span
+                              className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold mt-0.5 ${
+                                isFullyWrittenOff
+                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  : 'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}
+                            >
+                              {isFullyWrittenOff ? '100% ჩამოწერილი' : 'ნაწილობრივი ჩამოწერა'}
+                            </span>
+                          )}
                         </td>
 
                         {/* Ground & Category */}
@@ -790,17 +872,39 @@ export default function WrittenOffDebtsPage() {
 
                         {/* Actions */}
                         <td className="py-3 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setPreviewActItem(item)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-primary text-xs font-semibold transition-all shadow-2xs cursor-pointer"
-                            title="ოფიციალური აქტის გადახედვა & ბეჭდვა"
-                          >
-                            <span className="material-symbols-outlined text-[16px] text-primary">
-                              print
-                            </span>
-                            <span>აქტის ნახვა</span>
-                          </button>
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setPreviewActItem(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-primary text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+                              title="ოფიციალური აქტის გადახედვა & ბეჭდვა"
+                            >
+                              <span className="material-symbols-outlined text-[16px] text-primary">
+                                print
+                              </span>
+                              <span>აქტის ნახვა</span>
+                            </button>
+                            {item.status !== 'REVERSED' ? (
+                              <button
+                                type="button"
+                                onClick={() => openAnnulModal(item)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold transition-all shadow-2xs cursor-pointer"
+                                title="ჩამოწერის აქტის ანულირება და ვალის აღდგენა"
+                              >
+                                <span className="material-symbols-outlined text-[16px] text-amber-700">
+                                  undo
+                                </span>
+                                <span>აქტის ანულირება</span>
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-500 text-[11px] font-semibold border border-slate-200">
+                                <span className="material-symbols-outlined text-[15px]">
+                                  history
+                                </span>
+                                <span>აღდგენილია</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -810,7 +914,8 @@ export default function WrittenOffDebtsPage() {
             </div>
           )}
         </div>
-      </main>
+        </main>
+      </div>
 
       {/* ========================================================================= */}
       {/* 5. MODAL: CREATE NEW WRITTEN OFF DEBT ACT */}
@@ -1046,6 +1151,16 @@ export default function WrittenOffDebtsPage() {
                 <h3 className="font-bold text-base">ოფიციალური ჩამოწერის აქტის გადახედვა</h3>
               </div>
               <div className="flex items-center gap-2">
+                {previewActItem.status !== 'REVERSED' && (
+                  <button
+                    type="button"
+                    onClick={() => openAnnulModal(previewActItem)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">undo</span>
+                    <span>აქტის ანულირება &amp; ვალის აღდგენა</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => window.print()}
@@ -1211,6 +1326,128 @@ export default function WrittenOffDebtsPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. MODAL: ANNUL WRITTEN-OFF ACT & RESTORE DEBT ACROSS SYSTEM */}
+      {/* ========================================================================= */}
+      {annulTargetItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs overflow-y-auto animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full overflow-hidden my-8">
+            <div className="px-6 py-4 bg-amber-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-[22px]">gavel</span>
+                <div>
+                  <h3 className="font-bold text-base">
+                    ჩამოწერის აქტის ანულირება &amp; ვალის აღდგენა
+                  </h3>
+                  <p className="text-[11px] text-amber-100 font-mono">
+                    აქტი № {annulTargetItem.actNumber} • საქმე: {annulTargetItem.caseNumber}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAnnulTargetItem(null)}
+                className="w-8 h-8 rounded-lg hover:bg-white/20 flex items-center justify-center text-white cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAnnulSubmit} className="p-6 space-y-5">
+              {/* Info Banner */}
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1.5">
+                <div className="font-bold flex items-center gap-1.5 text-amber-950">
+                  <span className="material-symbols-outlined text-[18px] text-amber-600">
+                    info
+                  </span>
+                  <span>რა მოხდება აქტის ანულირების შემდეგ:</span>
+                </div>
+                <p className="leading-relaxed">
+                  ახალი გარემოების გამოვლენის საფუძველზე ჩამოწერის აქტი გაბათილდება, ხოლო დაფიქსირებული დავალიანება (
+                  <strong className="font-mono">{formatGEL(annulTargetItem.writtenOffAmount)}</strong>) ავტომატურად კვლავ აისახება{' '}
+                  <strong>დებიტორის გვერდზე</strong>, გამოუჩნდება <strong>კრედიტორს</strong> და აღდგება ყველა საოპერაციო რეესტრსა და პორტფელში.
+                </p>
+              </div>
+
+              {/* Summary Card */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400">მოვალე (დებიტორი)</div>
+                  <div className="font-bold text-slate-900 mt-0.5">{annulTargetItem.debtorName}</div>
+                  <div className="font-mono text-slate-500 text-[11px]">{annulTargetItem.personalId}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-400">კრედიტორი</div>
+                  <div className="font-bold text-slate-900 mt-0.5">{annulTargetItem.creditorName}</div>
+                  <div className="font-mono text-rose-700 font-bold text-sm mt-0.5">
+                    აღსადგენი ვალი: {formatGEL(annulTargetItem.writtenOffAmount)}
+                  </div>
+                </div>
+              </div>
+
+              {annulErrorMessage && (
+                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] text-rose-600">error</span>
+                  <span>{annulErrorMessage}</span>
+                </div>
+              )}
+
+              {/* Quick Reason Presets + Textarea */}
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-800">
+                  ანულირების საფუძველი / ახლად გამოვლენილი გარემოება <span className="text-rose-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'გამოვლინდა მოვალის ახალი ქონებრივი აქტივი და საბანკო ბრუნვა',
+                    'წარმოდგენილი შეღავათის/უქონლობის დამადასტურებელი დოკუმენტი გაბათილდა',
+                    'დადგინდა ხანდაზმულობის ვადის შეწყვეტის/აღდგენის სამართლებრივი გარემოება',
+                    'კრედიტორის მომართვისა და ახალი აუდიტორული დასკვნის საფუძველზე',
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setAnnulReason(preset)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300 border border-slate-200 text-[11px] text-slate-700 transition-colors cursor-pointer text-left"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  rows={3}
+                  value={annulReason}
+                  onChange={(e) => setAnnulReason(e.target.value)}
+                  required
+                  placeholder="დეტალურად მიუთითეთ გარემოება, რომელიც აბათილებს ვალის ჩამოწერის არგუმენტს..."
+                  className="w-full text-xs bg-white border border-slate-300 rounded-xl p-3 text-slate-800 focus:outline-none focus:border-amber-600 focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAnnulTargetItem(null)}
+                  className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                >
+                  გაუქმება
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingAnnul}
+                  className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[17px]">undo</span>
+                  <span>
+                    {submittingAnnul ? 'მიმდინარეობს აღდგენა...' : 'აქტის ანულირება & ვალის აღდგენა'}
+                  </span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -399,9 +399,23 @@ export class AuthService {
   }
 
   /**
+   * Live observation registry: maps targetUserId -> active observer details
+   */
+  private activeObservations = new Map<
+    string,
+    {
+      analystId: string;
+      analystName: string;
+      analystEmail: string;
+      startedAt: string;
+      lastHeartbeat: number;
+    }
+  >();
+
+  /**
    * Impersonate User (for Analyst or Admin monitoring / audit)
    */
-  async impersonateUser(targetUserId: string) {
+  async impersonateUser(targetUserId: string, analystUser?: any) {
     const user = await this.prisma.user.findUnique({
       where: { id: targetUserId },
       include: {
@@ -414,6 +428,34 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('მომხმარებელი ვერ მოიძებნა');
     }
+
+    let analystName =
+      analystUser?.staffProfile?.fullName ||
+      analystUser?.name ||
+      analystUser?.email ||
+      'ფინანსური ანალიტიკოსი';
+
+    if (analystUser?.id && !analystUser?.staffProfile) {
+      const fullAnalyst = await this.prisma.user.findUnique({
+        where: { id: analystUser.id },
+        include: { staffProfile: true, individualProfile: true },
+      });
+      if (fullAnalyst) {
+        analystName =
+          fullAnalyst.staffProfile?.fullName ||
+          (fullAnalyst.individualProfile
+            ? `${fullAnalyst.individualProfile.firstName} ${fullAnalyst.individualProfile.lastName}`.trim()
+            : fullAnalyst.email);
+      }
+    }
+
+    this.activeObservations.set(targetUserId, {
+      analystId: analystUser?.id || 'analyst',
+      analystName,
+      analystEmail: analystUser?.email || 'analyst@debitinfo.ge',
+      startedAt: new Date().toISOString(),
+      lastHeartbeat: Date.now(),
+    });
 
     const tokens = await this.generateTokens(user);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
@@ -448,6 +490,45 @@ export class AuthService {
       tokens,
       redirectUrl,
     };
+  }
+
+  getObservationStatus(userId: string) {
+    const obs = this.activeObservations.get(userId);
+    if (!obs) {
+      return { isBeingObserved: false, observer: null };
+    }
+    // Auto-expire if no heartbeat in 45 seconds
+    if (Date.now() - obs.lastHeartbeat > 45000) {
+      this.activeObservations.delete(userId);
+      return { isBeingObserved: false, observer: null };
+    }
+    return {
+      isBeingObserved: true,
+      observer: obs,
+    };
+  }
+
+  heartbeatObservation(targetUserId: string, analystName?: string, analystEmail?: string) {
+    const existing = this.activeObservations.get(targetUserId);
+    if (existing) {
+      existing.lastHeartbeat = Date.now();
+      if (analystName) existing.analystName = analystName;
+      this.activeObservations.set(targetUserId, existing);
+    } else {
+      this.activeObservations.set(targetUserId, {
+        analystId: 'analyst',
+        analystName: analystName || 'ფინანსური ანალიტიკოსი',
+        analystEmail: analystEmail || 'analyst@debitinfo.ge',
+        startedAt: new Date().toISOString(),
+        lastHeartbeat: Date.now(),
+      });
+    }
+    return { success: true, isBeingObserved: true };
+  }
+
+  stopObservation(targetUserId: string) {
+    this.activeObservations.delete(targetUserId);
+    return { success: true, isBeingObserved: false };
   }
 
   // ---------------------------------------------------------------------------

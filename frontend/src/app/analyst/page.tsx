@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
-import AnalystRegistryManager from '@/components/analyst/AnalystRegistryManager';
 import AddDebtorModal, { DebtorFormData } from '@/components/analyst/AddDebtorModal';
+import AnalystSidebar, { AnalystViewType } from '@/components/analyst/AnalystSidebar';
 import { downloadDebtorTemplateXLSX, parseDebtorExcelFile } from '@/utils/excel';
 
 export default function AnalystPage() {
@@ -13,17 +13,35 @@ export default function AnalystPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
   const [filterPeriod, setFilterPeriod] = useState('30d');
+  const [activeView, setActiveView] = useState<
+    'overview' | 'pending-debtors' | 'debtors-registry' | 'creditors-registry' | 'portfolio-dispatch'
+  >('overview');
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
 
-  // Live Analyst & Excel Management State
-  const [users, setUsers] = useState<any[]>([]);
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('debitinfo_analyst_sidebar_open', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  // Live Analyst Registries State
   const [excelDebtors, setExcelDebtors] = useState<any[]>([]);
   const [excelCreditors, setExcelCreditors] = useState<any[]>([]);
+  const [debtorsSearch, setDebtorsSearch] = useState('');
+  const [creditorsSearch, setCreditorsSearch] = useState('');
+  const [addDebtorModalOpen, setAddDebtorModalOpen] = useState(false);
+  const [targetCreditorForDebtor, setTargetCreditorForDebtor] = useState<any>(null);
   const [pendingCreditorDebtors, setPendingCreditorDebtors] = useState<any[]>([]);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
-  const [syncingExcel, setSyncingExcel] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
   // Creditor Registration Modal State
@@ -113,27 +131,32 @@ export default function AnalystPage() {
   const [staffOptions, setStaffOptions] = useState<any[]>([]);
   const [claimsOptions, setClaimsOptions] = useState<any[]>([]);
   const [workloadStats, setWorkloadStats] = useState<any>(null);
+  const [selectedStaffRole, setSelectedStaffRole] = useState<string>('OPERATOR');
+  const [isStaffDropdownOpen, setIsStaffDropdownOpen] = useState<boolean>(true);
   const [selectedStaffId, setSelectedStaffId] = useState('');
+  const [selectedCreditorName, setSelectedCreditorName] = useState<string>('');
+  const [isCreditorDropdownOpen, setIsCreditorDropdownOpen] = useState<boolean>(false);
+  const [selectedClaimIds, setSelectedClaimIds] = useState<string[]>([]);
+  const [portfolioDebtorSearch, setPortfolioDebtorSearch] = useState<string>('');
   const [selectedClaimId, setSelectedClaimId] = useState('');
   const [dispatchPriority, setDispatchPriority] = useState<'high' | 'medium' | 'low'>('high');
   const [dispatchInstructions, setDispatchInstructions] = useState('');
   const [isDispatching, setIsDispatching] = useState(false);
   const [dispatchSuccessMessage, setDispatchSuccessMessage] = useState<string | null>(null);
+  const [dispatchErrorMessage, setDispatchErrorMessage] = useState<string | null>(null);
 
   const loadAnalystData = async () => {
     setLoadingData(true);
     try {
-      const [uRes, dRes, cRes, staffRes, claimsRes, workloadRes, pendingRes] = await Promise.allSettled([
-        analystBackendService.getUsers(),
-        analystBackendService.getExcelDebtors(),
-        analystBackendService.getExcelCreditors(),
+      const [dRes, cRes, staffRes, claimsRes, workloadRes, pendingRes] = await Promise.allSettled([
+        analystBackendService.getDebtorsRegistry(),
+        analystBackendService.getCreditorsRegistry(),
         analystBackendService.getStaffOptions(),
         analystBackendService.getClaimsOptions(),
         analystBackendService.getWorkloadStats(),
         analystBackendService.getPendingDebtors(),
       ]);
 
-      const u = uRes.status === 'fulfilled' ? uRes.value : [];
       const d = dRes.status === 'fulfilled' ? dRes.value : [];
       const c = cRes.status === 'fulfilled' ? cRes.value : [];
       const staff = staffRes.status === 'fulfilled' ? staffRes.value : [];
@@ -141,20 +164,12 @@ export default function AnalystPage() {
       const workload = workloadRes.status === 'fulfilled' ? workloadRes.value : null;
       const pendingDebtors = pendingRes.status === 'fulfilled' ? pendingRes.value : [];
 
-      setUsers(u || []);
       setExcelDebtors(d || []);
       setExcelCreditors(c || []);
       setStaffOptions(staff || []);
       setClaimsOptions(claims || []);
       setWorkloadStats(workload || null);
       setPendingCreditorDebtors(pendingDebtors || []);
-
-      if (staff && staff.length > 0) {
-        setSelectedStaffId((prev) => prev || staff[0].id);
-      }
-      if (claims && claims.length > 0) {
-        setSelectedClaimId((prev) => prev || claims[0].id);
-      }
     } catch (err) {
       console.warn('Could not load analyst data:', err);
     } finally {
@@ -167,7 +182,6 @@ export default function AnalystPage() {
       await downloadDebtorTemplateXLSX();
     } catch (err) {
       console.error('Failed to download template:', err);
-      alert('შაბლონის ჩამოტვირთვა ვერ მოხერხდა.');
     }
   };
 
@@ -180,7 +194,7 @@ export default function AnalystPage() {
       setPendingCreditorDebtors((prev) => prev.filter((d) => d.id !== id));
       await loadAnalystData();
     } catch (err: any) {
-      alert(err?.message || 'დადასტურება ვერ მოხერხდა');
+      console.error('Verification error:', err);
     } finally {
       setVerifyingId(null);
     }
@@ -191,18 +205,13 @@ export default function AnalystPage() {
     if (!file) return;
     try {
       const parsed = await parseDebtorExcelFile(file);
-      const newDebtors = parsed.map((d) => ({ ...d, status: 'VERIFIED' }));
-      if (newDebtors.length > 0) {
-        await analystBackendService.syncExcelData(newDebtors);
-        setActionSuccessMessage(`Excel (.xlsx) ფაილიდან წარმატებით ჩაიტვირთა ${newDebtors.length} დებიტორი!`);
+      if (parsed.length > 0) {
+        setCreditorDebtorsList((prev) => [...prev, ...(parsed as any[])]);
+        setActionSuccessMessage(`Excel (.xlsx) ფაილიდან სიაში დაემატა ${parsed.length} დებიტორი!`);
         setTimeout(() => setActionSuccessMessage(null), 5000);
-        await loadAnalystData();
-      } else {
-        alert('ფაილში მონაცემები ვერ მოიძებნა. გთხოვთ გამოიყენოთ შაბლონი (.xlsx).');
       }
     } catch (err) {
       console.error('Analyst import error:', err);
-      alert('ფაილის წაკითხვა ვერ მოხერხდა. გადაამოწმეთ ფაილის ფორმატი (.xlsx / .xls).');
     } finally {
       e.target.value = '';
     }
@@ -210,25 +219,35 @@ export default function AnalystPage() {
 
   const handleDispatchTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStaffId || !selectedClaimId) {
-      alert('გთხოვთ აირჩიოთ შემსრულებელი თანამშრომელი და საქმე');
+    setDispatchErrorMessage(null);
+    if (!selectedStaffId) {
+      setDispatchErrorMessage('გთხოვთ შეარჩიოთ თანამშრომლის როლი და მიუთითოთ შემსრულებელი თანამშრომელი.');
+      return;
+    }
+    if (selectedClaimIds.length === 0) {
+      setDispatchErrorMessage('გთხოვთ შეარჩიოთ კრედიტორი და მონიშნოთ მინიმუმ ერთი დებიტორი.');
       return;
     }
     setIsDispatching(true);
     try {
       const res = await analystBackendService.dispatchTask({
         staffUserId: selectedStaffId,
-        claimId: selectedClaimId,
+        claimIds: selectedClaimIds,
         priority: dispatchPriority,
         instructions: dispatchInstructions || 'გადაამოწმეთ მოვალის სტატუსი და განახორციელეთ შესაბამისი მოქმედება.',
       });
-      setDispatchSuccessMessage(res?.message || 'დავალება წარმატებით გაეგზავნა თანამშრომელს!');
+      setDispatchSuccessMessage(res?.message || 'პორტფელი წარმატებით გადანაწილდა თანამშრომელზე!');
       setDispatchInstructions('');
-      setTimeout(() => setDispatchSuccessMessage(null), 5000);
-      const updatedWorkload = await analystBackendService.getWorkloadStats();
+      setSelectedClaimIds([]);
+      setTimeout(() => setDispatchSuccessMessage(null), 6000);
+      const [updatedWorkload, updatedStaff] = await Promise.all([
+        analystBackendService.getWorkloadStats(),
+        analystBackendService.getStaffOptions(),
+      ]);
       setWorkloadStats(updatedWorkload);
+      setStaffOptions(updatedStaff || []);
     } catch (err: any) {
-      alert(err?.message || 'დავალების გაგზავნა ვერ მოხერხდა');
+      setDispatchErrorMessage(err?.message || 'პორტფელის გადაცემა ვერ მოხერხდა');
     } finally {
       setIsDispatching(false);
     }
@@ -247,35 +266,31 @@ export default function AnalystPage() {
     }
     setCurrentUser(u);
     setAuthorized(true);
+    try {
+      const saved = localStorage.getItem('debitinfo_analyst_sidebar_open');
+      if (saved !== null) setIsSidebarOpen(saved === 'true');
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get('view');
+      if (
+        viewParam === 'overview' ||
+        viewParam === 'pending-debtors' ||
+        viewParam === 'debtors-registry' ||
+        viewParam === 'creditors-registry' ||
+        viewParam === 'portfolio-dispatch'
+      ) {
+        setActiveView(viewParam);
+      }
+      if (params.get('registerCreditor') === '1') {
+        setIsRegistrationOpen(true);
+      }
+      if (params.get('openFilter') === '1') {
+        setIsFilterDrawerOpen(true);
+      }
+    } catch {
+      // ignore
+    }
     loadAnalystData();
   }, [router]);
-
-  const handleAssignRole = async (
-    user: any,
-    role: 'DEBTOR' | 'CREDITOR',
-    agreement?: string,
-    amount?: number,
-    registryItemId?: string,
-    creditorId?: string
-  ) => {
-    try {
-      await analystBackendService.assignRole({
-        userId: user.id,
-        targetRole: role,
-        agreementNumber: agreement || `AGR-${Math.floor(10000 + Math.random() * 90000)}`,
-        amount: amount || (role === 'DEBTOR' ? 1540 : 0),
-        registryItemId,
-        creditorId,
-      });
-      setActionSuccessMessage(
-        `მომხმარებელს ${user.name || user.email} წარმატებით მიენიჭა ${role === 'DEBTOR' ? 'დებიტორის' : 'კრედიტორის'} სტატუსი!`
-      );
-      setTimeout(() => setActionSuccessMessage(null), 4000);
-      await loadAnalystData();
-    } catch (err: any) {
-      alert(err?.message || 'როლის მინიჭება ვერ მოხერხდა');
-    }
-  };
 
   const handleAddDebtorToExistingCreditor = async (creditorTaxId: string, debtor: DebtorFormData) => {
     try {
@@ -284,7 +299,7 @@ export default function AnalystPage() {
       setTimeout(() => setActionSuccessMessage(null), 4000);
       await loadAnalystData();
     } catch (err: any) {
-      alert(err?.message || 'დებიტორის მიბმა ვერ მოხერხდა');
+      console.error('Failed to add debtor:', err);
     }
   };
 
@@ -344,23 +359,9 @@ export default function AnalystPage() {
 
       await loadAnalystData();
     } catch (err: any) {
-      alert(err?.message || 'კრედიტორის რეგისტრაცია ვერ მოხერხდა');
+      console.error('Creditor registration error:', err);
     } finally {
       setRegisteringCreditor(false);
-    }
-  };
-
-  const handleSyncExcel = async () => {
-    setSyncingExcel(true);
-    try {
-      const res = await analystBackendService.syncExcelData();
-      setActionSuccessMessage(res?.message || 'Excel-ის მონაცემთა ბაზა წარმატებით დასინქრონირდა!');
-      setTimeout(() => setActionSuccessMessage(null), 4000);
-      await loadAnalystData();
-    } catch (err: any) {
-      alert(err?.message || 'სინქრონიზაცია ვერ მოხერხდა');
-    } finally {
-      setSyncingExcel(false);
     }
   };
 
@@ -518,148 +519,29 @@ export default function AnalystPage() {
   {/* ========================================================================= */}
   <div className="flex-1 flex w-full max-w-[1720px] mx-auto overflow-hidden">
     {/* ========================================================================= */}
-    {/* 2. LEFT COLLAPSIBLE NAVIGATION SIDEBAR (260px) */}
+    {/* 2. LEFT COLLAPSIBLE NAVIGATION SIDEBAR */}
     {/* ========================================================================= */}
-    <aside className="w-[260px] bg-surface-card border-r border-border-subtle flex-shrink-0 flex flex-col justify-between hidden md:flex py-5 px-3">
-      {/* Primary Navigation Cluster */}
-      <div className="space-y-6">
-        <div>
-          <div className="px-3 pb-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
-            მთავარი კონსოლი
-          </div>
-          <nav className="space-y-1">
-            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-primary-container text-white shadow-sm font-body-md font-medium group transition-all" href="#">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px]" style={{fontVariationSettings: '"FILL" 1'}}>dashboard</span>
-                <span>მიმოხილვა &amp; მონიტორინგი</span>
-              </div>
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-            </a>
-            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-900 hover:from-indigo-100 hover:to-blue-100 transition-all font-body-md font-semibold border border-indigo-200/80 shadow-2xs" href="/analyst/analytics">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-indigo-600">query_stats</span>
-                <span>ღრმა ანალიტიკა (BI Hub)</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded bg-indigo-600 text-white text-[10px] font-mono font-bold">
-                NEW
-              </span>
-            </Link>
-            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#excel-registry-section">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-sky-600">badge</span>
-                <span>დებიტორთა რეესტრი</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 border border-sky-200 text-[10px] font-mono font-semibold">
-                {excelDebtors.length}
-              </span>
-            </a>
-            <a className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="#excel-registry-section">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-primary">account_balance</span>
-                <span>კრედიტორთა რეესტრი</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded bg-blue-50 text-primary border border-blue-200 text-[10px] font-mono font-bold">
-                {excelCreditors.length}
-              </span>
-            </a>
-            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/analyst/portfolio">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-indigo-600">send_time_extension</span>
-                <span>სამართავი პორტფელის განაწილება</span>
-              </div>
-            </Link>
-            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/analyst/staff">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-emerald-600">badge</span>
-                <span>თანამშრომელთა რეესტრი</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-mono font-semibold">
-                HR
-              </span>
-            </Link>
-            <Link className="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-700 hover:text-primary hover:bg-slate-50 transition-colors font-body-md font-medium" href="/analyst/written-off">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[20px] text-rose-600">assignment_turned_in</span>
-                <span>ჩამოწერილი ვალების რეესტრი</span>
-              </div>
-              <span className="px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-mono font-bold">
-                აქტები
-              </span>
-            </Link>
-          </nav>
-          <div className="pt-3 px-1">
-            <button
-              type="button"
-              onClick={() => setIsRegistrationOpen(true)}
-              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-primary hover:bg-[#0A37CA] text-white font-semibold text-xs shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
-            >
-              <span className="material-symbols-outlined text-[18px]">domain_add</span>
-              <span>+ კრედიტორის რეგისტრაცია</span>
-            </button>
-          </div>
-        </div>
-        {/* Quick Access Filters */}
-        <div className="pt-2 border-t border-border-subtle">
-          <div className="px-3 pb-2 text-[10px] font-semibold text-text-muted uppercase tracking-wider">
-            სწრაფი ფილტრები
-          </div>
-          <div className="space-y-1">
-            <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-body-sm font-body-sm text-slate-600 hover:bg-slate-50 hover:text-text-primary transition-colors text-left">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-rating-c" />
-                <span className="">სასამართლო სარჩელები</span>
-              </span>
-              <span className="font-mono text-label-sm text-text-muted">312</span>
-            </button>
-            <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-body-sm font-body-sm text-slate-600 hover:bg-slate-50 hover:text-text-primary transition-colors text-left">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                <span className="">მოლაპარაკების ფაზა</span>
-              </span>
-              <span className="font-mono text-label-sm text-text-muted">456</span>
-            </button>
-            <button className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-body-sm font-body-sm text-slate-600 hover:bg-slate-50 hover:text-text-primary transition-colors text-left">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="">გრაფიკით დაფარვა</span>
-              </span>
-              <span className="font-mono text-label-sm text-text-muted">516</span>
-            </button>
-          </div>
-        </div><div className="px-1 pt-2">
-          <button type="button" onClick={() => setIsFilterDrawerOpen(true)} className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50/70 border border-primary/20 text-primary hover:border-primary hover:shadow-sm transition-all group cursor-pointer" title="გაფართოებული ფილტრაცია">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center shadow-xs">
-                <span className="material-symbols-outlined text-[17px]">tune</span>
-              </div>
-              <div className="flex flex-col text-left">
-                <span className="text-body-sm font-semibold text-text-primary group-hover:text-primary transition-colors leading-tight">ფილტრები</span>
-                <span className="text-[10px] text-text-muted">Audit &amp; Verification</span>
-              </div>
-            </div>
-            <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[10px] font-bold">⌥F</span>
-          </button>
-        </div>
-      </div>
-      {/* Bottom Sidebar Health Widget */}
-      <div className="p-3.5 bg-slate-50 rounded-xl border border-border-subtle space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[18px]">dns</span>
-            <span className="text-body-sm font-body-sm font-semibold text-text-primary">სისტემის მდგომარეობა</span>
-          </div>
-          <span className="text-label-sm font-label-sm text-emerald-600 font-bold">99.8%</span>
-        </div>
-        {/* Load bar */}
-        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-          <div className="bg-gradient-to-r from-primary to-emerald-500 h-full rounded-full" style={{width: '92%'}} />
-        </div>
-        <div className="flex items-center justify-between text-[11px] text-text-muted">
-          <span className="">აქტიური სესიები: <strong className="text-text-primary font-mono">14</strong></span>
-          <span className="">პინგ: <strong className="text-emerald-600 font-mono">18ms</strong></span>
-        </div>
-      </div>
-    </aside>
+    <AnalystSidebar
+      activeView={activeView}
+      onSelectView={(v: AnalystViewType) => {
+        if (
+          v === 'overview' ||
+          v === 'pending-debtors' ||
+          v === 'debtors-registry' ||
+          v === 'creditors-registry' ||
+          v === 'portfolio-dispatch'
+        ) {
+          setActiveView(v);
+        }
+      }}
+      onOpenCreditorRegistration={() => setIsRegistrationOpen(true)}
+      onOpenFilterDrawer={() => setIsFilterDrawerOpen(true)}
+      pendingCount={pendingCreditorDebtors.length}
+      debtorsCount={excelDebtors.length}
+      creditorsCount={excelCreditors.length}
+      isOpen={isSidebarOpen}
+      onToggleOpen={toggleSidebar}
+    />
     {/* ========================================================================= */}
     {/* MAIN CONTENT CANVAS */}
     {/* ========================================================================= */}
@@ -667,19 +549,53 @@ export default function AnalystPage() {
       {/* Operational Header Row with Breadcrumb */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2 border-b border-border-subtle">
         <div>
-          <div className="flex items-center gap-2 text-label-sm font-label-sm text-text-muted mb-1">
+          <div className="flex items-center gap-2 text-label-sm font-label-sm text-text-muted">
             <span>პლატფორმა</span>
             <span>/</span>
             <span>ოპერაციული ცენტრი</span>
             <span>/</span>
-            <span className="text-primary font-medium">სამართავი პანელი</span>
+            <span className="text-primary font-medium">
+              {activeView === 'pending-debtors'
+                ? 'კრედიტორების მიერ ატვირთული დებიტორები (დასადასტურებელი)'
+                : activeView === 'debtors-registry'
+                ? 'დებიტორთა რეესტრი'
+                : activeView === 'creditors-registry'
+                ? 'კრედიტორთა რეესტრი'
+                : activeView === 'portfolio-dispatch'
+                ? 'სამართავი პორტფელის განაწილება'
+                : 'მთავარი გვერდი'}
+            </span>
           </div>
-          <h1 className="text-headline-lg font-headline-lg text-text-primary tracking-tight font-bold">
-            ფინანსური ანალიტიკოსის მთავარი დაფა
-          </h1>
         </div>
+        {activeView !== 'overview' && (
+          <button
+            type="button"
+            onClick={() => setActiveView('overview')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-slate-50 text-xs font-semibold text-text-primary transition-colors cursor-pointer self-start lg:self-auto"
+          >
+            <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+            <span>უკან მთავარ პანელზე</span>
+          </button>
+        )}
       </div>
 
+      {activeView === 'pending-debtors' ? (
+      <>
+      {actionSuccessMessage && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-emerald-800 text-sm animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
+            <span className="font-medium">{actionSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionSuccessMessage(null)}
+            className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      )}
       {/* ========================================================================= */}
       {/* 4.5. CREDITORS PENDING DEBTORS (VERIFICATION QUEUE) */}
       {/* ========================================================================= */}
@@ -694,8 +610,8 @@ export default function AnalystPage() {
                 <h2 className="text-headline-sm font-headline-sm text-text-primary font-bold">
                   კრედიტორების მიერ ატვირთული დებიტორები (დასადასტურებელი)
                 </h2>
-                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold font-mono">
-                  {pendingCreditorDebtors.length} მოთხოვნა
+                <span className="w-6 h-6 rounded-full bg-red-600 text-white text-xs font-bold font-mono inline-flex items-center justify-center shadow-xs">
+                  {pendingCreditorDebtors.length}
                 </span>
               </div>
               <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
@@ -814,260 +730,1128 @@ export default function AnalystPage() {
           )}
         </div>
       </section>
+      </>
+      ) : activeView === 'portfolio-dispatch' ? (
+      <>
 
       {/* ========================================================================= */}
       {/* 5. TASK DISPATCHER & PORTFOLIO ALLOCATION PANEL */}
       {/* ========================================================================= */}
-      <section id="portfolio-dispatch-section" className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm scroll-mt-20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-5 border-b border-border-subtle">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined text-[24px]">send_time_extension</span>
-            </div>
-            <div>
-              <h2 className="text-headline-sm font-headline-sm text-text-primary font-bold">
-                სამართავი პორტფელის განაწილება
-              </h2>
-              <p className="text-body-sm font-body-sm text-text-muted">
-                მიამაგრეთ საქმე პასუხისმგებელ თანამშრომელს (ოპერატორი, ველის შემმოწმებელი, იურისტი) და გაუნაწილეთ შესასრულებელი ამოცანები
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-label-sm font-label-sm text-text-muted">ავტომატური დისპეტჩერი:</span>
-            <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[11px] font-mono border border-emerald-200 font-semibold">
-              Live PostgreSQL Connected
-            </span>
-          </div>
-        </div>
+      {(() => {
+        const ROLE_OPTIONS = [
+          {
+            code: 'OPERATOR',
+            label: 'კრედიტ-მენეჯერი (ოპერატორი)',
+            subtitle: 'სატელეფონო კომუნიკაცია & მოლაპარაკება',
+            icon: 'support_agent',
+            color: 'blue',
+          },
+          {
+            code: 'LEGAL',
+            label: 'იურისტი',
+            subtitle: 'სასამართლო წარმოება & აღსრულება',
+            icon: 'gavel',
+            color: 'indigo',
+          },
+          {
+            code: 'FIELD_OFFICER',
+            label: 'საველე ვიზიტორი / კურიერი',
+            subtitle: 'ადგილზე ვიზიტი & ოქმის შედგენა',
+            icon: 'directions_car',
+            color: 'amber',
+          },
+        ];
 
-        {dispatchSuccessMessage && (
-          <div className="mt-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-3 text-emerald-800 text-sm animate-fadeIn">
-            <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
-            <span className="font-medium">{dispatchSuccessMessage}</span>
-          </div>
-        )}
+        const filteredStaffByRole = staffOptions.filter((s) =>
+          selectedStaffRole ? s.role === selectedStaffRole : true
+        );
+        const chosenStaff = staffOptions.find((s) => s.id === selectedStaffId) || null;
 
-        <form className="mt-6 space-y-6" onSubmit={handleDispatchTask}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Employee Dropdown Selector */}
-            <div>
-              <label className="block text-body-sm font-body-sm font-medium text-text-primary mb-2">
-                შემსრულებელი თანამშრომელი <span className="text-rating-c">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={selectedStaffId}
-                  onChange={(e) => setSelectedStaffId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all appearance-none"
-                >
-                  {staffOptions.length === 0 ? (
-                    <option value="">თანამშრომლები იტვირთება...</option>
-                  ) : (
-                    staffOptions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.label}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <span className="material-symbols-outlined absolute right-3 top-3 text-text-muted pointer-events-none text-[20px]">
-                  expand_more
-                </span>
+        // Group claims by creditorName
+        const creditorGroupsMap = new Map<
+          string,
+          {
+            creditorName: string;
+            creditorTaxId: string;
+            claims: any[];
+            totalAmount: number;
+          }
+        >();
+
+        claimsOptions.forEach((cl) => {
+          const cName = cl.creditorName || 'შპს ჯეო ტრეიდინგი';
+          const cTax = cl.creditorTaxId || '405123456';
+          if (!creditorGroupsMap.has(cName)) {
+            creditorGroupsMap.set(cName, {
+              creditorName: cName,
+              creditorTaxId: cTax,
+              claims: [],
+              totalAmount: 0,
+            });
+          }
+          const grp = creditorGroupsMap.get(cName)!;
+          grp.claims.push(cl);
+          grp.totalAmount += Number(cl.remainingAmount || 0);
+        });
+
+        const creditorGroups = Array.from(creditorGroupsMap.values());
+        const activeCreditorGroup =
+          creditorGroups.find((g) => g.creditorName === selectedCreditorName) || null;
+
+        const visibleCreditorClaims = (activeCreditorGroup?.claims || []).filter((cl) => {
+          if (!portfolioDebtorSearch.trim()) return true;
+          const q = portfolioDebtorSearch.toLowerCase();
+          return (
+            cl.debtorName?.toLowerCase().includes(q) ||
+            cl.debtorPersonalId?.toLowerCase().includes(q) ||
+            cl.caseNumber?.toLowerCase().includes(q) ||
+            cl.agreementNumber?.toLowerCase().includes(q)
+          );
+        });
+
+        const selectedClaimObjects = claimsOptions.filter((cl) =>
+          selectedClaimIds.includes(cl.id)
+        );
+        const selectedTotalAmount = selectedClaimObjects.reduce(
+          (sum, cl) => sum + Number(cl.remainingAmount || 0),
+          0
+        );
+
+        const toggleClaimCheckbox = (claimId: string) => {
+          setSelectedClaimIds((prev) =>
+            prev.includes(claimId) ? prev.filter((id) => id !== claimId) : [...prev, claimId]
+          );
+        };
+
+        const allVisibleIds = visibleCreditorClaims.map((c) => c.id);
+        const areAllVisibleSelected =
+          allVisibleIds.length > 0 &&
+          allVisibleIds.every((id) => selectedClaimIds.includes(id));
+
+        const toggleSelectAllVisible = () => {
+          if (areAllVisibleSelected) {
+            setSelectedClaimIds((prev) => prev.filter((id) => !allVisibleIds.includes(id)));
+          } else {
+            setSelectedClaimIds((prev) => Array.from(new Set([...prev, ...allVisibleIds])));
+          }
+        };
+
+        return (
+          <section
+            id="portfolio-dispatch-section"
+            className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm scroll-mt-20 space-y-6"
+          >
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-5 border-b border-border-subtle">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-primary">
+                  <span className="material-symbols-outlined text-[24px]">send_time_extension</span>
+                </div>
+                <div>
+                  <h2 className="text-headline-sm font-headline-sm text-text-primary font-bold">
+                    სამართავი პორტფელის განაწილება
+                  </h2>
+                  <p className="text-body-sm font-body-sm text-text-muted">
+                    1) შეარჩიეთ როლი და თანამშრომელი • 2) შეარჩიეთ კრედიტორი • 3) მონიშნეთ დებიტორები ავტომატური დაჯამებით
+                  </p>
+                </div>
               </div>
-              {(() => {
-                const s = staffOptions.find((x) => x.id === selectedStaffId);
-                return s ? (
-                  <span className="text-[11px] text-text-muted mt-1 block">
-                    მიმდინარე დატვირთვა: <strong className="text-text-primary font-mono">{s.activeTaskCount}</strong> აქტიური დავალება
-                  </span>
-                ) : null;
-              })()}
-            </div>
-            {/* Portfolio / Case Reference Selector */}
-            <div>
-              <label className="block text-body-sm font-body-sm font-medium text-text-primary mb-2">
-                საქმე / პორტფელის რეკვიზიტი <span className="text-rating-c">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  value={selectedClaimId}
-                  onChange={(e) => setSelectedClaimId(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-body-md font-body-md text-text-primary focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all appearance-none font-mono text-[13px]"
-                >
-                  {claimsOptions.length === 0 ? (
-                    <option value="">საქმეები იტვირთება...</option>
-                  ) : (
-                    claimsOptions.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <span className="material-symbols-outlined absolute right-3 top-3 text-text-muted pointer-events-none text-[20px]">
-                  folder_open
-                </span>
-              </div>
-              {(() => {
-                const c = claimsOptions.find((x) => x.id === selectedClaimId);
-                return c ? (
-                  <span className="text-[11px] text-emerald-700 font-medium mt-1 block">
-                    ვადაგადაცილება: {c.daysOverdue} დღე • ნაშთი: {c.remainingAmount.toLocaleString('ka-GE')} ₾
-                  </span>
-                ) : null;
-              })()}
-            </div>
-            {/* Priority Selector (Toggle Badges) */}
-            <div>
-              <label className="block text-body-sm font-body-sm font-medium text-text-primary mb-2">
-                დავალების პრიორიტეტი <span className="text-rating-c">*</span>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <label className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="priority"
-                    value="high"
-                    checked={dispatchPriority === 'high'}
-                    onChange={() => setDispatchPriority('high')}
-                    className="peer sr-only"
-                  />
-                  <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-red-50 peer-checked:text-red-700 peer-checked:border-red-300 transition-all flex items-center justify-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-rating-c" />
-                    <span>სასწრაფო</span>
-                  </div>
-                </label>
-                <label className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="priority"
-                    value="medium"
-                    checked={dispatchPriority === 'medium'}
-                    onChange={() => setDispatchPriority('medium')}
-                    className="peer sr-only"
-                  />
-                  <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-amber-50 peer-checked:text-amber-700 peer-checked:border-amber-300 transition-all flex items-center justify-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span>საშუალო</span>
-                  </div>
-                </label>
-                <label className="cursor-pointer">
-                  <input
-                    type="radio"
-                    name="priority"
-                    value="low"
-                    checked={dispatchPriority === 'low'}
-                    onChange={() => setDispatchPriority('low')}
-                    className="peer sr-only"
-                  />
-                  <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-checked:border-emerald-300 transition-all flex items-center justify-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span>დაბალი</span>
-                  </div>
-                </label>
-              </div>
-              <span className="text-[11px] text-text-muted mt-1 block">შესრულების დედლაინი: 24 საათი</span>
-            </div>
-          </div>
-          {/* Description and Quick Action Chips */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-body-sm font-body-sm font-medium text-text-primary">
-                დავალების შინაარსი &amp; შიდა ინსტრუქცია (Internal Memo)
-              </label>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-text-muted">სწრაფი შაბლონები:</span>
-                <div className="flex flex-wrap gap-1.5">
+                <span className="text-label-sm font-label-sm text-text-muted">ავტომატური დისპეტჩერი:</span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-mono border border-emerald-200 font-semibold">
+                  Live PostgreSQL Connected
+                </span>
+              </div>
+            </div>
+
+            {dispatchSuccessMessage && (
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-emerald-800 text-sm animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
+                  <span className="font-semibold">{dispatchSuccessMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDispatchSuccessMessage(null)}
+                  className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+            )}
+
+            {dispatchErrorMessage && (
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-3 text-rose-800 text-sm animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-rose-600 text-[20px]">error</span>
+                  <span className="font-semibold">{dispatchErrorMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDispatchErrorMessage(null)}
+                  className="text-rose-700 hover:text-rose-900 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+            )}
+
+            <form className="space-y-6" onSubmit={handleDispatchTask}>
+              {/* =============================================================== */}
+              {/* STEP 1: ROLE CHECKBOXES & STAFF DROPDOWN -> SELECTED STAFF BOX */}
+              {/* =============================================================== */}
+              <div className="rounded-xl border border-border-subtle bg-slate-50/70 p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center font-mono">
+                      1
+                    </span>
+                    <div>
+                      <h3 className="text-body-md font-bold text-text-primary">
+                        თანამშრომლის ფუნქციის (როლის) და შემსრულებლის შერჩევა
+                      </h3>
+                      <p className="text-xs text-text-muted">
+                        მონიშნეთ თანამშრომლის ფუნქცია სისტემაში, რათა გამოჩნდეს შესაბამისი თანამშრომლების სია
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Role Checkboxes */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {ROLE_OPTIONS.map((r) => {
+                    const isChecked = selectedStaffRole === r.code;
+                    const countInRole = staffOptions.filter((s) => s.role === r.code).length;
+                    return (
+                      <div
+                        key={r.code}
+                        onClick={() => {
+                          setSelectedStaffRole(r.code);
+                          setIsStaffDropdownOpen(true);
+                        }}
+                        className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                          isChecked
+                            ? 'bg-blue-50/90 border-primary ring-2 ring-primary/15 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div
+                          className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                            isChecked
+                              ? 'bg-primary border-primary text-white'
+                              : 'bg-white border-slate-300 text-transparent'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[15px] font-bold">check</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs font-bold text-text-primary truncate">{r.label}</span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono text-[10px] font-bold">
+                              {countInRole}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-text-muted mt-0.5 leading-tight">{r.subtitle}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Staff Slot (Field where clicked employee drops in) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start pt-1">
+                  <div className="lg:col-span-5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      შერჩეული შემსრულებელი თანამშრომელი (ველი):
+                    </label>
+                    {chosenStaff ? (
+                      <div className="p-3.5 rounded-xl bg-white border-2 border-emerald-500 shadow-xs flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center shrink-0 border border-emerald-300">
+                            {chosenStaff.fullName?.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-bold text-text-primary truncate">
+                                {chosenStaff.fullName}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold">
+                                არჩეულია
+                              </span>
+                            </div>
+                            <div className="text-xs text-text-muted truncate">
+                              {chosenStaff.roleTitle} • აქტიური საქმეები:{' '}
+                              <strong className="font-mono text-text-primary">{chosenStaff.activeTaskCount}</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700 shrink-0 cursor-pointer"
+                        >
+                          {isStaffDropdownOpen ? 'სიის დამალვა' : 'შეცვლა'}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-xl bg-white border-2 border-dashed border-amber-300 text-amber-800 text-xs flex items-center gap-2.5">
+                        <span className="material-symbols-outlined text-amber-600 text-[20px]">person_search</span>
+                        <span>
+                          მარჯვენა სიიდან აირჩიეთ სასურველი თანამშრომელი
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Expanded Staff List for the checked Role */}
+                  <div className="lg:col-span-7">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        თანამშრომლების სია ({filteredStaffByRole.length}) — აირჩიეთ შემსრულებელი:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsStaffDropdownOpen((prev) => !prev)}
+                        className="text-xs text-primary font-semibold hover:underline cursor-pointer flex items-center gap-0.5"
+                      >
+                        <span>{isStaffDropdownOpen ? 'ჩაკეცვა' : 'ჩამოშლა'}</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {isStaffDropdownOpen ? 'expand_less' : 'expand_more'}
+                        </span>
+                      </button>
+                    </div>
+
+                    {isStaffDropdownOpen && (
+                      <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-56 overflow-y-auto shadow-2xs">
+                        {filteredStaffByRole.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-text-muted">
+                            ამ როლზე თანამშრომლები ვერ მოიძებნა
+                          </div>
+                        ) : (
+                          filteredStaffByRole.map((s) => {
+                            const isSelected = s.id === selectedStaffId;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStaffId(s.id);
+                                }}
+                                className={`w-full px-4 py-2.5 flex items-center justify-between gap-3 text-left transition-colors cursor-pointer ${
+                                  isSelected ? 'bg-blue-50/80' : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div
+                                    className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                                      isSelected
+                                        ? 'bg-primary border-primary text-white'
+                                        : 'border-slate-300 bg-white text-transparent'
+                                    }`}
+                                  >
+                                    <span className="material-symbols-outlined text-[13px] font-bold">check</span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-semibold text-text-primary truncate">
+                                      {s.fullName}
+                                    </div>
+                                    <div className="text-[11px] text-text-muted truncate">
+                                      {s.roleTitle} • {s.email}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono text-[11px] font-semibold">
+                                    {s.activeTaskCount} საქმე
+                                  </span>
+                                  <span className="text-xs font-semibold text-primary">
+                                    {isSelected ? 'არჩეულია' : 'არჩევა →'}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* =============================================================== */}
+              {/* STEP 2: CREDITOR (CLIENT COMPANY) SELECTION                     */}
+              {/* =============================================================== */}
+              <div className="rounded-xl border border-border-subtle bg-slate-50/70 p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center font-mono">
+                      2
+                    </span>
+                    <div>
+                      <h3 className="text-body-md font-bold text-text-primary">
+                        კრედიტორის (დამკვეთი კომპანიის) პორტფელის შერჩევა
+                      </h3>
+                      <p className="text-xs text-text-muted">
+                        აირჩიეთ კრედიტორი კომპანია, რათა გაიშალოს მისი დებიტორების რეესტრი
+                      </p>
+                    </div>
+                  </div>
+                  {activeCreditorGroup && (
+                    <span className="px-3 py-1 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200 text-xs font-bold">
+                      არჩეული კრედიტორი: {activeCreditorGroup.creditorName} ({activeCreditorGroup.claims.length} დებიტორი)
+                    </span>
+                  )}
+                </div>
+
+                {/* Creditor Cards / Selector */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {creditorGroups.map((grp) => {
+                    const isSelectedCreditor = selectedCreditorName === grp.creditorName;
+                    return (
+                      <div
+                        key={grp.creditorName}
+                        onClick={() => {
+                          setSelectedCreditorName(grp.creditorName);
+                          setSelectedClaimIds([]);
+                        }}
+                        className={`p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
+                          isSelectedCreditor
+                            ? 'bg-indigo-50/90 border-indigo-600 ring-2 ring-indigo-600/15 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-indigo-300'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div
+                              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                                isSelectedCreditor
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">domain</span>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-sm font-bold text-text-primary truncate">
+                                {grp.creditorName}
+                              </div>
+                              <div className="text-[11px] font-mono text-text-muted">
+                                ს/კ: {grp.creditorTaxId}
+                              </div>
+                            </div>
+                          </div>
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
+                              isSelectedCreditor
+                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                : 'border-slate-300 bg-white text-transparent'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[13px] font-bold">check</span>
+                          </div>
+                        </div>
+                        <div className="pt-2 border-t border-slate-200/70 flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-700">
+                            დებიტორები: <strong className="font-mono text-indigo-700">{grp.claims.length}</strong>
+                          </span>
+                          <span className="font-mono font-bold text-text-primary">
+                            {grp.totalAmount.toLocaleString('ka-GE')} ₾
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* =============================================================== */}
+              {/* STEP 3: CREDITOR'S DEBTORS REGISTRY WITH CHECKBOXES & CALCULATOR*/}
+              {/* =============================================================== */}
+              <div className="rounded-xl border border-border-subtle bg-white p-5 space-y-4 shadow-2xs">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center font-mono">
+                      3
+                    </span>
+                    <div>
+                      <h3 className="text-body-md font-bold text-text-primary">
+                        {activeCreditorGroup
+                          ? `„${activeCreditorGroup.creditorName}“-ს დებიტორების რეესტრი და კალკულატორი`
+                          : 'დებიტორების რეესტრი და კალკულატორი'}
+                      </h3>
+                      <p className="text-xs text-text-muted">
+                        მონიშნეთ სასურველი დებიტორები — კალკულატორი ავტომატურად დააჯამებს შერჩეულ თანხებს
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* LIVE CALCULATOR WIDGET */}
+                  <div className="flex flex-wrap items-center gap-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white px-5 py-3 rounded-xl shadow-md border border-indigo-500/30">
+                    <div className="flex items-center gap-2.5 pr-4 border-r border-white/15">
+                      <span className="material-symbols-outlined text-amber-400 text-[24px]">calculate</span>
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-slate-300 font-semibold">
+                          მონიშნული დებიტორები
+                        </div>
+                        <div className="text-base font-mono font-bold text-white">
+                          {selectedClaimObjects.length}{' '}
+                          <span className="text-xs font-normal text-slate-300">
+                            / {activeCreditorGroup ? activeCreditorGroup.claims.length : 0}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
+                        ჯამური თანხა (კალკულაცია)
+                      </div>
+                      <div className="text-xl font-mono font-extrabold text-emerald-400 tracking-tight">
+                        {selectedTotalAmount.toLocaleString('ka-GE')} ₾
+                      </div>
+                    </div>
+                    {selectedClaimObjects.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedClaimIds([])}
+                        className="ml-2 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] text-white font-medium transition cursor-pointer"
+                      >
+                        განულება
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Live Calculation Breakdown Ribbon (shows e.g. 100 ₾ + 300 ₾ + 500 ₾ = 900 ₾) */}
+                {selectedClaimObjects.length > 0 && (
+                  <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                      <span className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-emerald-600">functions</span>
+                        <span>შერჩეული დებიტორების დაჯამების ლენტი:</span>
+                      </span>
+                      <span className="font-mono text-sm text-emerald-800">
+                        სულ: {selectedTotalAmount.toLocaleString('ka-GE')} ₾
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {selectedClaimObjects.map((cl, idx) => (
+                        <React.Fragment key={cl.id}>
+                          {idx > 0 && (
+                            <span className="font-mono font-bold text-emerald-700 text-xs">+</span>
+                          )}
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-emerald-300 text-xs font-medium text-slate-800 shadow-2xs">
+                            <span className="truncate max-w-[140px]">{cl.debtorName}</span>
+                            <strong className="font-mono text-emerald-700">
+                              {Number(cl.remainingAmount).toLocaleString('ka-GE')} ₾
+                            </strong>
+                            <button
+                              type="button"
+                              onClick={() => toggleClaimCheckbox(cl.id)}
+                              className="text-slate-400 hover:text-rose-600 cursor-pointer ml-0.5"
+                              title="მოხსნა"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        </React.Fragment>
+                      ))}
+                      <span className="font-mono font-bold text-emerald-900 text-xs ml-1">
+                        = {selectedTotalAmount.toLocaleString('ka-GE')} ₾
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {!activeCreditorGroup ? (
+                  <div className="p-10 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                    <span className="material-symbols-outlined text-4xl text-indigo-400 mb-2">domain_verification</span>
+                    <p className="text-body-md font-bold text-text-primary">
+                      გთხოვთ ზემოთ (ნაბიჯი 2) აირჩიოთ კრედიტორი კომპანია
+                    </p>
+                    <p className="text-xs text-text-muted mt-1">
+                      კრედიტორის არჩევისთანავე გამოჩნდება მისი დებიტორების სრული რეესტრი და კალკულატორი
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Search & Select All Bar */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="relative flex-1 max-w-md">
+                        <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">
+                          search
+                        </span>
+                        <input
+                          type="text"
+                          value={portfolioDebtorSearch}
+                          onChange={(e) => setPortfolioDebtorSearch(e.target.value)}
+                          placeholder="დებიტორის ძებნა სახელით, პ/ნ-ით ან საქმის №-ით..."
+                          className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-xs focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={toggleSelectAllVisible}
+                          className="px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-primary">
+                            {areAllVisibleSelected ? 'check_box' : 'check_box_outline_blank'}
+                          </span>
+                          <span>
+                            {areAllVisibleSelected
+                              ? 'ყველას მოხსნა'
+                              : `ყველას მონიშვნა (${visibleCreditorClaims.length})`}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Debtors Table with Checkboxes */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200 max-h-[420px] overflow-y-auto">
+                      <table className="w-full text-left border-collapse text-body-sm">
+                        <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 text-slate-600 text-[11px] uppercase tracking-wider font-bold">
+                          <tr>
+                            <th className="py-3 px-3 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                checked={areAllVisibleSelected}
+                                onChange={toggleSelectAllVisible}
+                                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                              />
+                            </th>
+                            <th className="py-3 px-3">დებიტორი</th>
+                            <th className="py-3 px-3">პ/ნ ან ს/კ</th>
+                            <th className="py-3 px-3">საქმე / ხელშეკრულება</th>
+                            <th className="py-3 px-3 text-center">ვადაგადაცილება</th>
+                            <th className="py-3 px-3 text-right">დავალიანება (ნაშთი)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {visibleCreditorClaims.map((cl) => {
+                            const isChecked = selectedClaimIds.includes(cl.id);
+                            return (
+                              <tr
+                                key={cl.id}
+                                onClick={() => toggleClaimCheckbox(cl.id)}
+                                className={`transition-colors cursor-pointer ${
+                                  isChecked ? 'bg-blue-50/70 hover:bg-blue-50' : 'hover:bg-slate-50'
+                                }`}
+                              >
+                                <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleClaimCheckbox(cl.id)}
+                                    className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                                  />
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="font-semibold text-text-primary flex items-center gap-2">
+                                    <span>{cl.debtorName}</span>
+                                    {isChecked && (
+                                      <span className="px-1.5 py-0.2 rounded bg-primary text-white text-[10px] font-bold">
+                                        + {Number(cl.remainingAmount).toLocaleString('ka-GE')} ₾
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-text-muted">{cl.debtorAddress}</div>
+                                </td>
+                                <td className="py-3 px-3 font-mono text-xs text-slate-700">
+                                  {cl.debtorPersonalId}
+                                </td>
+                                <td className="py-3 px-3 font-mono text-xs text-slate-600">
+                                  <div>#{cl.caseNumber}</div>
+                                  <div className="text-[10px] text-text-muted">{cl.agreementNumber}</div>
+                                </td>
+                                <td className="py-3 px-3 text-center">
+                                  <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-mono text-xs font-semibold">
+                                    {cl.daysOverdue} დღე
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-right font-mono font-bold text-text-primary text-sm">
+                                  {Number(cl.remainingAmount).toLocaleString('ka-GE')} ₾
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Priority & Instructions */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-body-sm font-body-sm font-medium text-text-primary mb-2">
+                    დავალების პრიორიტეტი <span className="text-rating-c">*</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="cursor-pointer">
+                      <input
+                        type="radio"
+                        name="priority"
+                        value="high"
+                        checked={dispatchPriority === 'high'}
+                        onChange={() => setDispatchPriority('high')}
+                        className="peer sr-only"
+                      />
+                      <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-red-50 peer-checked:text-red-700 peer-checked:border-red-300 transition-all flex items-center justify-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-rating-c" />
+                        <span>სასწრაფო</span>
+                      </div>
+                    </label>
+                    <label className="cursor-pointer">
+                      <input
+                        type="radio"
+                        name="priority"
+                        value="medium"
+                        checked={dispatchPriority === 'medium'}
+                        onChange={() => setDispatchPriority('medium')}
+                        className="peer sr-only"
+                      />
+                      <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-amber-50 peer-checked:text-amber-700 peer-checked:border-amber-300 transition-all flex items-center justify-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                        <span>საშუალო</span>
+                      </div>
+                    </label>
+                    <label className="cursor-pointer">
+                      <input
+                        type="radio"
+                        name="priority"
+                        value="low"
+                        checked={dispatchPriority === 'low'}
+                        onChange={() => setDispatchPriority('low')}
+                        className="peer sr-only"
+                      />
+                      <div className="py-2.5 px-3 rounded-lg bg-surface-bg border border-slate-300 text-center text-body-sm font-body-sm font-medium text-slate-600 peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-checked:border-emerald-300 transition-all flex items-center justify-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span>დაბალი</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <label className="text-body-sm font-body-sm font-medium text-text-primary">
+                      დავალების შინაარსი &amp; შიდა ინსტრუქცია (Internal Memo)
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        onClick={() =>
+                          setDispatchInstructions(
+                            'დაუკავშირდით მოვალეს, გადაამოწმეთ დაფარვის მზადყოფნა და დააფიქსირეთ შეთანხმებული თარიღი.'
+                          )
+                        }
+                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                        type="button"
+                      >
+                        + სატელეფონო შეხსენება
+                      </button>
+                      <button
+                        onClick={() =>
+                          setDispatchInstructions(
+                            'მოვალეს გაეგზავნოს ოფიციალური გაფრთხილება და მომზადდეს სარჩელი სასამართლოში წარსადგენად.'
+                          )
+                        }
+                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                        type="button"
+                      >
+                        + სარჩელის მომზადება
+                      </button>
+                      <button
+                        onClick={() =>
+                          setDispatchInstructions(
+                            'განახორციელეთ საველე ვიზიტი იურიდიულ/ფაქტობრივ მისამართზე, შეადგინეთ ინსპექციის ოქმი.'
+                          )
+                        }
+                        className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                        type="button"
+                      >
+                        + ადგილზე ვიზიტი
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={dispatchInstructions}
+                    onChange={(e) => setDispatchInstructions(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-lg p-3 text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none"
+                    placeholder="ჩაწერეთ კონკრეტული დავალება თანამშრომლისთვის..."
+                    rows={2}
+                  />
+                </div>
+              </div>
+
+              {/* Bottom Actions / Submit */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border-subtle">
+                <div className="flex items-center gap-4 text-xs text-slate-600">
+                  <span>
+                    შემსრულებელი:{' '}
+                    <strong className="text-text-primary">{chosenStaff ? chosenStaff.fullName : 'არ არის შერჩეული'}</strong>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    შერჩეული დებიტორები:{' '}
+                    <strong className="font-mono text-primary">{selectedClaimObjects.length}</strong>
+                  </span>
+                  <span>•</span>
+                  <span>
+                    ჯამური პორტფელი:{' '}
+                    <strong className="font-mono text-emerald-700">
+                      {selectedTotalAmount.toLocaleString('ka-GE')} ₾
+                    </strong>
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
                   <button
-                    onClick={() => setDispatchInstructions('დაუკავშირდით მოვალეს, გადაამოწმეთ დაფარვის მზადყოფნა და დააფიქსირეთ შეთანხმებული თარიღი.')}
-                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedClaimIds([]);
+                      setDispatchInstructions('');
+                    }}
+                    className="w-1/2 sm:w-auto px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-50 text-body-md font-body-md transition-colors cursor-pointer"
                     type="button"
                   >
-                    + სატელეფონო შეხსენება
+                    გასუფთავება
                   </button>
                   <button
-                    onClick={() => setDispatchInstructions('მოვალეს გაეგზავნოს ოფიციალური გაფრთხილება და მომზადდეს სარჩელი სასამართლოში წარსადგენად.')}
-                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
-                    type="button"
+                    disabled={isDispatching}
+                    className="w-1/2 sm:w-auto px-6 py-2.5 rounded-lg bg-primary hover:bg-[#0A37CA] disabled:opacity-50 text-white font-medium text-body-md font-body-md shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+                    type="submit"
                   >
-                    + სარჩელის მომზადება
-                  </button>
-                  <button
-                    onClick={() => setDispatchInstructions('განახორციელეთ საველე ვიზიტი იურიდიულ/ფაქტობრივ მისამართზე, შეადგინეთ ინსპექციის ოქმი.')}
-                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
-                    type="button"
-                  >
-                    + ადგილზე ვიზიტი
-                  </button>
-                  <button
-                    onClick={() => setDispatchInstructions('გადაამოწმეთ RS.GE ბაზაში კომპანიის მიმდინარე ბრუნვა და აქტივების მდგომარეობა.')}
-                    className="px-2 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-[11px] text-primary border border-border-subtle transition-colors cursor-pointer"
-                    type="button"
-                  >
-                    + საბანკო / RS შემოწმება
+                    <span className="material-symbols-outlined text-[18px]">send</span>
+                    <span>
+                      {isDispatching
+                        ? 'იგზავნება...'
+                        : `პორტფელის გადაცემა (${selectedClaimObjects.length} დებიტორი • ${selectedTotalAmount.toLocaleString('ka-GE')} ₾)`}
+                    </span>
                   </button>
                 </div>
               </div>
-            </div>
-            <textarea
-              value={dispatchInstructions}
-              onChange={(e) => setDispatchInstructions(e.target.value)}
-              className="w-full bg-white border border-slate-300 rounded-lg p-3 text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all resize-none"
-              placeholder="ჩაწერეთ კონკრეტული დავალება თანამშრომლისთვის..."
-              rows={3}
-            />
+            </form>
+          </section>
+        );
+      })()}
+      </>
+      ) : activeView === 'debtors-registry' ? (
+      <>
+      {actionSuccessMessage && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-emerald-800 text-sm animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
+            <span className="font-medium">{actionSuccessMessage}</span>
           </div>
-          {/* Bottom Actions / Submit */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border-subtle">
-            <div className="flex items-center gap-3 text-body-sm font-body-sm text-text-muted">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input defaultChecked className="rounded border-slate-300 text-primary focus:ring-primary w-4 h-4" type="checkbox" />
-                <span className="text-slate-700">SMS შეტყობინება თანამშრომელს</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input defaultChecked className="rounded border-slate-300 text-primary focus:ring-primary w-4 h-4" type="checkbox" />
-                <span className="text-slate-700">საქმის ჟურნალში (Audit Log) ფიქსაცია</span>
-              </label>
+          <button
+            type="button"
+            onClick={() => setActionSuccessMessage(null)}
+            className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      )}
+      <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-border-subtle">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow-sm">
+              <span className="material-symbols-outlined text-2xl">badge</span>
             </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <button
-                onClick={() => setDispatchInstructions('')}
-                className="w-1/2 sm:w-auto px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-50 text-body-md font-body-md transition-colors cursor-pointer"
-                type="button"
-              >
-                გასუფთავება
-              </button>
-              <button
-                disabled={isDispatching}
-                className="w-1/2 sm:w-auto px-6 py-2.5 rounded-lg bg-primary hover:bg-[#0A37CA] disabled:opacity-50 text-white font-medium text-body-md font-body-md shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
-                type="submit"
-              >
-                <span className="material-symbols-outlined text-[18px]">send</span>
-                <span>{isDispatching ? 'იგზავნება...' : 'დავალების შექმნა და გაგზავნა'}</span>
-              </button>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-headline-sm font-headline-sm font-bold text-text-primary">
+                  დებიტორთა რეესტრი
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-mono text-xs font-bold">
+                  {excelDebtors.length} ჩანაწერი
+                </span>
+              </div>
+              <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
+                დებიტორთა სრული მონაცემთა ბაზა და დავალიანებების რეესტრი
+              </p>
             </div>
           </div>
-        </form>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-2.5 text-text-muted text-[18px]">
+                search
+              </span>
+              <input
+                type="text"
+                value={debtorsSearch}
+                onChange={(e) => setDebtorsSearch(e.target.value)}
+                placeholder="ძიება სახელით, პ/ნ-ით, ს/კ-ით ან კრედიტორით..."
+                className="pl-9 pr-4 py-2 bg-surface-bg border border-border-subtle rounded-lg text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary w-72"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={loadAnalystData}
+              disabled={loadingData}
+              className="px-3.5 py-2 rounded-lg border border-border-subtle bg-surface-bg hover:bg-slate-100 text-body-sm text-text-primary font-medium flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <span className={`material-symbols-outlined text-base ${loadingData ? 'animate-spin' : ''}`}>
+                refresh
+              </span>
+              <span>განახლება</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border-subtle shadow-2xs">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider">
+                <th className="py-3 px-4">პირადი ნომერი / ს/კ</th>
+                <th className="py-3 px-4">მოვალის სახელი &amp; გვარი / კომპანია</th>
+                <th className="py-3 px-4">სუბიექტის ტიპი</th>
+                <th className="py-3 px-4">ხელშეკრულების №</th>
+                <th className="py-3 px-4">დავალიანება (GEL)</th>
+                <th className="py-3 px-4">კრედიტორი</th>
+                <th className="py-3 px-4">ვადაგადაცილება</th>
+                <th className="py-3 px-4">პლატფორმაზე სტატუსი</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-subtle text-body-md font-body-md bg-white">
+              {excelDebtors
+                .filter((d) => {
+                  if (!debtorsSearch.trim()) return true;
+                  const q = debtorsSearch.toLowerCase();
+                  return (
+                    d.name?.toLowerCase().includes(q) ||
+                    d.personalId?.toLowerCase().includes(q) ||
+                    d.creditorName?.toLowerCase().includes(q) ||
+                    d.agreementNumber?.toLowerCase().includes(q)
+                  );
+                })
+                .map((d) => (
+                  <tr key={d.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
+                      {d.personalId}
+                    </td>
+                    <td className="py-3 px-4 font-medium text-text-primary">
+                      {d.name}
+                    </td>
+                    <td className="py-3 px-4 text-text-muted text-body-sm">
+                      {d.companyOrPerson || 'ფიზიკური პირი'}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-xs text-slate-600">
+                      {d.agreementNumber || '—'}
+                    </td>
+                    <td className="py-3 px-4 font-mono font-bold text-rose-600">
+                      {Number(d.amount).toLocaleString('ka-GE')} ₾
+                    </td>
+                    <td className="py-3 px-4 text-body-sm text-text-primary font-medium">
+                      {d.creditorName || 'შპს ჯეო ტრეიდინგი'}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-xs">
+                      {d.overdueDays > 0 ? (
+                        <span className="text-amber-700 font-semibold">{d.overdueDays} დღე</span>
+                      ) : (
+                        <span className="text-emerald-700">ვადაშია</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {d.isRegisteredOnPlatform ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          რეგისტრირებულია
+                        </span>
+                      ) : (
+                        <span className="text-text-muted text-xs">არ არის რეგისტრირებული</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </section>
-      {/* ========================================================================= */}
-      {/* 6. ANALYST REGISTRY, EXCEL SYNC & ROLE ASSIGNMENT CONSOLE */}
-      {/* ========================================================================= */}
-      <div id="excel-registry-section">
-        <AnalystRegistryManager
-          users={users}
-          excelDebtors={excelDebtors}
-          excelCreditors={excelCreditors}
-          syncingExcel={syncingExcel}
-          loadingData={loadingData}
-          actionSuccessMessage={actionSuccessMessage}
-          onSyncExcel={handleSyncExcel}
-          onRefreshData={loadAnalystData}
-          onDismissMessage={() => setActionSuccessMessage(null)}
-          onAssignRole={handleAssignRole}
-          onAddDebtorToCreditor={handleAddDebtorToExistingCreditor}
+      </>
+      ) : activeView === 'creditors-registry' ? (
+      <>
+      {actionSuccessMessage && (
+        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-emerald-800 text-sm animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
+            <span className="font-medium">{actionSuccessMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionSuccessMessage(null)}
+            className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">close</span>
+          </button>
+        </div>
+      )}
+      <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm space-y-5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-border-subtle">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center text-white shadow-sm">
+              <span className="material-symbols-outlined text-2xl">account_balance</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-headline-sm font-headline-sm font-bold text-text-primary">
+                  კრედიტორთა რეესტრი
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 font-mono text-xs font-bold">
+                  {excelCreditors.length} კრედიტორი
+                </span>
+              </div>
+              <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
+                კრედიტორ კომპანიათა მონაცემთა ბაზა, პორტფელის მოცულობა და დებიტორების მიბმა
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-2.5 text-text-muted text-[18px]">
+                search
+              </span>
+              <input
+                type="text"
+                value={creditorsSearch}
+                onChange={(e) => setCreditorsSearch(e.target.value)}
+                placeholder="ძიება კომპანიით, ს/კ-ით ან წარმომადგენლით..."
+                className="pl-9 pr-4 py-2 bg-surface-bg border border-border-subtle rounded-lg text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary w-72"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={loadAnalystData}
+              disabled={loadingData}
+              className="px-3.5 py-2 rounded-lg border border-border-subtle bg-surface-bg hover:bg-slate-100 text-body-sm text-text-primary font-medium flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <span className={`material-symbols-outlined text-base ${loadingData ? 'animate-spin' : ''}`}>
+                refresh
+              </span>
+              <span>განახლება</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsRegistrationOpen(true)}
+              className="px-4 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-semibold text-body-sm shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">domain_add</span>
+              <span>+ კრედიტორის რეგისტრაცია</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-border-subtle shadow-2xs">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider">
+                <th className="py-3 px-4">საიდენტიფიკაციო კოდი (ს/კ)</th>
+                <th className="py-3 px-4">კომპანიის დასახელება</th>
+                <th className="py-3 px-4">საკონტაქტო პირი / დირექტორი</th>
+                <th className="py-3 px-4">პორტფელის მოცულობა (GEL)</th>
+                <th className="py-3 px-4">ხელშეკრულების №</th>
+                <th className="py-3 px-4">დებიტორები</th>
+                <th className="py-3 px-4">პლატფორმაზე სტატუსი</th>
+                <th className="py-3 px-4 text-right">მოქმედება</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-subtle text-body-md font-body-md bg-white">
+              {excelCreditors
+                .filter((c) => {
+                  if (!creditorsSearch.trim()) return true;
+                  const q = creditorsSearch.toLowerCase();
+                  return (
+                    c.name?.toLowerCase().includes(q) ||
+                    c.personalId?.toLowerCase().includes(q) ||
+                    c.companyOrPerson?.toLowerCase().includes(q) ||
+                    c.agreementNumber?.toLowerCase().includes(q)
+                  );
+                })
+                .map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
+                      {c.personalId}
+                    </td>
+                    <td className="py-3 px-4 font-medium text-text-primary">
+                      {c.name}
+                    </td>
+                    <td className="py-3 px-4 text-text-muted text-body-sm">
+                      {c.companyOrPerson || '—'}
+                    </td>
+                    <td className="py-3 px-4 font-mono font-bold text-emerald-700">
+                      {Number(c.amount).toLocaleString('ka-GE')} ₾
+                    </td>
+                    <td className="py-3 px-4 font-mono text-xs text-slate-600">
+                      {c.agreementNumber || 'PORT-01'}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-xs font-semibold">
+                        <span className="material-symbols-outlined text-[14px]">groups</span>
+                        <span>{c.debtorsCount || 0} დებიტორი</span>
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {c.isRegisteredOnPlatform ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          რეგისტრირებულია
+                        </span>
+                      ) : (
+                        <span className="text-text-muted text-xs">არ არის რეგისტრირებული</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetCreditorForDebtor(c);
+                            setAddDebtorModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-primary border border-blue-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                          title="დებიტორის დამატება ამ კრედიტორისთვის"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">person_add</span>
+                          <span>+ დებიტორის მიბმა</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {addDebtorModalOpen && targetCreditorForDebtor && (
+        <AddDebtorModal
+          isOpen={addDebtorModalOpen}
+          onClose={() => {
+            setAddDebtorModalOpen(false);
+            setTargetCreditorForDebtor(null);
+          }}
+          creditorName={targetCreditorForDebtor.name}
+          creditorTaxId={targetCreditorForDebtor.personalId}
+          onAdd={async (debtorData: DebtorFormData) => {
+            await handleAddDebtorToExistingCreditor(targetCreditorForDebtor.personalId, debtorData);
+          }}
         />
+      )}
+      </>
+      ) : (
+      <div className="flex-1 min-h-[60vh] flex flex-col items-center justify-center text-center px-4 select-none">
+        <span className="material-symbols-outlined text-5xl text-slate-300 mb-3">
+          space_dashboard
+        </span>
+        <p className="text-base font-medium text-slate-400">
+          ანალიტიკოსის მთავარი გვერდი
+        </p>
+        <p className="text-sm text-slate-400 mt-1 max-w-md">
+          სამუშაოდ გთხოვთ მარცხენა „მთავარი კონსოლიდან“ აირჩიოთ სასურველი სექცია.
+        </p>
       </div>
+      )}
     </main>
   </div>
   {/* ========================================================================= */}
@@ -1589,287 +2373,6 @@ export default function AnalystPage() {
       </nav>
     </div>
   </footer>
-  {/* ========================================================================= */}
-  {/* ADVANCED AUDIT & MULTI-PARAMETER FILTER DRAWER */}
-  {/* ========================================================================= */}
-  <div id="advancedFilterDrawer" className={`fixed inset-0 z-50 overflow-hidden ${isFilterDrawerOpen ? '' : 'hidden'}`} role="dialog" aria-modal="true" aria-labelledby="drawer-headline">
-    {/* Backdrop */}
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={() => setIsFilterDrawerOpen(false)} />
-    <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-      <div className="w-screen max-w-2xl bg-surface-card shadow-2xl border-l border-border-subtle flex flex-col justify-between overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {/* Drawer Header */}
-        <div className="p-5 bg-surface-bg border-b border-border-subtle flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center shadow-sm">
-              <span className="material-symbols-outlined text-[22px]">tune</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id="drawer-headline" className="text-headline-sm font-headline-sm font-bold text-text-primary">გაფართოებული ფილტრაცია</h2>
-                <span className="px-2 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-label-sm font-mono font-semibold">Audit &amp; Multi-Query</span>
-              </div>
-              <p className="text-body-sm font-body-sm text-text-muted mt-0.5">საქმეების, სუბიექტების, ზარებისა და საველე ვიზიტების კომპლექსური ანალიზი</p>
-            </div>
-          </div>
-          <button type="button" onClick={() => setIsFilterDrawerOpen(false)} className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-200/60 transition-colors cursor-pointer" title="დახურვა">
-            <span className="material-symbols-outlined text-[22px]">close</span>
-          </button>
-        </div>
-        {/* Drawer Scrollable Form Area */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 text-body-md">
-          {/* 1. DATE RANGE & ACTIVITY TIME WINDOW */}
-          <div className="p-4 bg-slate-50/70 rounded-xl border border-border-subtle space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[18px]">calendar_month</span>
-                თარიღის დიაპაზონი და აქტივობის პერიოდი
-              </label>
-              <span className="text-[11px] text-text-muted">სწრაფი არჩევა</span>
-            </div>
-            {/* Quick Range Chips */}
-            <div className="flex flex-wrap gap-1.5">
-              <button type="button" className="px-2.5 py-1 rounded-md bg-white border border-border-subtle text-body-sm font-medium hover:border-primary text-text-primary transition-all text-xs">დღეს</button>
-              <button type="button" className="px-2.5 py-1 rounded-md bg-white border border-border-subtle text-body-sm font-medium hover:border-primary text-text-primary transition-all text-xs">ბოლო 7 დღე</button>
-              <button type="button" className="px-2.5 py-1 rounded-md bg-primary text-white font-medium shadow-xs text-xs">მიმდინარე თვე</button>
-              <button type="button" className="px-2.5 py-1 rounded-md bg-white border border-border-subtle text-body-sm font-medium hover:border-primary text-text-primary transition-all text-xs">კვარტალი (Q3)</button>
-            </div>
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">საწყისი თარიღი</label>
-                <input type="date" defaultValue="2024-10-01" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-body-sm text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">საბოლოო თარიღი</label>
-                <input type="date" defaultValue="2024-10-24" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-body-sm text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">აქტივობის დრო (დან)</label>
-                <input type="time" defaultValue="09:00" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-body-sm font-mono text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">აქტივობის დრო (მდე)</label>
-                <input type="time" defaultValue="19:00" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-body-sm font-mono text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-            </div>
-          </div>
-          {/* 2. IDENTIFIERS (PIN, TAX ID, DEBTOR & COMPANY NAME) */}
-          <div className="p-4 bg-slate-50/70 rounded-xl border border-border-subtle space-y-4">
-            <label className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[18px]">badge</span>
-              სუბიექტისა და კომპანიის რეკვიზიტები
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">პირადი ნომერი (11 ნიშნა პ/ნ)</label>
-                <div className="relative">
-                  <input type="text" maxLength={11} placeholder="01024089..." className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm font-mono text-text-primary focus:outline-none focus:border-primary" />
-                  <span className="absolute right-2.5 top-2.5 text-label-sm font-mono text-text-muted">11 digits</span>
-                </div>
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">საიდენტიფიკაციო კოდი (9 ნიშნა ს/კ)</label>
-                <div className="relative">
-                  <input type="text" maxLength={9} placeholder="405118492..." className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm font-mono text-text-primary focus:outline-none focus:border-primary" />
-                  <span className="absolute right-2.5 top-2.5 text-label-sm font-mono text-text-muted">9 digits</span>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">მოვალის / ფიზიკური პირის სახელი</label>
-                <input type="text" placeholder="მაგ: გიორგი ბერიძე" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">კომპანიის დასახელება (შპს / სს)</label>
-                <input type="text" placeholder="მაგ: შპს ალფა ლოჯისტიკსი" className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">ტელეფონის ნომერი</label>
-                <input type="tel" placeholder="+995 5..." className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm font-mono text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">მისამართი / რეგიონი / ლოკაცია</label>
-                <input type="text" placeholder="მაგ: თბილისი, ბათუმი, ქუთაისი..." className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-            </div>
-          </div>
-          {/* 3. RESPONSIBLE OFFICER / TEAM ROLE */}
-          <div className="p-4 bg-slate-50/70 rounded-xl border border-border-subtle space-y-3">
-            <label className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[18px]">assignment_ind</span>
-              პასუხისმგებელი ოფიცერი &amp; როლი
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <select className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary">
-                <option value="">ყველა თანამშრომელი</option>
-                <option value="1">თეონა პეტრიაშვილი (ქოლ-ცენტრი)</option>
-                <option value="2">გიორგი მახარაძე (უფროსი იურისტი)</option>
-                <option value="3">ლევან კვირიკაშვილი (საველე ვიზიტორი)</option>
-                <option value="4">ნინო ბერიძე (რისკ-ანალიტიკოსი)</option>
-              </select>
-              <select className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary">
-                <option value="">ყველა დეპარტამენტი</option>
-                <option value="call">ქოლ-ცენტრი / ოპერატორი</option>
-                <option value="field">საველე ვიზიტები (Field Enforcement)</option>
-                <option value="legal">იურიდიული სამსახური &amp; სასამართლო</option>
-                <option value="risk">რისკ-მენეჯმენტი &amp; Scoring</option>
-              </select>
-            </div>
-          </div>
-          {/* 4. CALL CENTER & FIELD VISIT AUDIT CHECKS */}
-          <div className="p-4 bg-blue-50/40 rounded-xl border border-blue-200/80 space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[18px]">verified_user</span>
-                ქოლ-ცენტრისა და საველე ვიზიტების აუდიტ-შემოწმება
-              </label>
-              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">Fraud Prevention</span>
-            </div>
-            {/* Call / Visit Status Checkboxes */}
-            <div>
-              <label className="text-[11px] text-text-muted block mb-1.5 font-medium">ზარის / ვიზიტის სტატუსი</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" defaultChecked className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">შედგა (Connected)</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">უპასუხო (No Answer)</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">დაკავებულია</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">გამორთულია</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">არასწორი ნომერი</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" defaultChecked className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">ადგილზე ნანახია</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">ვერ მოიძებნა</span>
-                </label>
-                <label className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-primary transition-all">
-                  <input type="checkbox" className="rounded text-primary focus:ring-primary" />
-                  <span className="text-slate-700">უარი კომენტარზე</span>
-                </label>
-              </div>
-            </div>
-            {/* Call Duration Filter & Audio Verification */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1 font-medium">ზარის ხანგრძლივობა (ხანგრძლივი vs ფიქტიური)</label>
-                <select className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary">
-                  <option value="all">ნებისმიერი ხანგრძლივობა</option>
-                  <option value="gt30">&gt; 30 წამი (შემდგარი საუბარი)</option>
-                  <option value="gt60">&gt; 1 წუთი (დეტალური განხილვა)</option>
-                  <option value="gt180">&gt; 3 წუთი (მოლაპარაკება)</option>
-                  <option value="fake">0 წამი / ფიქტიური მცდელობის შემოწმება</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1 font-medium">აუდიო ჩანაწერის არსებობა</label>
-                <select className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary">
-                  <option value="all">ყველა ჩანაწერი</option>
-                  <option value="with_audio">მხოლოდ აუდიო ფაილით (დამოწმებული)</option>
-                  <option value="no_audio">აუდიო ფაილის გარეშე (საეჭვო)</option>
-                </select>
-              </div>
-            </div>
-            {/* GPS & Location Verification Status */}
-            <div className="pt-1">
-              <label className="text-[11px] text-text-muted block mb-1 font-medium">GPS / IP გეოლოკაციის ვალიდაცია</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <label className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 cursor-pointer">
-                  <input type="radio" name="gps_filter" defaultChecked className="text-emerald-600 focus:ring-emerald-500" />
-                  <div>
-                    <span className="font-semibold text-emerald-800 block">GPS ემთხვევა ობიექტს</span>
-                    <span className="text-[10px] text-emerald-600">ვიზიტორი იმყოფებოდა 50მ რადიუსში</span>
-                  </div>
-                </label>
-                <label className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 cursor-pointer">
-                  <input type="radio" name="gps_filter" className="text-amber-600 focus:ring-amber-500" />
-                  <div>
-                    <span className="font-semibold text-amber-800 block">GPS აცდენა / საეჭვო</span>
-                    <span className="text-[10px] text-amber-600">კოორდინატები არ ემთხვევა რეკვიზიტს</span>
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-          {/* 5. TASK OUTCOME & DEBT AMOUNT RANGE */}
-          <div className="p-4 bg-slate-50/70 rounded-xl border border-border-subtle space-y-4">
-            <label className="text-body-sm font-semibold text-text-primary flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[18px]">payments</span>
-              შედეგი და დავალიანების მოცულობის დიაპაზონი (₾)
-            </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">საბოლოო რეზოლუცია / შედეგი</label>
-                <select className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary">
-                  <option value="">ყველა შედეგი</option>
-                  <option value="promise">გადახდის პირობა (PTP)</option>
-                  <option value="refusal">პირდაპირი უარი</option>
-                  <option value="schedule">გრაფიკის გაფორმება</option>
-                  <option value="legal_action">სასამართლოში გადაცემა</option>
-                  <option value="closed">სრული დაფარვა</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">საკრედიტო რისკ-გრეიდი</label>
-                <select className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm text-text-primary focus:outline-none focus:border-primary">
-                  <option value="">ყველა გრეიდი (A, B, C)</option>
-                  <option value="grade_a">Grade A (Prime / დაბალი რისკი)</option>
-                  <option value="grade_b">Grade B (Moderate / საშუალო რისკი)</option>
-                  <option value="grade_c">Grade C (High / დეფოლტი &amp; სარჩელი)</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">მინიმალური თანხა (₾)</label>
-                <input type="number" placeholder="0" defaultValue={5000} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm font-mono text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-              <div>
-                <label className="text-[11px] text-text-muted block mb-1">მაქსიმალური თანხა (₾)</label>
-                <input type="number" placeholder="500,000" defaultValue={150000} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-sm font-mono text-text-primary focus:outline-none focus:border-primary" />
-              </div>
-            </div>
-          </div>
-        </div>
-        {/* Drawer Footer Action Bar */}
-        <div className="p-5 bg-surface-bg border-t border-border-subtle flex items-center justify-between gap-3">
-          <button type="button" onClick={() => { const form = document.querySelector('#advancedFilterDrawer form') as HTMLFormElement; form?.reset(); }} className="px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors cursor-pointer">
-            გასუფთავება
-          </button>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setIsFilterDrawerOpen(false)} className="px-4 py-2.5 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors cursor-pointer">
-              დახურვა
-            </button>
-            <button type="button" onClick={() => setIsFilterDrawerOpen(false)} className="px-6 py-2.5 rounded-lg bg-primary hover:bg-[#0A37CA] text-white text-body-md font-semibold shadow-md shadow-primary/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
-              <span className="material-symbols-outlined text-[18px]">filter_alt</span>
-              <span className="">ფილტრის გამოყენება</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  {/* ========================================================================= */}
-  {/* SCRIPT FOR ADVANCED FILTER DRAWER */}
-  {/* ========================================================================= */}
 </div>
 
     </div>
