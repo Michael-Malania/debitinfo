@@ -473,10 +473,23 @@ export default function AnalystAnalyticsHub() {
                 {currentUser?.email?.substring(0, 2).toUpperCase() || 'AN'}
               </div>
               <div className="hidden lg:flex flex-col text-left">
-                <span className="text-xs font-semibold text-slate-800 leading-tight">დავით კაპანაძე</span>
+                <span className="text-xs font-semibold text-slate-800 leading-tight">
+                  {currentUser?.name || currentUser?.email || 'ანალიტიკოსი'}
+                </span>
                 <span className="text-[10px] text-slate-400">მთავარი ანალიტიკოსი</span>
               </div>
             </div>
+
+            <button
+              onClick={() => {
+                authService.logout();
+                window.location.href = '/ops';
+              }}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+              title="სისტემიდან გამოსვლა"
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+            </button>
           </div>
         </div>
       </header>

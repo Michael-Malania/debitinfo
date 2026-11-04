@@ -340,6 +340,17 @@ export default function StaffRegistryPage() {
                 <span className="text-[10px] text-slate-400">მთავარი ანალიტიკოსი</span>
               </div>
             </div>
+
+            <button
+              onClick={() => {
+                authService.logout();
+                window.location.href = '/ops';
+              }}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+              title="სისტემიდან გამოსვლა"
+            >
+              <span className="material-symbols-outlined text-[20px]">logout</span>
+            </button>
           </div>
         </div>
       </header>
