@@ -159,7 +159,7 @@ export default function AnalystSidebar({
   // Collapsed compact state (shows Burger icon + compact icon rail so user can expand anytime)
   if (!isOpen) {
     return (
-      <aside className="w-[64px] bg-surface-card border-r border-border-subtle flex-shrink-0 flex flex-col items-center justify-between py-4 px-2 transition-all duration-200 select-none z-30">
+      <aside className="w-[64px] bg-surface-card border-r border-border-subtle flex-shrink-0 flex flex-col items-center py-4 px-2 transition-all duration-200 select-none z-30">
         <div className="flex flex-col items-center gap-2 w-full">
           {/* Burger Button to Expand */}
           <button
@@ -180,7 +180,7 @@ export default function AnalystSidebar({
             title="მთავარი გვერდი"
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'overview'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-slate-600 hover:text-primary hover:bg-slate-100'
             }`}
           >
@@ -194,7 +194,7 @@ export default function AnalystSidebar({
             title="კრედიტორების მიერ ატვირთული დებიტორები (დასადასტურებელი)"
             className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'pending-debtors'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-amber-600 hover:bg-slate-100'
             }`}
           >
@@ -211,7 +211,7 @@ export default function AnalystSidebar({
             title="ღრმა ანალიტიკა (BI Hub)"
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'analytics'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-indigo-600 hover:bg-indigo-50'
             }`}
           >
@@ -225,7 +225,7 @@ export default function AnalystSidebar({
             title={`დებიტორთა რეესტრი (${debtorsCount})`}
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'debtors-registry'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-sky-600 hover:bg-slate-100'
             }`}
           >
@@ -239,7 +239,7 @@ export default function AnalystSidebar({
             title={`კრედიტორთა რეესტრი (${creditorsCount})`}
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'creditors-registry'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-primary hover:bg-slate-100'
             }`}
           >
@@ -253,7 +253,7 @@ export default function AnalystSidebar({
             title="სამართავი პორტფელის განაწილება"
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'portfolio-dispatch'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-indigo-600 hover:bg-slate-100'
             }`}
           >
@@ -267,7 +267,7 @@ export default function AnalystSidebar({
             title="თანამშრომელთა რეესტრი"
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'staff'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-emerald-600 hover:bg-slate-100'
             }`}
           >
@@ -281,7 +281,7 @@ export default function AnalystSidebar({
             title="ჩამოწერილი ვალების რეესტრი"
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'written-off'
-                ? 'bg-primary-container text-white shadow-sm'
+                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
                 : 'text-rose-600 hover:bg-slate-100'
             }`}
           >
@@ -290,23 +290,15 @@ export default function AnalystSidebar({
 
           <div className="w-8 h-px bg-border-subtle my-1" />
 
-          {/* Register Creditor quick icon */}
+          {/* Register Creditor quick icon (Distinct Executive Dark Slate with Gold Accent) */}
           <button
             type="button"
             onClick={handleCreditorRegClick}
             title="+ კრედიტორის რეგისტრაცია"
-            className="w-10 h-10 rounded-xl bg-primary hover:bg-[#0A37CA] text-white flex items-center justify-center shadow-sm transition-all cursor-pointer"
+            className="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center shadow-sm border border-slate-800 transition-all cursor-pointer hover:scale-105 active:scale-95"
           >
-            <span className="material-symbols-outlined text-[20px]">domain_add</span>
+            <span className="material-symbols-outlined text-[20px] text-amber-400">domain_add</span>
           </button>
-        </div>
-
-        {/* Bottom System Status Dot */}
-        <div
-          className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600"
-          title="სისტემის მდგომარეობა: 99.8%"
-        >
-          <span className="material-symbols-outlined text-[18px]">dns</span>
         </div>
       </aside>
     );
@@ -314,7 +306,7 @@ export default function AnalystSidebar({
 
   // Expanded full state
   return (
-    <aside className="w-[268px] bg-surface-card border-r border-border-subtle flex-shrink-0 flex flex-col justify-between py-5 px-3 transition-all duration-200 select-none z-30">
+    <aside className="w-[268px] bg-surface-card border-r border-border-subtle flex-shrink-0 flex flex-col py-5 px-3 transition-all duration-200 select-none z-30">
       {/* Primary Navigation Cluster */}
       <div className="space-y-6">
         <div>
@@ -340,7 +332,7 @@ export default function AnalystSidebar({
               onClick={() => handleNavClick('overview')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-body-md font-medium group transition-all cursor-pointer text-left ${
                 activeView === 'overview'
-                  ? 'bg-primary-container text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-slate-700 hover:text-primary hover:bg-slate-50'
               }`}
             >
@@ -364,7 +356,7 @@ export default function AnalystSidebar({
               onClick={() => handleNavClick('pending-debtors')}
               className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg font-body-md font-medium group transition-all cursor-pointer text-left ${
                 activeView === 'pending-debtors'
-                  ? 'bg-primary-container text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-slate-700 hover:text-primary hover:bg-slate-50'
               }`}
             >
@@ -390,7 +382,7 @@ export default function AnalystSidebar({
               href="/analyst/analytics"
               className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-all font-body-md font-semibold border shadow-2xs ${
                 activeView === 'analytics'
-                  ? 'bg-primary-container text-white border-primary shadow-sm'
+                  ? 'bg-primary text-white border-primary shadow-sm'
                   : 'bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-900 hover:from-indigo-100 hover:to-blue-100 border-indigo-200/80'
               }`}
             >
@@ -421,7 +413,7 @@ export default function AnalystSidebar({
               onClick={() => handleNavClick('debtors-registry')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-body-md font-medium transition-colors cursor-pointer text-left ${
                 activeView === 'debtors-registry'
-                  ? 'bg-primary-container text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-slate-700 hover:text-primary hover:bg-slate-50'
               }`}
             >
@@ -452,7 +444,7 @@ export default function AnalystSidebar({
               onClick={() => handleNavClick('creditors-registry')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-body-md font-medium transition-colors cursor-pointer text-left ${
                 activeView === 'creditors-registry'
-                  ? 'bg-primary-container text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-slate-700 hover:text-primary hover:bg-slate-50'
               }`}
             >
@@ -483,7 +475,7 @@ export default function AnalystSidebar({
               onClick={() => handleNavClick('portfolio-dispatch')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg font-body-md font-medium transition-colors cursor-pointer text-left ${
                 activeView === 'portfolio-dispatch'
-                  ? 'bg-primary-container text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-slate-700 hover:text-primary hover:bg-slate-50'
               }`}
             >
@@ -504,7 +496,7 @@ export default function AnalystSidebar({
               href="/analyst/staff"
               className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors font-body-md font-medium ${
                 activeView === 'staff'
-                  ? 'bg-primary-container text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-slate-700 hover:text-primary hover:bg-slate-50'
               }`}
             >
@@ -534,7 +526,7 @@ export default function AnalystSidebar({
               href="/analyst/written-off"
               className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors font-body-md font-medium ${
                 activeView === 'written-off'
-                  ? 'bg-primary-container text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-slate-700 hover:text-primary hover:bg-slate-50'
               }`}
             >
@@ -560,44 +552,17 @@ export default function AnalystSidebar({
             </Link>
           </nav>
 
-          {/* Creditor Registration CTA */}
+          {/* Creditor Registration CTA (Executive Dark Slate with Gold Accent) */}
           <div className="pt-3 px-1">
             <button
               type="button"
               onClick={handleCreditorRegClick}
-              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-primary hover:bg-[#0A37CA] text-white font-semibold text-xs shadow-md shadow-primary/20 transition-all cursor-pointer active:scale-95"
+              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-sm border border-slate-800 transition-all cursor-pointer active:scale-95"
             >
-              <span className="material-symbols-outlined text-[18px]">domain_add</span>
+              <span className="material-symbols-outlined text-[18px] text-amber-400">domain_add</span>
               <span>+ კრედიტორის რეგისტრაცია</span>
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Bottom Sidebar Health Widget */}
-      <div className="p-3.5 bg-slate-50 rounded-xl border border-border-subtle space-y-3 mt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary text-[18px]">dns</span>
-            <span className="text-body-sm font-body-sm font-semibold text-text-primary">
-              სისტემის მდგომარეობა
-            </span>
-          </div>
-          <span className="text-label-sm font-label-sm text-emerald-600 font-bold">99.8%</span>
-        </div>
-        <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-          <div
-            className="bg-gradient-to-r from-primary to-emerald-500 h-full rounded-full"
-            style={{ width: '92%' }}
-          />
-        </div>
-        <div className="flex items-center justify-between text-[11px] text-text-muted">
-          <span>
-            აქტიური სესიები: <strong className="text-text-primary font-mono">14</strong>
-          </span>
-          <span>
-            პინგ: <strong className="text-emerald-600 font-mono">18ms</strong>
-          </span>
         </div>
       </div>
     </aside>
