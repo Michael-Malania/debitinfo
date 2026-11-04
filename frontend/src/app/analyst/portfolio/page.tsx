@@ -4,12 +4,18 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
+import AnalystSidebar from '@/components/analyst/AnalystSidebar';
 
 export default function PortfolioDispatchPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen((prev) => !prev);
+  };
 
   // Dynamic state
   const [staffOptions, setStaffOptions] = useState<any[]>([]);
@@ -138,7 +144,7 @@ export default function PortfolioDispatchPage() {
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-body-md antialiased selection:bg-primary-container selection:text-white">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-2xs">
-        <div className="max-w-[1720px] mx-auto px-4 lg:px-8 h-16 flex items-center justify-between">
+        <div className="w-full px-4 lg:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/analyst" className="flex items-center gap-2 group">
               <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-sm group-hover:bg-indigo-700 transition-all">
@@ -214,8 +220,14 @@ export default function PortfolioDispatchPage() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-[1720px] mx-auto px-4 lg:px-8 py-6 w-full flex-1 space-y-6">
+      {/* Main Workspace Layout with AnalystSidebar */}
+      <div className="flex-1 flex w-full overflow-hidden">
+        <AnalystSidebar
+          activeView="portfolio-dispatch"
+          isOpen={isSidebarOpen}
+          onToggleOpen={toggleSidebar}
+        />
+        <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 space-y-6">
         {/* Success Alert */}
         {dispatchSuccessMessage && (
           <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-emerald-800 text-sm font-semibold shadow-2xs animate-fadeIn">
@@ -474,6 +486,7 @@ export default function PortfolioDispatchPage() {
           </div>
         </div>
       </main>
+      </div>
     </div>
   );
 }

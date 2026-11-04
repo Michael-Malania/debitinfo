@@ -409,7 +409,7 @@ export default function AnalystPage() {
   {/* 1. TOP NAVIGATION BAR / OPERATIONS HEADER */}
   {/* ========================================================================= */}
   <header className="w-full bg-surface-card border-b border-border-subtle sticky top-0 z-40 shadow-sm">
-    <div className="w-full px-4 lg:px-8 max-w-[1720px] mx-auto flex items-center justify-between h-16">
+    <div className="w-full px-4 lg:px-6 flex items-center justify-between h-16">
       {/* Brand & Operations Subtitle */}
       <div className="flex items-center gap-4">
         <a className="flex items-center gap-2 group" href="/">
@@ -517,7 +517,7 @@ export default function AnalystPage() {
   {/* ========================================================================= */}
   {/* MAIN WORKSPACE LAYOUT (SIDEBAR + CONTENT CANVAS) */}
   {/* ========================================================================= */}
-  <div className="flex-1 flex w-full max-w-[1720px] mx-auto overflow-hidden">
+  <div className="flex-1 flex w-full overflow-hidden">
     {/* ========================================================================= */}
     {/* 2. LEFT COLLAPSIBLE NAVIGATION SIDEBAR */}
     {/* ========================================================================= */}
@@ -2353,7 +2353,7 @@ export default function AnalystPage() {
   {/* SHARED FOOTER COMPONENT */}
   {/* ========================================================================= */}
   <footer className="w-full bg-surface-card border-t border-border-subtle mt-auto">
-    <div className="w-full max-w-[1720px] mx-auto px-4 lg:px-8 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
+    <div className="w-full px-4 lg:px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <div className="flex items-center">
           <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight">Debitinfo</span>

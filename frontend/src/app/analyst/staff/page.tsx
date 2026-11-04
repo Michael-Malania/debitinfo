@@ -271,7 +271,7 @@ export default function StaffRegistryPage() {
       {/* 1. TOP HEADER & NAVIGATION */}
       {/* ========================================================================= */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-2xs">
-        <div className="max-w-[1720px] mx-auto px-4 lg:px-8 h-16 flex items-center justify-between">
+        <div className="w-full px-4 lg:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link href="/analyst" className="flex items-center gap-2 group">
               <div className="w-9 h-9 rounded-lg bg-primary-container flex items-center justify-center text-white shadow-sm group-hover:bg-primary transition-all">
@@ -347,7 +347,7 @@ export default function StaffRegistryPage() {
       {/* ========================================================================= */}
       {/* MAIN WORKSPACE WITH PERSISTENT COLLAPSIBLE CONSOLE SIDEBAR */}
       {/* ========================================================================= */}
-      <div className="flex-1 flex w-full max-w-[1720px] mx-auto overflow-hidden">
+      <div className="flex-1 flex w-full overflow-hidden">
         <AnalystSidebar
           activeView="staff"
           isOpen={isSidebarOpen}
