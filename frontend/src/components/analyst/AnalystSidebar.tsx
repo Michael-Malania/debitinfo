@@ -290,14 +290,14 @@ export default function AnalystSidebar({
 
           <div className="w-8 h-px bg-border-subtle my-1" />
 
-          {/* Register Creditor quick icon (Distinct Executive Dark Slate with Gold Accent) */}
+          {/* Register Creditor quick icon (Emerald Business Green) */}
           <button
             type="button"
             onClick={handleCreditorRegClick}
             title="+ კრედიტორის რეგისტრაცია"
-            className="w-10 h-10 rounded-xl bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center shadow-sm border border-slate-800 transition-all cursor-pointer hover:scale-105 active:scale-95"
+            className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm shadow-emerald-600/20 transition-all cursor-pointer hover:scale-105 active:scale-95"
           >
-            <span className="material-symbols-outlined text-[20px] text-amber-400">domain_add</span>
+            <span className="material-symbols-outlined text-[20px]">domain_add</span>
           </button>
         </div>
       </aside>
@@ -552,14 +552,14 @@ export default function AnalystSidebar({
             </Link>
           </nav>
 
-          {/* Creditor Registration CTA (Executive Dark Slate with Gold Accent) */}
+          {/* Creditor Registration CTA (Emerald Business Green) */}
           <div className="pt-3 px-1">
             <button
               type="button"
               onClick={handleCreditorRegClick}
-              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-sm border border-slate-800 transition-all cursor-pointer active:scale-95"
+              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm shadow-emerald-600/20 transition-all cursor-pointer active:scale-95"
             >
-              <span className="material-symbols-outlined text-[18px] text-amber-400">domain_add</span>
+              <span className="material-symbols-outlined text-[18px]">domain_add</span>
               <span>+ კრედიტორის რეგისტრაცია</span>
             </button>
           </div>

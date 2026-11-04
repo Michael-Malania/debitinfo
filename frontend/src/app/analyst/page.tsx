@@ -1734,7 +1734,7 @@ export default function AnalystPage() {
             <button
               type="button"
               onClick={() => setIsRegistrationOpen(true)}
-              className="px-4 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-semibold text-body-sm shadow-xs flex items-center gap-1.5 transition cursor-pointer"
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-body-sm shadow-xs shadow-emerald-600/20 flex items-center gap-1.5 transition cursor-pointer"
             >
               <span className="material-symbols-outlined text-[18px]">domain_add</span>
               <span>+ კრედიტორის რეგისტრაცია</span>
@@ -1866,7 +1866,7 @@ export default function AnalystPage() {
         {/* Modal Header */}
         <div className="bg-surface-card px-6 py-5 border-b border-border-subtle flex items-start justify-between">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center text-white shadow-md shadow-primary/20 flex-shrink-0">
+            <div className="w-11 h-11 rounded-xl bg-emerald-600 flex items-center justify-center text-white shadow-md shadow-emerald-600/20 flex-shrink-0">
               <span className="material-symbols-outlined text-[24px]">domain_add</span>
             </div>
             <div>
@@ -1907,7 +1907,7 @@ export default function AnalystPage() {
                 <option value="კერძო საინვესტიციო ფონდი">კერძო საინვესტიციო ფონდი</option>
               </select>
             </div>
-            <span className="px-2.5 py-1 rounded bg-blue-50 text-primary text-[11px] font-semibold border border-blue-200 hidden md:inline">
+            <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-semibold border border-emerald-200 hidden md:inline">
               მოთხოვნის მფლობელი ორგანიზაცია
             </span>
           </div>
@@ -2058,7 +2058,7 @@ export default function AnalystPage() {
           <div className="border border-border-subtle rounded-xl overflow-hidden bg-slate-50/50">
             <div className="p-3.5 bg-slate-50 border-b border-border-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-[20px]">group_add</span>
+                <span className="material-symbols-outlined text-emerald-600 text-[20px]">group_add</span>
                 <span className="text-body-sm font-bold text-text-primary">
                   ამ კრედიტორზე მიმაგრებული დებიტორები ({creditorDebtorsList.length})
                 </span>
@@ -2069,7 +2069,7 @@ export default function AnalystPage() {
               <button
                 type="button"
                 onClick={() => setIsAddDebtorForNewCreditorOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-[#0A37CA] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer self-start sm:self-auto"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs shadow-emerald-600/20 transition-colors cursor-pointer self-start sm:self-auto"
               >
                 <span className="material-symbols-outlined text-[16px]">add</span>
                 <span>+ დებიტორის დამატება</span>
@@ -2322,7 +2322,7 @@ export default function AnalystPage() {
               გაუქმება
             </button>
             <button
-              className="px-5 py-2 rounded-lg bg-primary hover:bg-[#0A37CA] text-white font-medium text-body-md shadow-sm shadow-primary/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-body-md shadow-sm shadow-emerald-600/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
               disabled={registeringCreditor}
               onClick={handleRegisterCreditorSubmit}
               type="button"
