@@ -1698,14 +1698,6 @@ export default function AnalystPage() {
               </span>
               <span>განახლება</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setIsRegistrationOpen(true)}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-body-sm shadow-xs shadow-emerald-600/20 flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]">domain_add</span>
-              <span>+ კრედიტორის რეგისტრაცია</span>
-            </button>
           </div>
         </div>
 
