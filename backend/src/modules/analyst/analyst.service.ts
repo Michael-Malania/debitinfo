@@ -19,6 +19,33 @@ export interface AddStaffRecommendationDto {
   comment: string;
 }
 
+export interface DebtorRegistryFilters {
+  entityType?: 'PHYSICAL' | 'LEGAL' | string;
+  search?: string;
+  personalId?: string;
+  taxId?: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  legalAddress?: string;
+  actualAddress?: string;
+  address?: string;
+  creditorName?: string;
+  agreementNumber?: string;
+  minAmount?: number | string;
+  maxAmount?: number | string;
+  minOverdueDays?: number | string;
+  maxOverdueDays?: number | string;
+  overdueFilter?: string; // 'ALL' | 'CURRENT' | 'OVERDUE_30' | 'OVERDUE_60' | 'OVERDUE_90'
+  directorName?: string;
+  directorPersonalId?: string;
+  directorPhone?: string;
+  directorEmail?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 @Injectable()
 export class AnalystService {
   private readonly logger = new Logger(AnalystService.name);
@@ -29,16 +56,145 @@ export class AnalystService {
   ) {}
 
   /**
-   * Get Debtors registry records
+   * Get Debtors registry records with comprehensive filtering across all Excel template fields
    */
-  async getExcelDebtors() {
+  async getExcelDebtors(filters?: DebtorRegistryFilters) {
+    const where: any = { type: 'DEBTOR' };
+
+    if (filters?.entityType) {
+      where.entityType = filters.entityType.toUpperCase();
+    }
+
+    if (filters?.personalId) {
+      where.personalId = { contains: filters.personalId, mode: 'insensitive' };
+    }
+
+    if (filters?.taxId) {
+      where.taxId = { contains: filters.taxId, mode: 'insensitive' };
+    }
+
+    if (filters?.name) {
+      where.name = { contains: filters.name, mode: 'insensitive' };
+    }
+
+    if (filters?.phone) {
+      where.phone = { contains: filters.phone, mode: 'insensitive' };
+    }
+
+    if (filters?.email) {
+      where.email = { contains: filters.email, mode: 'insensitive' };
+    }
+
+    if (filters?.legalAddress) {
+      where.legalAddress = { contains: filters.legalAddress, mode: 'insensitive' };
+    }
+
+    if (filters?.actualAddress) {
+      where.actualAddress = { contains: filters.actualAddress, mode: 'insensitive' };
+    }
+
+    if (filters?.address) {
+      where.OR = [
+        ...(where.OR || []),
+        { legalAddress: { contains: filters.address, mode: 'insensitive' } },
+        { actualAddress: { contains: filters.address, mode: 'insensitive' } },
+      ];
+    }
+
+    if (filters?.creditorName) {
+      where.creditorName = { contains: filters.creditorName, mode: 'insensitive' };
+    }
+
+    if (filters?.agreementNumber) {
+      where.agreementNumber = { contains: filters.agreementNumber, mode: 'insensitive' };
+    }
+
+    if (filters?.minAmount !== undefined && filters?.minAmount !== '' || filters?.maxAmount !== undefined && filters?.maxAmount !== '') {
+      where.amount = {};
+      if (filters.minAmount !== undefined && filters.minAmount !== '') {
+        where.amount.gte = Number(filters.minAmount);
+      }
+      if (filters.maxAmount !== undefined && filters.maxAmount !== '') {
+        where.amount.lte = Number(filters.maxAmount);
+      }
+    }
+
+    if (filters?.overdueFilter) {
+      if (filters.overdueFilter === 'CURRENT') {
+        where.overdueDays = 0;
+      } else if (filters.overdueFilter === 'OVERDUE_30') {
+        where.overdueDays = { gte: 30 };
+      } else if (filters.overdueFilter === 'OVERDUE_60') {
+        where.overdueDays = { gte: 60 };
+      } else if (filters.overdueFilter === 'OVERDUE_90') {
+        where.overdueDays = { gte: 90 };
+      }
+    } else if (filters?.minOverdueDays !== undefined && filters?.minOverdueDays !== '' || filters?.maxOverdueDays !== undefined && filters?.maxOverdueDays !== '') {
+      where.overdueDays = {};
+      if (filters.minOverdueDays !== undefined && filters.minOverdueDays !== '') {
+        where.overdueDays.gte = Number(filters.minOverdueDays);
+      }
+      if (filters.maxOverdueDays !== undefined && filters.maxOverdueDays !== '') {
+        where.overdueDays.lte = Number(filters.maxOverdueDays);
+      }
+    }
+
+    if (filters?.directorName) {
+      where.OR = [
+        ...(where.OR || []),
+        { directorFirstName: { contains: filters.directorName, mode: 'insensitive' } },
+        { directorLastName: { contains: filters.directorName, mode: 'insensitive' } },
+      ];
+    }
+
+    if (filters?.directorPersonalId) {
+      where.directorPersonalId = { contains: filters.directorPersonalId, mode: 'insensitive' };
+    }
+
+    if (filters?.directorPhone) {
+      where.directorPhone = { contains: filters.directorPhone, mode: 'insensitive' };
+    }
+
+    if (filters?.directorEmail) {
+      where.directorEmail = { contains: filters.directorEmail, mode: 'insensitive' };
+    }
+
+    if (filters?.dateFrom || filters?.dateTo) {
+      where.debtOriginationDate = {};
+      if (filters.dateFrom) where.debtOriginationDate.gte = new Date(filters.dateFrom);
+      if (filters.dateTo) where.debtOriginationDate.lte = new Date(filters.dateTo);
+    }
+
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    if (filters?.search && filters.search.trim()) {
+      const s = filters.search.trim();
+      where.OR = [
+        ...(where.OR || []),
+        { name: { contains: s, mode: 'insensitive' } },
+        { personalId: { contains: s, mode: 'insensitive' } },
+        { taxId: { contains: s, mode: 'insensitive' } },
+        { phone: { contains: s, mode: 'insensitive' } },
+        { email: { contains: s, mode: 'insensitive' } },
+        { legalAddress: { contains: s, mode: 'insensitive' } },
+        { actualAddress: { contains: s, mode: 'insensitive' } },
+        { creditorName: { contains: s, mode: 'insensitive' } },
+        { agreementNumber: { contains: s, mode: 'insensitive' } },
+        { directorFirstName: { contains: s, mode: 'insensitive' } },
+        { directorLastName: { contains: s, mode: 'insensitive' } },
+        { directorPersonalId: { contains: s, mode: 'insensitive' } },
+      ];
+    }
+
     const debtors = await this.prisma.stagedRegistryItem.findMany({
-      where: { type: 'DEBTOR' },
+      where,
       orderBy: { createdAt: 'desc' },
     });
 
     // Cross-match with registered users
-    const personalIds = debtors.map((d) => d.personalId);
+    const personalIds = debtors.map((d) => d.personalId).filter(Boolean);
     const matchedUsers = await this.prisma.user.findMany({
       where: { personalId: { in: personalIds } },
       select: { id: true, personalId: true, email: true, role: true },

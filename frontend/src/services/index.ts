@@ -860,8 +860,9 @@ export const creditorBackendService = {
 };
 
 export const analystBackendService = {
-  async getDebtorsRegistry(): Promise<any[]> {
-    return await apiFetch('/api/v1/analyst/debtors-registry');
+  async getDebtorsRegistry(params?: Record<string, any>): Promise<any[]> {
+    const query = params && Object.keys(params).length > 0 ? `?${new URLSearchParams(params as any).toString()}` : '';
+    return await apiFetch(`/api/v1/analyst/debtors-registry${query}`);
   },
 
   async getCreditorsRegistry(): Promise<any[]> {

@@ -13,8 +13,8 @@ export class AnalystController {
   constructor(private readonly analystService: AnalystService) {}
 
   @Get('debtors-registry')
-  async getDebtorsRegistry() {
-    return await this.analystService.getExcelDebtors();
+  async getDebtorsRegistry(@Query() query: any) {
+    return await this.analystService.getExcelDebtors(query);
   }
 
   @Get('creditors-registry')
@@ -23,8 +23,8 @@ export class AnalystController {
   }
 
   @Get('excel-registry/debtors')
-  async getExcelDebtors() {
-    return await this.analystService.getExcelDebtors();
+  async getExcelDebtors(@Query() query: any) {
+    return await this.analystService.getExcelDebtors(query);
   }
 
   @Get('excel-registry/creditors')

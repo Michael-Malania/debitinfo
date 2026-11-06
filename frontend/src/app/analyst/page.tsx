@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
@@ -43,6 +43,210 @@ export default function AnalystPage() {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+
+  // Debtors Registry Switch & Filter States
+  const [debtorsEntityType, setDebtorsEntityType] = useState<'PHYSICAL' | 'LEGAL'>('PHYSICAL');
+  const [isDebtorsFilterPanelOpen, setIsDebtorsFilterPanelOpen] = useState(false);
+
+  // Specific Field Filters (Physical & Legal)
+  const [dfPersonalId, setDfPersonalId] = useState('');
+  const [dfName, setDfName] = useState('');
+  const [dfPhone, setDfPhone] = useState('');
+  const [dfEmail, setDfEmail] = useState('');
+  const [dfLegalAddress, setDfLegalAddress] = useState('');
+  const [dfActualAddress, setDfActualAddress] = useState('');
+  const [dfCreditorName, setDfCreditorName] = useState('');
+  const [dfAgreementNumber, setDfAgreementNumber] = useState('');
+  const [dfMinAmount, setDfMinAmount] = useState('');
+  const [dfMaxAmount, setDfMaxAmount] = useState('');
+  const [dfOverdueCategory, setDfOverdueCategory] = useState<'ALL' | 'CURRENT' | 'OVERDUE_30' | 'OVERDUE_60' | 'OVERDUE_90'>('ALL');
+  const [dfPlatformStatus, setDfPlatformStatus] = useState<'ALL' | 'REGISTERED' | 'NOT_REGISTERED'>('ALL');
+  const [dfDateFrom, setDfDateFrom] = useState('');
+  const [dfDateTo, setDfDateTo] = useState('');
+
+  // Legal-specific Filters
+  const [dfTaxId, setDfTaxId] = useState('');
+  const [dfDirectorName, setDfDirectorName] = useState('');
+  const [dfDirectorPersonalId, setDfDirectorPersonalId] = useState('');
+  const [dfDirectorPhone, setDfDirectorPhone] = useState('');
+  const [dfDirectorEmail, setDfDirectorEmail] = useState('');
+
+  const resetDebtorsFilters = () => {
+    setDebtorsSearch('');
+    setDfPersonalId('');
+    setDfName('');
+    setDfPhone('');
+    setDfEmail('');
+    setDfLegalAddress('');
+    setDfActualAddress('');
+    setDfCreditorName('');
+    setDfAgreementNumber('');
+    setDfMinAmount('');
+    setDfMaxAmount('');
+    setDfOverdueCategory('ALL');
+    setDfPlatformStatus('ALL');
+    setDfDateFrom('');
+    setDfDateTo('');
+    setDfTaxId('');
+    setDfDirectorName('');
+    setDfDirectorPersonalId('');
+    setDfDirectorPhone('');
+    setDfDirectorEmail('');
+  };
+
+  const activeDebtorsFiltersCount = useMemo(() => {
+    let count = 0;
+    if (debtorsSearch.trim()) count++;
+    if (dfPersonalId.trim()) count++;
+    if (dfName.trim()) count++;
+    if (dfPhone.trim()) count++;
+    if (dfEmail.trim()) count++;
+    if (dfLegalAddress.trim()) count++;
+    if (dfActualAddress.trim()) count++;
+    if (dfCreditorName.trim()) count++;
+    if (dfAgreementNumber.trim()) count++;
+    if (dfMinAmount.trim() || dfMaxAmount.trim()) count++;
+    if (dfOverdueCategory !== 'ALL') count++;
+    if (dfPlatformStatus !== 'ALL') count++;
+    if (dfDateFrom.trim() || dfDateTo.trim()) count++;
+    if (dfTaxId.trim()) count++;
+    if (dfDirectorName.trim()) count++;
+    if (dfDirectorPersonalId.trim()) count++;
+    if (dfDirectorPhone.trim()) count++;
+    if (dfDirectorEmail.trim()) count++;
+    return count;
+  }, [
+    debtorsSearch, dfPersonalId, dfName, dfPhone, dfEmail, dfLegalAddress,
+    dfActualAddress, dfCreditorName, dfAgreementNumber, dfMinAmount, dfMaxAmount,
+    dfOverdueCategory, dfPlatformStatus, dfDateFrom, dfDateTo, dfTaxId,
+    dfDirectorName, dfDirectorPersonalId, dfDirectorPhone, dfDirectorEmail,
+  ]);
+
+  const physicalDebtorsList = useMemo(() => {
+    return excelDebtors.filter((d) => (d.entityType || 'PHYSICAL').toUpperCase() === 'PHYSICAL');
+  }, [excelDebtors]);
+
+  const legalDebtorsList = useMemo(() => {
+    return excelDebtors.filter((d) => (d.entityType || '').toUpperCase() === 'LEGAL');
+  }, [excelDebtors]);
+
+  const availableCreditorsList = useMemo(() => {
+    const list = new Set<string>();
+    excelDebtors.forEach((d) => {
+      if (d.creditorName) list.add(d.creditorName);
+    });
+    return Array.from(list).sort();
+  }, [excelDebtors]);
+
+  const filteredDebtors = useMemo(() => {
+    const list = debtorsEntityType === 'PHYSICAL' ? physicalDebtorsList : legalDebtorsList;
+
+    return list.filter((d) => {
+      // Global quick search
+      if (debtorsSearch.trim()) {
+        const q = debtorsSearch.toLowerCase();
+        const matchesGlobal =
+          (d.name && d.name.toLowerCase().includes(q)) ||
+          (d.personalId && d.personalId.toLowerCase().includes(q)) ||
+          (d.taxId && d.taxId.toLowerCase().includes(q)) ||
+          (d.phone && d.phone.toLowerCase().includes(q)) ||
+          (d.email && d.email.toLowerCase().includes(q)) ||
+          (d.legalAddress && d.legalAddress.toLowerCase().includes(q)) ||
+          (d.actualAddress && d.actualAddress.toLowerCase().includes(q)) ||
+          (d.creditorName && d.creditorName.toLowerCase().includes(q)) ||
+          (d.agreementNumber && d.agreementNumber.toLowerCase().includes(q)) ||
+          (d.directorFirstName && d.directorFirstName.toLowerCase().includes(q)) ||
+          (d.directorLastName && d.directorLastName.toLowerCase().includes(q)) ||
+          (d.directorPersonalId && d.directorPersonalId.toLowerCase().includes(q));
+        if (!matchesGlobal) return false;
+      }
+
+      // Specific field filters
+      if (dfPersonalId.trim() && !d.personalId?.toLowerCase().includes(dfPersonalId.trim().toLowerCase())) {
+        return false;
+      }
+      if (dfTaxId.trim() && !d.taxId?.toLowerCase().includes(dfTaxId.trim().toLowerCase())) {
+        return false;
+      }
+      if (dfName.trim() && !d.name?.toLowerCase().includes(dfName.trim().toLowerCase())) {
+        return false;
+      }
+      if (dfPhone.trim() && !d.phone?.toLowerCase().includes(dfPhone.trim().toLowerCase())) {
+        return false;
+      }
+      if (dfEmail.trim() && !d.email?.toLowerCase().includes(dfEmail.trim().toLowerCase())) {
+        return false;
+      }
+      if (dfLegalAddress.trim() && !d.legalAddress?.toLowerCase().includes(dfLegalAddress.trim().toLowerCase())) {
+        return false;
+      }
+      if (dfActualAddress.trim() && !d.actualAddress?.toLowerCase().includes(dfActualAddress.trim().toLowerCase())) {
+        return false;
+      }
+      if (dfCreditorName.trim() && d.creditorName !== dfCreditorName.trim()) {
+        return false;
+      }
+      if (dfAgreementNumber.trim() && !d.agreementNumber?.toLowerCase().includes(dfAgreementNumber.trim().toLowerCase())) {
+        return false;
+      }
+
+      // Amount range
+      const amt = Number(d.amount) || 0;
+      if (dfMinAmount.trim() && amt < Number(dfMinAmount.trim())) {
+        return false;
+      }
+      if (dfMaxAmount.trim() && amt > Number(dfMaxAmount.trim())) {
+        return false;
+      }
+
+      // Overdue status
+      const overdue = Number(d.overdueDays) || 0;
+      if (dfOverdueCategory === 'CURRENT' && overdue > 0) return false;
+      if (dfOverdueCategory === 'OVERDUE_30' && overdue < 30) return false;
+      if (dfOverdueCategory === 'OVERDUE_60' && overdue < 60) return false;
+      if (dfOverdueCategory === 'OVERDUE_90' && overdue < 90) return false;
+
+      // Platform status
+      if (dfPlatformStatus === 'REGISTERED' && !d.isRegisteredOnPlatform) return false;
+      if (dfPlatformStatus === 'NOT_REGISTERED' && d.isRegisteredOnPlatform) return false;
+
+      // Date range filter
+      if (dfDateFrom.trim() || dfDateTo.trim()) {
+        const itemDateStr = d.debtOriginationDate ? String(d.debtOriginationDate).slice(0, 10) : '';
+        if (dfDateFrom.trim() && (!itemDateStr || itemDateStr < dfDateFrom.trim())) return false;
+        if (dfDateTo.trim() && (!itemDateStr || itemDateStr > dfDateTo.trim())) return false;
+      }
+
+      // Legal-specific director filters
+      if (debtorsEntityType === 'LEGAL') {
+        if (dfDirectorName.trim()) {
+          const dirFull = `${d.directorFirstName || ''} ${d.directorLastName || ''}`.toLowerCase();
+          if (!dirFull.includes(dfDirectorName.trim().toLowerCase())) return false;
+        }
+        if (dfDirectorPersonalId.trim()) {
+          if (!d.directorPersonalId?.toLowerCase().includes(dfDirectorPersonalId.trim().toLowerCase())) return false;
+        }
+        if (dfDirectorPhone.trim()) {
+          if (!d.directorPhone?.toLowerCase().includes(dfDirectorPhone.trim().toLowerCase())) return false;
+        }
+        if (dfDirectorEmail.trim()) {
+          if (!d.directorEmail?.toLowerCase().includes(dfDirectorEmail.trim().toLowerCase())) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [
+    debtorsEntityType, physicalDebtorsList, legalDebtorsList, debtorsSearch,
+    dfPersonalId, dfTaxId, dfName, dfPhone, dfEmail, dfLegalAddress,
+    dfActualAddress, dfCreditorName, dfAgreementNumber, dfMinAmount, dfMaxAmount,
+    dfOverdueCategory, dfPlatformStatus, dfDateFrom, dfDateTo,
+    dfDirectorName, dfDirectorPersonalId, dfDirectorPhone, dfDirectorEmail,
+  ]);
+
+  const filteredDebtorsTotalAmount = useMemo(() => {
+    return filteredDebtors.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  }, [filteredDebtors]);
 
   // Creditor Registration Modal State
   const [creditorCategory, setCreditorCategory] = useState('კომერციული ორგანიზაცია / B2B');
@@ -1519,46 +1723,152 @@ export default function AnalystPage() {
         </div>
       )}
       <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm space-y-5">
+        {/* Header with Title and Quick Stats */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-border-subtle">
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow-sm">
-              <span className="material-symbols-outlined text-2xl">badge</span>
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-sm transition-colors ${
+              debtorsEntityType === 'PHYSICAL' ? 'bg-sky-600' : 'bg-indigo-600'
+            }`}>
+              <span className="material-symbols-outlined text-2xl">
+                {debtorsEntityType === 'PHYSICAL' ? 'person' : 'domain'}
+              </span>
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <h2 className="text-headline-sm font-headline-sm font-bold text-text-primary">
                   დებიტორთა რეესტრი
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-mono text-xs font-bold">
-                  {excelDebtors.length} ჩანაწერი
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200 font-mono text-xs font-bold">
+                  {excelDebtors.length} სულ ჩანაწერი
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-mono text-xs font-bold">
+                  ჯამური ვალი: {filteredDebtorsTotalAmount.toLocaleString('ka-GE')} ₾
                 </span>
               </div>
               <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
-                დებიტორთა სრული მონაცემთა ბაზა და დავალიანებების რეესტრი
+                დებიტორთა სრული მონაცემთა ბაზა Excel თემფლეითის სტრუქტურის მიხედვით (ფიზიკური და იურიდიული პირები)
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Quick Counter Summary */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 font-semibold">
+              <span className="material-symbols-outlined text-sm">person</span>
+              <span>ფიზიკური: {physicalDebtorsList.length}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 font-semibold">
+              <span className="material-symbols-outlined text-sm">domain</span>
+              <span>იურიდიული: {legalDebtorsList.length}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Toolbar: Switch Button on Left & Controls on Right */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200">
+          {/* Switch on the Left */}
+          <div className="inline-flex items-center p-1 bg-white rounded-xl shadow-xs border border-slate-200/80 gap-1 self-start lg:self-auto">
+            <button
+              type="button"
+              onClick={() => setDebtorsEntityType('PHYSICAL')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                debtorsEntityType === 'PHYSICAL'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-primary hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">person</span>
+              <span>ფიზიკური პირები</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+                  debtorsEntityType === 'PHYSICAL'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {physicalDebtorsList.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDebtorsEntityType('LEGAL')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                debtorsEntityType === 'LEGAL'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-primary hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">domain</span>
+              <span>იურიდიული პირები</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+                  debtorsEntityType === 'LEGAL'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {legalDebtorsList.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Right Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-2.5 text-text-muted text-[18px]">
+              <span className="material-symbols-outlined absolute left-3 top-2 text-text-muted text-[18px]">
                 search
               </span>
               <input
                 type="text"
                 value={debtorsSearch}
                 onChange={(e) => setDebtorsSearch(e.target.value)}
-                placeholder="ძიება სახელით, პ/ნ-ით, ს/კ-ით ან კრედიტორით..."
-                className="pl-9 pr-4 py-2 bg-surface-bg border border-border-subtle rounded-lg text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary w-72"
+                placeholder={
+                  debtorsEntityType === 'PHYSICAL'
+                    ? 'ძიება (სახელი, პ/ნ, ტელეფონი, კრედიტორი)...'
+                    : 'ძიება (კომპანია, ს/კ, დირექტორი, ტელეფონი)...'
+                }
+                className="pl-9 pr-3 py-1.5 bg-white border border-border-subtle rounded-lg text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary w-64 sm:w-80 shadow-2xs"
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsDebtorsFilterPanelOpen(!isDebtorsFilterPanelOpen)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer shadow-2xs ${
+                isDebtorsFilterPanelOpen || activeDebtorsFiltersCount > 0
+                  ? 'bg-blue-50 border-primary text-primary'
+                  : 'bg-white border-border-subtle text-text-primary hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">tune</span>
+              <span>ფილტრები</span>
+              {activeDebtorsFiltersCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center">
+                  {activeDebtorsFiltersCount}
+                </span>
+              )}
+            </button>
+
+            {activeDebtorsFiltersCount > 0 && (
+              <button
+                type="button"
+                onClick={resetDebtorsFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold transition cursor-pointer"
+                title="ყველა ფილტრის გასუფთავება"
+              >
+                <span className="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                <span>გასუფთავება</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={loadAnalystData}
               disabled={loadingData}
-              className="px-3.5 py-2 rounded-lg border border-border-subtle bg-surface-bg hover:bg-slate-100 text-body-sm text-text-primary font-medium flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-slate-50 text-xs text-text-primary font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
             >
-              <span className={`material-symbols-outlined text-base ${loadingData ? 'animate-spin' : ''}`}>
+              <span className={`material-symbols-outlined text-[16px] ${loadingData ? 'animate-spin' : ''}`}>
                 refresh
               </span>
               <span>განახლება</span>
@@ -1566,73 +1876,710 @@ export default function AnalystPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-border-subtle shadow-2xs">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider">
-                <th className="py-3 px-4">პირადი ნომერი / ს/კ</th>
-                <th className="py-3 px-4">მოვალის სახელი &amp; გვარი / კომპანია</th>
-                <th className="py-3 px-4">სუბიექტის ტიპი</th>
-                <th className="py-3 px-4">ხელშეკრულების №</th>
-                <th className="py-3 px-4">დავალიანება (GEL)</th>
-                <th className="py-3 px-4">კრედიტორი</th>
-                <th className="py-3 px-4">ვადაგადაცილება</th>
-                <th className="py-3 px-4">პლატფორმაზე სტატუსი</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle text-body-md font-body-md bg-white">
-              {excelDebtors
-                .filter((d) => {
-                  if (!debtorsSearch.trim()) return true;
-                  const q = debtorsSearch.toLowerCase();
-                  return (
-                    d.name?.toLowerCase().includes(q) ||
-                    d.personalId?.toLowerCase().includes(q) ||
-                    d.creditorName?.toLowerCase().includes(q) ||
-                    d.agreementNumber?.toLowerCase().includes(q)
-                  );
-                })
-                .map((d) => (
-                  <tr key={d.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
-                      {d.personalId}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-text-primary">
-                      {d.name}
-                    </td>
-                    <td className="py-3 px-4 text-text-muted text-body-sm">
-                      {d.companyOrPerson || 'ფიზიკური პირი'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-xs text-slate-600">
-                      {d.agreementNumber || '—'}
-                    </td>
-                    <td className="py-3 px-4 font-mono font-bold text-rose-600">
-                      {Number(d.amount).toLocaleString('ka-GE')} ₾
-                    </td>
-                    <td className="py-3 px-4 text-body-sm text-text-primary font-medium">
-                      {d.creditorName || 'შპს ჯეო ტრეიდინგი'}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-xs">
-                      {d.overdueDays > 0 ? (
-                        <span className="text-amber-700 font-semibold">{d.overdueDays} დღე</span>
-                      ) : (
-                        <span className="text-emerald-700">ვადაშია</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">
-                      {d.isRegisteredOnPlatform ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          რეგისტრირებულია
-                        </span>
-                      ) : (
-                        <span className="text-text-muted text-xs">არ არის რეგისტრირებული</span>
+        {/* Comprehensive Expandable Filter Panel */}
+        {isDebtorsFilterPanelOpen && (
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[18px]">filter_list</span>
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  დეტალური ფილტრაცია ({debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური პირის 9 ველი' : 'იურიდიული პირის 13 ველი'})
+                </span>
+              </div>
+              {activeDebtorsFiltersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetDebtorsFilters}
+                  className="text-xs text-rose-600 hover:text-rose-800 font-semibold cursor-pointer flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[14px]">refresh</span>
+                  ყველას გასუფთავება
+                </button>
+              )}
+            </div>
+
+            {debtorsEntityType === 'PHYSICAL' ? (
+              /* Physical Entity Filters */
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+                {/* 1. პირადი ნომერი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პირადი ნომერი (პ/ნ 11-ნიშნა):</label>
+                  <input
+                    type="text"
+                    value={dfPersonalId}
+                    onChange={(e) => setDfPersonalId(e.target.value)}
+                    placeholder="მაგ: 01024089123"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 2. სახელი & გვარი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">სახელი ან გვარი:</label>
+                  <input
+                    type="text"
+                    value={dfName}
+                    onChange={(e) => setDfName(e.target.value)}
+                    placeholder="მაგ: დავით კვირიკაშვილი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 3. ტელეფონი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ტელეფონის ნომერი:</label>
+                  <input
+                    type="text"
+                    value={dfPhone}
+                    onChange={(e) => setDfPhone(e.target.value)}
+                    placeholder="მაგ: +995 599..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 4. ელ-ფოსტა */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ელ-ფოსტა:</label>
+                  <input
+                    type="text"
+                    value={dfEmail}
+                    onChange={(e) => setDfEmail(e.target.value)}
+                    placeholder="მაგ: davit@..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 5. იურიდიული მისამართი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">იურიდიული მისამართი:</label>
+                  <input
+                    type="text"
+                    value={dfLegalAddress}
+                    onChange={(e) => setDfLegalAddress(e.target.value)}
+                    placeholder="მაგ: ვაჟა-ფშაველას გამზ."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 6. ფაქტობრივი მისამართი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ფაქტობრივი მისამართი:</label>
+                  <input
+                    type="text"
+                    value={dfActualAddress}
+                    onChange={(e) => setDfActualAddress(e.target.value)}
+                    placeholder="მაგ: ფანჯიკიძის ქ."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 7. კრედიტორი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კრედიტორი კომპანია:</label>
+                  <select
+                    value={dfCreditorName}
+                    onChange={(e) => setDfCreditorName(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="">ყველა კრედიტორი</option>
+                    {availableCreditorsList.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 8. ხელშეკრულების № */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ხელშეკრულების №:</label>
+                  <input
+                    type="text"
+                    value={dfAgreementNumber}
+                    onChange={(e) => setDfAgreementNumber(e.target.value)}
+                    placeholder="მაგ: AGR-77142"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 9. დავალიანების დიაპაზონი (Min / Max) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">საწყისი დავალიანება (GEL):</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      value={dfMinAmount}
+                      onChange={(e) => setDfMinAmount(e.target.value)}
+                      placeholder="დან"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                    <span className="text-slate-400">-</span>
+                    <input
+                      type="number"
+                      value={dfMaxAmount}
+                      onChange={(e) => setDfMaxAmount(e.target.value)}
+                      placeholder="მდე"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* 10. ვადაგადაცილება */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ვადაგადაცილების სტატუსი:</label>
+                  <select
+                    value={dfOverdueCategory}
+                    onChange={(e) => setDfOverdueCategory(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">ყველა</option>
+                    <option value="CURRENT">ვადაშია (0 დღე)</option>
+                    <option value="OVERDUE_30">&gt; 30 დღე</option>
+                    <option value="OVERDUE_60">&gt; 60 დღე</option>
+                    <option value="OVERDUE_90">&gt; 90 დღე</option>
+                  </select>
+                </div>
+
+                {/* 11. სტატუსი პლატფორმაზე */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პლატფორმაზე რეგისტრაცია:</label>
+                  <select
+                    value={dfPlatformStatus}
+                    onChange={(e) => setDfPlatformStatus(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">ყველა</option>
+                    <option value="REGISTERED">რეგისტრირებულია</option>
+                    <option value="NOT_REGISTERED">არ არის რეგისტრირებული</option>
+                  </select>
+                </div>
+
+                {/* 12. წარმოქმნის თარიღი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">წარმოქმნის თარიღი (დიაპაზონი):</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={dfDateFrom}
+                      onChange={(e) => setDfDateFrom(e.target.value)}
+                      className="w-1/2 px-1.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary text-[11px]"
+                    />
+                    <span className="text-slate-400">-</span>
+                    <input
+                      type="date"
+                      value={dfDateTo}
+                      onChange={(e) => setDfDateTo(e.target.value)}
+                      className="w-1/2 px-1.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary text-[11px]"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Legal Entity Filters (13 fields) */
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+                {/* 1. ს/კ */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ს/კ (9-ნიშნა საიდენტ. კოდი):</label>
+                  <input
+                    type="text"
+                    value={dfTaxId}
+                    onChange={(e) => setDfTaxId(e.target.value)}
+                    placeholder="მაგ: 405118492"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 2. სრული დასახელება */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">სრული დასახელება (კომპანია):</label>
+                  <input
+                    type="text"
+                    value={dfName}
+                    onChange={(e) => setDfName(e.target.value)}
+                    placeholder="მაგ: შპს კავკასუს ტრანს..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 3. კომპანიის ტელეფონი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კომპანიის ტელეფონი:</label>
+                  <input
+                    type="text"
+                    value={dfPhone}
+                    onChange={(e) => setDfPhone(e.target.value)}
+                    placeholder="მაგ: +995 591..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 4. ელ-ფოსტა */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კომპანიის ელ-ფოსტა:</label>
+                  <input
+                    type="text"
+                    value={dfEmail}
+                    onChange={(e) => setDfEmail(e.target.value)}
+                    placeholder="მაგ: info@cts-georgia.ge"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 5. იურიდიული მისამართი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">იურიდიული მისამართი:</label>
+                  <input
+                    type="text"
+                    value={dfLegalAddress}
+                    onChange={(e) => setDfLegalAddress(e.target.value)}
+                    placeholder="მაგ: ალ. ყაზბეგის გამზ."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 6. ფაქტობრივი მისამართი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ფაქტობრივი მისამართი:</label>
+                  <input
+                    type="text"
+                    value={dfActualAddress}
+                    onChange={(e) => setDfActualAddress(e.target.value)}
+                    placeholder="მაგ: აეროპორტის გზატკეცილი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 7. დირექტორის სახელი & გვარი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დირექტორი (სახელი / გვარი):</label>
+                  <input
+                    type="text"
+                    value={dfDirectorName}
+                    onChange={(e) => setDfDirectorName(e.target.value)}
+                    placeholder="მაგ: დავით კაპანაძე"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 8. დირექტორის პ/ნ */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დირექტორის პირადი ნომერი:</label>
+                  <input
+                    type="text"
+                    value={dfDirectorPersonalId}
+                    onChange={(e) => setDfDirectorPersonalId(e.target.value)}
+                    placeholder="მაგ: 01019045812"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 9. დირექტორის ტელეფონი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დირექტორის ტელეფონი:</label>
+                  <input
+                    type="text"
+                    value={dfDirectorPhone}
+                    onChange={(e) => setDfDirectorPhone(e.target.value)}
+                    placeholder="მაგ: +995 599..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 10. დირექტორის ელ-ფოსტა */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დირექტორის ელ-ფოსტა:</label>
+                  <input
+                    type="text"
+                    value={dfDirectorEmail}
+                    onChange={(e) => setDfDirectorEmail(e.target.value)}
+                    placeholder="მაგ: davit.k@..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 11. კრედიტორი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კრედიტორი კომპანია:</label>
+                  <select
+                    value={dfCreditorName}
+                    onChange={(e) => setDfCreditorName(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="">ყველა კრედიტორი</option>
+                    {availableCreditorsList.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 12. დავალიანების დიაპაზონი (Min / Max) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">საწყისი დავალიანება (GEL):</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      value={dfMinAmount}
+                      onChange={(e) => setDfMinAmount(e.target.value)}
+                      placeholder="დან"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                    <span className="text-slate-400">-</span>
+                    <input
+                      type="number"
+                      value={dfMaxAmount}
+                      onChange={(e) => setDfMaxAmount(e.target.value)}
+                      placeholder="მდე"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* 13. ვადაგადაცილება */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ვადაგადაცილება:</label>
+                  <select
+                    value={dfOverdueCategory}
+                    onChange={(e) => setDfOverdueCategory(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">ყველა</option>
+                    <option value="CURRENT">ვადაშია (0 დღე)</option>
+                    <option value="OVERDUE_30">&gt; 30 დღე</option>
+                    <option value="OVERDUE_60">&gt; 60 დღე</option>
+                    <option value="OVERDUE_90">&gt; 90 დღე</option>
+                  </select>
+                </div>
+
+                {/* 14. სტატუსი პლატფორმაზე */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პლატფორმაზე რეგისტრაცია:</label>
+                  <select
+                    value={dfPlatformStatus}
+                    onChange={(e) => setDfPlatformStatus(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">ყველა</option>
+                    <option value="REGISTERED">რეგისტრირებულია</option>
+                    <option value="NOT_REGISTERED">არ არის რეგისტრირებული</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter Summary & Result Count Row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted px-1">
+          <div className="flex items-center gap-2">
+            <span>
+              ნაჩვენებია <strong className="text-text-primary font-bold">{filteredDebtors.length}</strong> ჩანაწერი{' '}
+              {debtorsEntityType === 'PHYSICAL' ? physicalDebtorsList.length : legalDebtorsList.length}-დან
+            </span>
+            {activeDebtorsFiltersCount > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-[11px] font-semibold">
+                ფილტრი გააქტიურებულია ({activeDebtorsFiltersCount})
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span>ნაჩვენები დავალიანების ჯამი:</span>
+            <span className="font-mono font-bold text-rose-600 text-sm">
+              {filteredDebtorsTotalAmount.toLocaleString('ka-GE')} ₾
+            </span>
+          </div>
+        </div>
+
+        {/* Table: Conditional rendering for Physical vs Legal Entity (matching Excel template) */}
+        <div className="overflow-x-auto rounded-xl border border-border-subtle shadow-2xs">
+          {debtorsEntityType === 'PHYSICAL' ? (
+            /* Physical Persons Table (9 Excel Fields + Operational) */
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-4">პირადი ნომერი (პ/ნ)</th>
+                  <th className="py-3 px-4">მოვალის სახელი &amp; გვარი</th>
+                  <th className="py-3 px-4">ტელეფონი</th>
+                  <th className="py-3 px-4">ელ-ფოსტა</th>
+                  <th className="py-3 px-4">იურიდიული მისამართი</th>
+                  <th className="py-3 px-4">ფაქტობრივი მისამართი</th>
+                  <th className="py-3 px-4">საწყისი დავალიანება</th>
+                  <th className="py-3 px-4">წარმოქმნის თარიღი</th>
+                  <th className="py-3 px-4">კრედიტორი</th>
+                  <th className="py-3 px-4">ხელშეკრულების №</th>
+                  <th className="py-3 px-4">ვადაგადაცილება</th>
+                  <th className="py-3 px-4">სტატუსი</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
+                {filteredDebtors.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="py-12 text-center text-text-muted">
+                      <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">person_off</span>
+                      <span>ფიზიკური პირები მითითებული ფილტრებით ვერ მოიძებნა</span>
+                      {activeDebtorsFiltersCount > 0 && (
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={resetDebtorsFilters}
+                            className="px-3 py-1.5 rounded-lg border border-primary text-primary hover:bg-blue-50 text-xs font-semibold cursor-pointer"
+                          >
+                            ფილტრების გასუფთავება
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
-                ))}
-            </tbody>
-          </table>
+                ) : (
+                  filteredDebtors.map((d) => (
+                    <tr key={d.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                      <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
+                        <div className="flex items-center gap-1.5">
+                          <span>{d.personalId}</span>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(d.personalId)}
+                            title="დაკოპირება"
+                            className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-medium text-text-primary">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center font-bold text-[11px]">
+                            {(d.name || 'დ').charAt(0).toUpperCase()}
+                          </span>
+                          <span>{d.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {d.phone ? (
+                          <a href={`tel:${d.phone}`} className="hover:text-primary transition flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px] text-slate-400">call</span>
+                            {d.phone}
+                          </a>
+                        ) : '—'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        {d.email ? (
+                          <a href={`mailto:${d.email}`} className="hover:text-primary transition flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px] text-slate-400">mail</span>
+                            {d.email}
+                          </a>
+                        ) : '—'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate" title={d.legalAddress || ''}>
+                        {d.legalAddress || '—'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate" title={d.actualAddress || ''}>
+                        {d.actualAddress || '—'}
+                      </td>
+                      <td className="py-3 px-4 font-mono font-bold text-rose-600">
+                        {Number(d.amount).toLocaleString('ka-GE')} ₾
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {d.debtOriginationDate ? String(d.debtOriginationDate).slice(0, 10) : '—'}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-text-primary">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800 text-xs">
+                          <span className="material-symbols-outlined text-[13px] text-slate-500">account_balance</span>
+                          {d.creditorName || 'შპს ჯეო ტრეიდინგი'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {d.agreementNumber || '—'}
+                      </td>
+                      <td className="py-3 px-4 font-mono">
+                        {Number(d.overdueDays) > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            {d.overdueDays} დღე
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            ვადაშია
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {d.isRegisteredOnPlatform ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            რეგისტრირებულია
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                            არ არის რეგისტრირებული
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          ) : (
+            /* Legal Entities Table (13 Excel Fields + Operational) */
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-4">ს/კ (9-ნიშნა)</th>
+                  <th className="py-3 px-4">სრული დასახელება</th>
+                  <th className="py-3 px-4">ტელეფონი</th>
+                  <th className="py-3 px-4">ელ-ფოსტა</th>
+                  <th className="py-3 px-4">იურიდიული მისამართი</th>
+                  <th className="py-3 px-4">ფაქტობრივი მისამართი</th>
+                  <th className="py-3 px-4">საწყისი დავალიანება</th>
+                  <th className="py-3 px-4">წარმოქმნის თარიღი</th>
+                  <th className="py-3 px-4">დირექტორი (სახელი, გვარი, პ/ნ)</th>
+                  <th className="py-3 px-4">დირექტორის კონტაქტი</th>
+                  <th className="py-3 px-4">კრედიტორი</th>
+                  <th className="py-3 px-4">ხელშეკრულების №</th>
+                  <th className="py-3 px-4">ვადაგადაცილება</th>
+                  <th className="py-3 px-4">სტატუსი</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
+                {filteredDebtors.length === 0 ? (
+                  <tr>
+                    <td colSpan={14} className="py-12 text-center text-text-muted">
+                      <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">domain_disabled</span>
+                      <span>იურიდიული პირები მითითებული ფილტრებით ვერ მოიძებნა</span>
+                      {activeDebtorsFiltersCount > 0 && (
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={resetDebtorsFilters}
+                            className="px-3 py-1.5 rounded-lg border border-primary text-primary hover:bg-blue-50 text-xs font-semibold cursor-pointer"
+                          >
+                            ფილტრების გასუფთავება
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDebtors.map((d) => (
+                    <tr key={d.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                      <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
+                        <div className="flex items-center gap-1.5">
+                          <span>{d.taxId || d.personalId}</span>
+                          <button
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(d.taxId || d.personalId)}
+                            title="დაკოპირება"
+                            className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                          </button>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-semibold text-text-primary">
+                        <div className="flex items-center gap-2">
+                          <span className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 text-primary flex items-center justify-center font-bold text-xs">
+                            <span className="material-symbols-outlined text-[16px]">domain</span>
+                          </span>
+                          <span>{d.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {d.phone ? (
+                          <a href={`tel:${d.phone}`} className="hover:text-primary transition flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px] text-slate-400">call</span>
+                            {d.phone}
+                          </a>
+                        ) : '—'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600">
+                        {d.email ? (
+                          <a href={`mailto:${d.email}`} className="hover:text-primary transition flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[14px] text-slate-400">mail</span>
+                            {d.email}
+                          </a>
+                        ) : '—'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate" title={d.legalAddress || ''}>
+                        {d.legalAddress || '—'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate" title={d.actualAddress || ''}>
+                        {d.actualAddress || '—'}
+                      </td>
+                      <td className="py-3 px-4 font-mono font-bold text-rose-600">
+                        {Number(d.amount).toLocaleString('ka-GE')} ₾
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {d.debtOriginationDate ? String(d.debtOriginationDate).slice(0, 10) : '—'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {d.directorFirstName || d.directorLastName || d.directorPersonalId ? (
+                          <div>
+                            <div className="font-semibold text-slate-800">
+                              {`${d.directorFirstName || ''} ${d.directorLastName || ''}`.trim() || 'დირექტორი'}
+                            </div>
+                            {d.directorPersonalId && (
+                              <div className="font-mono text-[11px] text-slate-500">
+                                პ/ნ: {d.directorPersonalId}
+                              </div>
+                            )}
+                          </div>
+                        ) : '—'}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600 text-[11px]">
+                        {d.directorPhone && (
+                          <div className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[12px] text-slate-400">call</span>
+                            <span>{d.directorPhone}</span>
+                          </div>
+                        )}
+                        {d.directorEmail && (
+                          <div className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[12px] text-slate-400">mail</span>
+                            <span>{d.directorEmail}</span>
+                          </div>
+                        )}
+                        {!d.directorPhone && !d.directorEmail && '—'}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-text-primary">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800 text-xs">
+                          <span className="material-symbols-outlined text-[13px] text-slate-500">account_balance</span>
+                          {d.creditorName || 'სს ლიდერ კრედიტი'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {d.agreementNumber || '—'}
+                      </td>
+                      <td className="py-3 px-4 font-mono">
+                        {Number(d.overdueDays) > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            {d.overdueDays} დღე
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            ვადაშია
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        {d.isRegisteredOnPlatform ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            რეგისტრირებულია
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                            არ არის რეგისტრირებული
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
       </>
