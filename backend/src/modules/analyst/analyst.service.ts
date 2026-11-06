@@ -195,7 +195,7 @@ export class AnalystService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Cross-match with registered users
+    // Cross-match with registered users and real DebtClaims
     const personalIds = debtors.map((d) => d.personalId).filter(Boolean);
     const matchedUsers = await this.prisma.user.findMany({
       where: { personalId: { in: personalIds } },
@@ -203,11 +203,103 @@ export class AnalystService {
     });
 
     const userMap = new Map(matchedUsers.map((u) => [u.personalId, u]));
+    const userIds = matchedUsers.map((u) => u.id);
+    const agreementNumbers = debtors.map((d) => d.agreementNumber).filter(Boolean) as string[];
+
+    const claims = await this.prisma.debtClaim.findMany({
+      where: {
+        OR: [
+          { debtorId: { in: userIds } },
+          { agreementNumber: { in: agreementNumbers } },
+        ],
+      },
+      select: {
+        id: true,
+        debtorId: true,
+        agreementNumber: true,
+        initialAmount: true,
+        remainingAmount: true,
+        status: true,
+        rating: true,
+        riskScore: true,
+      },
+    });
+
+    const claimByDebtorId = new Map(claims.map((c) => [c.debtorId, c]));
+    const claimByAgrNum = new Map(claims.map((c) => [c.agreementNumber, c]));
 
     return debtors.map((d) => {
       const matched = userMap.get(d.personalId);
+      const claim = (matched ? claimByDebtorId.get(matched.id) : null) || (d.agreementNumber ? claimByAgrNum.get(d.agreementNumber) : null);
+
+      // Remaining / Current amount (მიმდინარე დავალიანება)
+      const currentAmount = claim ? Number(claim.remainingAmount) : Number(d.amount || 0);
+
+      // Determine loan/claim status: SETTLED -> 'გადახდილი', ACTIVE -> 'აქტიური', DISPUTED -> 'დავაშია', etc.
+      let claimStatus = 'ACTIVE';
+      let claimStatusText = 'აქტიური';
+
+      if (claim) {
+        claimStatus = claim.status;
+        if (claim.status === 'SETTLED' || currentAmount === 0) {
+          claimStatusText = 'გადახდილი';
+        } else if (claim.status === 'DISPUTED') {
+          claimStatusText = 'დავაშია';
+        } else if (claim.status === 'OVERDUE') {
+          claimStatusText = 'ვადაგადაცილებული';
+        } else if (claim.status === 'IN_LITIGATION') {
+          claimStatusText = 'სასამართლოში';
+        } else if (claim.status === 'RESTRUCTURED') {
+          claimStatusText = 'რესტრუქტურიზებული';
+        } else {
+          claimStatusText = 'აქტიური';
+        }
+      } else {
+        if (currentAmount === 0) {
+          claimStatusText = 'გადახდილი';
+        } else if (d.overdueDays > 0) {
+          claimStatusText = 'ვადაგადაცილებული';
+        } else {
+          claimStatusText = 'აქტიური';
+        }
+      }
+
+      // Credit trust rating: Grade A, Grade B, Grade C
+      let rating = 'B';
+      let ratingGrade = 'Grade B';
+
+      if (claim?.rating) {
+        rating = String(claim.rating);
+        ratingGrade = `Grade ${rating}`;
+      } else {
+        if (d.overdueDays === 0 && currentAmount < 5000) {
+          rating = 'A';
+          ratingGrade = 'Grade A';
+        } else if (d.overdueDays <= 30) {
+          rating = 'B';
+          ratingGrade = 'Grade B';
+        } else {
+          rating = 'C';
+          ratingGrade = 'Grade C';
+        }
+      }
+
+      // Separate first name and last name
+      const firstName = d.firstName || (d.name ? d.name.trim().split(/\s+/)[0] : '');
+      const lastName = d.lastName || (d.name ? d.name.trim().split(/\s+/).slice(1).join(' ') : '');
+
       return {
         ...d,
+        firstName,
+        lastName,
+        currentAmount,
+        remainingAmount: currentAmount,
+        amount: currentAmount, // Synced to current debt
+        claimStatus,
+        claimStatusText,
+        rating,
+        ratingGrade,
+        riskScore: claim?.riskScore ?? (rating === 'A' ? 88 : rating === 'B' ? 68 : 42),
         matchedUser: matched || null,
         isRegisteredOnPlatform: !!matched,
       };

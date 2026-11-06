@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
 import AddDebtorModal, { DebtorFormData } from '@/components/analyst/AddDebtorModal';
 import AnalystSidebar, { AnalystViewType } from '@/components/analyst/AnalystSidebar';
-import { downloadDebtorTemplateXLSX, parseDebtorExcelFile } from '@/utils/excel';
+import { downloadDebtorTemplateXLSX, parseDebtorExcelFile, exportDebtorsRegistryXLSX } from '@/utils/excel';
 
 export default function AnalystPage() {
   const router = useRouter();
@@ -59,10 +59,11 @@ export default function AnalystPage() {
   const [dfAgreementNumber, setDfAgreementNumber] = useState('');
   const [dfMinAmount, setDfMinAmount] = useState('');
   const [dfMaxAmount, setDfMaxAmount] = useState('');
-  const [dfOverdueCategory, setDfOverdueCategory] = useState<'ALL' | 'CURRENT' | 'OVERDUE_30' | 'OVERDUE_60' | 'OVERDUE_90'>('ALL');
-  const [dfPlatformStatus, setDfPlatformStatus] = useState<'ALL' | 'REGISTERED' | 'NOT_REGISTERED'>('ALL');
+  const [dfClaimStatus, setDfClaimStatus] = useState<string>('ALL');
+  const [dfRating, setDfRating] = useState<string>('ALL');
   const [dfDateFrom, setDfDateFrom] = useState('');
   const [dfDateTo, setDfDateTo] = useState('');
+  const [isExportingDebtors, setIsExportingDebtors] = useState(false);
 
   // Legal-specific Filters
   const [dfTaxId, setDfTaxId] = useState('');
@@ -83,8 +84,8 @@ export default function AnalystPage() {
     setDfAgreementNumber('');
     setDfMinAmount('');
     setDfMaxAmount('');
-    setDfOverdueCategory('ALL');
-    setDfPlatformStatus('ALL');
+    setDfClaimStatus('ALL');
+    setDfRating('ALL');
     setDfDateFrom('');
     setDfDateTo('');
     setDfTaxId('');
@@ -104,10 +105,9 @@ export default function AnalystPage() {
     if (dfLegalAddress.trim()) count++;
     if (dfActualAddress.trim()) count++;
     if (dfCreditorName.trim()) count++;
-    if (dfAgreementNumber.trim()) count++;
     if (dfMinAmount.trim() || dfMaxAmount.trim()) count++;
-    if (dfOverdueCategory !== 'ALL') count++;
-    if (dfPlatformStatus !== 'ALL') count++;
+    if (dfClaimStatus !== 'ALL') count++;
+    if (dfRating !== 'ALL') count++;
     if (dfDateFrom.trim() || dfDateTo.trim()) count++;
     if (dfTaxId.trim()) count++;
     if (dfDirectorName.trim()) count++;
@@ -117,8 +117,8 @@ export default function AnalystPage() {
     return count;
   }, [
     debtorsSearch, dfPersonalId, dfName, dfPhone, dfEmail, dfLegalAddress,
-    dfActualAddress, dfCreditorName, dfAgreementNumber, dfMinAmount, dfMaxAmount,
-    dfOverdueCategory, dfPlatformStatus, dfDateFrom, dfDateTo, dfTaxId,
+    dfActualAddress, dfCreditorName, dfMinAmount, dfMaxAmount,
+    dfClaimStatus, dfRating, dfDateFrom, dfDateTo, dfTaxId,
     dfDirectorName, dfDirectorPersonalId, dfDirectorPhone, dfDirectorEmail,
   ]);
 
@@ -147,6 +147,10 @@ export default function AnalystPage() {
         const q = debtorsSearch.toLowerCase();
         const matchesGlobal =
           (d.name && d.name.toLowerCase().includes(q)) ||
+          (d.firstName && d.firstName.toLowerCase().includes(q)) ||
+          (d.lastName && d.lastName.toLowerCase().includes(q)) ||
+          (d.claimStatusText && d.claimStatusText.toLowerCase().includes(q)) ||
+          (d.ratingGrade && d.ratingGrade.toLowerCase().includes(q)) ||
           (d.personalId && d.personalId.toLowerCase().includes(q)) ||
           (d.taxId && d.taxId.toLowerCase().includes(q)) ||
           (d.phone && d.phone.toLowerCase().includes(q)) ||
@@ -186,12 +190,9 @@ export default function AnalystPage() {
       if (dfCreditorName.trim() && d.creditorName !== dfCreditorName.trim()) {
         return false;
       }
-      if (dfAgreementNumber.trim() && !d.agreementNumber?.toLowerCase().includes(dfAgreementNumber.trim().toLowerCase())) {
-        return false;
-      }
 
-      // Amount range
-      const amt = Number(d.amount) || 0;
+      // Current amount range (მიმდინარე დავალიანება)
+      const amt = Number(d.currentAmount ?? d.remainingAmount ?? d.amount ?? 0);
       if (dfMinAmount.trim() && amt < Number(dfMinAmount.trim())) {
         return false;
       }
@@ -199,16 +200,28 @@ export default function AnalystPage() {
         return false;
       }
 
-      // Overdue status
-      const overdue = Number(d.overdueDays) || 0;
-      if (dfOverdueCategory === 'CURRENT' && overdue > 0) return false;
-      if (dfOverdueCategory === 'OVERDUE_30' && overdue < 30) return false;
-      if (dfOverdueCategory === 'OVERDUE_60' && overdue < 60) return false;
-      if (dfOverdueCategory === 'OVERDUE_90' && overdue < 90) return false;
+      // Loan Status filter (გადახდილი, აქტიური, დავაშია, ვადაგადაცილებული და ა.შ.)
+      if (dfClaimStatus !== 'ALL') {
+        const curStatus = (d.claimStatus || '').toUpperCase();
+        const curText = (d.claimStatusText || '');
+        if (dfClaimStatus === 'SETTLED') {
+          if (curStatus !== 'SETTLED' && curText !== 'გადახდილი' && amt !== 0) return false;
+        } else if (dfClaimStatus === 'ACTIVE') {
+          if (curStatus !== 'ACTIVE' && curText !== 'აქტიური') return false;
+        } else if (dfClaimStatus === 'DISPUTED') {
+          if (curStatus !== 'DISPUTED' && curText !== 'დავაშია') return false;
+        } else if (dfClaimStatus === 'OVERDUE') {
+          if (curStatus !== 'OVERDUE' && curText !== 'ვადაგადაცილებული') return false;
+        }
+      }
 
-      // Platform status
-      if (dfPlatformStatus === 'REGISTERED' && !d.isRegisteredOnPlatform) return false;
-      if (dfPlatformStatus === 'NOT_REGISTERED' && d.isRegisteredOnPlatform) return false;
+      // Rating filter (Grade A, Grade B, Grade C)
+      if (dfRating !== 'ALL') {
+        const curRating = d.rating || (d.ratingGrade ? d.ratingGrade.replace('Grade ', '') : '');
+        if (curRating !== dfRating && !d.ratingGrade?.includes(dfRating)) {
+          return false;
+        }
+      }
 
       // Date range filter
       if (dfDateFrom.trim() || dfDateTo.trim()) {
@@ -239,14 +252,37 @@ export default function AnalystPage() {
   }, [
     debtorsEntityType, physicalDebtorsList, legalDebtorsList, debtorsSearch,
     dfPersonalId, dfTaxId, dfName, dfPhone, dfEmail, dfLegalAddress,
-    dfActualAddress, dfCreditorName, dfAgreementNumber, dfMinAmount, dfMaxAmount,
-    dfOverdueCategory, dfPlatformStatus, dfDateFrom, dfDateTo,
+    dfActualAddress, dfCreditorName, dfMinAmount, dfMaxAmount,
+    dfClaimStatus, dfRating, dfDateFrom, dfDateTo,
     dfDirectorName, dfDirectorPersonalId, dfDirectorPhone, dfDirectorEmail,
   ]);
 
   const filteredDebtorsTotalAmount = useMemo(() => {
-    return filteredDebtors.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+    return filteredDebtors.reduce(
+      (sum, d) => sum + (Number(d.currentAmount ?? d.remainingAmount ?? d.amount) || 0),
+      0
+    );
   }, [filteredDebtors]);
+
+  const handleExportDebtorsExcel = async () => {
+    setIsExportingDebtors(true);
+    try {
+      await exportDebtorsRegistryXLSX({
+        entityType: debtorsEntityType,
+        debtors: filteredDebtors,
+        totalAmount: filteredDebtorsTotalAmount,
+      });
+      setActionSuccessMessage(
+        `${debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური' : 'იურიდიული'} პირების რეესტრი (${filteredDebtors.length} ჩანაწერი) წარმატებით დაექსპორტირდა Excel (.xlsx) ფორმატში!`
+      );
+      setTimeout(() => setActionSuccessMessage(null), 5000);
+    } catch (err: any) {
+      console.error('Export debtors registry error:', err);
+      alert('Excel ექსპორტი ვერ მოხერხდა: ' + (err?.message || 'შეცდომა'));
+    } finally {
+      setIsExportingDebtors(false);
+    }
+  };
 
   // Creditor Registration Modal State
   const [creditorEntityType, setCreditorEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
@@ -2009,6 +2045,19 @@ export default function AnalystPage() {
               </span>
               <span>განახლება</span>
             </button>
+
+            <button
+              type="button"
+              onClick={handleExportDebtorsExcel}
+              disabled={isExportingDebtors || filteredDebtors.length === 0}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+              title="გაფილტრული რეესტრის ექსპორტი Excel (.xlsx) ფორმატში"
+            >
+              <span className={`material-symbols-outlined text-[16px] ${isExportingDebtors ? 'animate-spin' : ''}`}>
+                {isExportingDebtors ? 'progress_activity' : 'file_download'}
+              </span>
+              <span>{isExportingDebtors ? 'ექსპორტირდება...' : 'Excel ექსპორტი (.xlsx)'}</span>
+            </button>
           </div>
         </div>
 
@@ -2019,7 +2068,7 @@ export default function AnalystPage() {
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary text-[18px]">filter_list</span>
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  დეტალური ფილტრაცია ({debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური პირის 9 ველი' : 'იურიდიული პირის 13 ველი'})
+                  დეტალური ფილტრაცია ({debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური პირის ველები' : 'იურიდიული პირის ველები'})
                 </span>
               </div>
               {activeDebtorsFiltersCount > 0 && (
@@ -2124,21 +2173,9 @@ export default function AnalystPage() {
                   </select>
                 </div>
 
-                {/* 8. ხელშეკრულების № */}
+                {/* 8. მიმდინარე დავალიანების დიაპაზონი (Min / Max) */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">ხელშეკრულების №:</label>
-                  <input
-                    type="text"
-                    value={dfAgreementNumber}
-                    onChange={(e) => setDfAgreementNumber(e.target.value)}
-                    placeholder="მაგ: AGR-77142"
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
-                  />
-                </div>
-
-                {/* 9. დავალიანების დიაპაზონი (Min / Max) */}
-                <div>
-                  <label className="block text-slate-600 font-semibold mb-1">საწყისი დავალიანება (GEL):</label>
+                  <label className="block text-slate-600 font-semibold mb-1">მიმდინარე დავალიანება (GEL):</label>
                   <div className="flex items-center gap-1.5">
                     <input
                       type="number"
@@ -2158,37 +2195,38 @@ export default function AnalystPage() {
                   </div>
                 </div>
 
-                {/* 10. ვადაგადაცილება */}
+                {/* 9. სესხის სტატუსი */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">ვადაგადაცილების სტატუსი:</label>
+                  <label className="block text-slate-600 font-semibold mb-1">სესხის სტატუსი:</label>
                   <select
-                    value={dfOverdueCategory}
-                    onChange={(e) => setDfOverdueCategory(e.target.value as any)}
+                    value={dfClaimStatus}
+                    onChange={(e) => setDfClaimStatus(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
                   >
-                    <option value="ALL">ყველა</option>
-                    <option value="CURRENT">ვადაშია (0 დღე)</option>
-                    <option value="OVERDUE_30">&gt; 30 დღე</option>
-                    <option value="OVERDUE_60">&gt; 60 დღე</option>
-                    <option value="OVERDUE_90">&gt; 90 დღე</option>
+                    <option value="ALL">ყველა სტატუსი</option>
+                    <option value="SETTLED">გადახდილი</option>
+                    <option value="ACTIVE">აქტიური</option>
+                    <option value="OVERDUE">ვადაგადაცილებული</option>
+                    <option value="DISPUTED">დავაშია</option>
                   </select>
                 </div>
 
-                {/* 11. სტატუსი პლატფორმაზე */}
+                {/* 10. საკრედიტო რეიტინგი */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">პლატფორმაზე რეგისტრაცია:</label>
+                  <label className="block text-slate-600 font-semibold mb-1">საკრედიტო რეიტინგი:</label>
                   <select
-                    value={dfPlatformStatus}
-                    onChange={(e) => setDfPlatformStatus(e.target.value as any)}
+                    value={dfRating}
+                    onChange={(e) => setDfRating(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
                   >
-                    <option value="ALL">ყველა</option>
-                    <option value="REGISTERED">რეგისტრირებულია</option>
-                    <option value="NOT_REGISTERED">არ არის რეგისტრირებული</option>
+                    <option value="ALL">ყველა რეიტინგი</option>
+                    <option value="A">Grade A (მაღალი სანდოობა)</option>
+                    <option value="B">Grade B (საშუალო რისკი)</option>
+                    <option value="C">Grade C (მაღალი რისკი)</option>
                   </select>
                 </div>
 
-                {/* 12. წარმოქმნის თარიღი */}
+                {/* 11. წარმოქმნის თარიღი */}
                 <div>
                   <label className="block text-slate-600 font-semibold mb-1">წარმოქმნის თარიღი (დიაპაზონი):</label>
                   <div className="flex items-center gap-1.5">
@@ -2346,9 +2384,9 @@ export default function AnalystPage() {
                   </select>
                 </div>
 
-                {/* 12. დავალიანების დიაპაზონი (Min / Max) */}
+                {/* 12. მიმდინარე დავალიანების დიაპაზონი (Min / Max) */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">საწყისი დავალიანება (GEL):</label>
+                  <label className="block text-slate-600 font-semibold mb-1">მიმდინარე დავალიანება (GEL):</label>
                   <div className="flex items-center gap-1.5">
                     <input
                       type="number"
@@ -2368,34 +2406,55 @@ export default function AnalystPage() {
                   </div>
                 </div>
 
-                {/* 13. ვადაგადაცილება */}
+                {/* 13. სესხის სტატუსი */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">ვადაგადაცილება:</label>
+                  <label className="block text-slate-600 font-semibold mb-1">სესხის სტატუსი:</label>
                   <select
-                    value={dfOverdueCategory}
-                    onChange={(e) => setDfOverdueCategory(e.target.value as any)}
+                    value={dfClaimStatus}
+                    onChange={(e) => setDfClaimStatus(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
                   >
-                    <option value="ALL">ყველა</option>
-                    <option value="CURRENT">ვადაშია (0 დღე)</option>
-                    <option value="OVERDUE_30">&gt; 30 დღე</option>
-                    <option value="OVERDUE_60">&gt; 60 დღე</option>
-                    <option value="OVERDUE_90">&gt; 90 დღე</option>
+                    <option value="ALL">ყველა სტატუსი</option>
+                    <option value="SETTLED">გადახდილი</option>
+                    <option value="ACTIVE">აქტიური</option>
+                    <option value="OVERDUE">ვადაგადაცილებული</option>
+                    <option value="DISPUTED">დავაშია</option>
                   </select>
                 </div>
 
-                {/* 14. სტატუსი პლატფორმაზე */}
+                {/* 14. საკრედიტო რეიტინგი */}
                 <div>
-                  <label className="block text-slate-600 font-semibold mb-1">პლატფორმაზე რეგისტრაცია:</label>
+                  <label className="block text-slate-600 font-semibold mb-1">საკრედიტო რეიტინგი:</label>
                   <select
-                    value={dfPlatformStatus}
-                    onChange={(e) => setDfPlatformStatus(e.target.value as any)}
+                    value={dfRating}
+                    onChange={(e) => setDfRating(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
                   >
-                    <option value="ALL">ყველა</option>
-                    <option value="REGISTERED">რეგისტრირებულია</option>
-                    <option value="NOT_REGISTERED">არ არის რეგისტრირებული</option>
+                    <option value="ALL">ყველა რეიტინგი</option>
+                    <option value="A">Grade A (მაღალი სანდოობა)</option>
+                    <option value="B">Grade B (საშუალო რისკი)</option>
+                    <option value="C">Grade C (მაღალი რისკი)</option>
                   </select>
+                </div>
+
+                {/* 15. წარმოქმნის თარიღი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">წარმოქმნის თარიღი (დიაპაზონი):</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={dfDateFrom}
+                      onChange={(e) => setDfDateFrom(e.target.value)}
+                      className="w-1/2 px-1.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary text-[11px]"
+                    />
+                    <span className="text-slate-400">-</span>
+                    <input
+                      type="date"
+                      value={dfDateTo}
+                      onChange={(e) => setDfDateTo(e.target.value)}
+                      className="w-1/2 px-1.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary text-[11px]"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -2432,17 +2491,17 @@ export default function AnalystPage() {
               <thead>
                 <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
                   <th className="py-3 px-4">პირადი ნომერი (პ/ნ)</th>
-                  <th className="py-3 px-4">მოვალის სახელი &amp; გვარი</th>
+                  <th className="py-3 px-4">სახელი</th>
+                  <th className="py-3 px-4">გვარი</th>
                   <th className="py-3 px-4">ტელეფონი</th>
                   <th className="py-3 px-4">ელ-ფოსტა</th>
                   <th className="py-3 px-4">იურიდიული მისამართი</th>
                   <th className="py-3 px-4">ფაქტობრივი მისამართი</th>
-                  <th className="py-3 px-4">საწყისი დავალიანება</th>
+                  <th className="py-3 px-4">მიმდინარე დავალიანება</th>
                   <th className="py-3 px-4">წარმოქმნის თარიღი</th>
                   <th className="py-3 px-4">კრედიტორი</th>
-                  <th className="py-3 px-4">ხელშეკრულების №</th>
-                  <th className="py-3 px-4">ვადაგადაცილება</th>
                   <th className="py-3 px-4">სტატუსი</th>
+                  <th className="py-3 px-4">რეიტინგი</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
@@ -2481,12 +2540,10 @@ export default function AnalystPage() {
                         </div>
                       </td>
                       <td className="py-3 px-4 font-medium text-text-primary">
-                        <div className="flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center font-bold text-[11px]">
-                            {(d.name || 'დ').charAt(0).toUpperCase()}
-                          </span>
-                          <span>{d.name}</span>
-                        </div>
+                        {d.firstName || (d.name ? d.name.split(' ')[0] : '—')}
+                      </td>
+                      <td className="py-3 px-4 font-medium text-text-primary">
+                        {d.lastName || (d.name ? d.name.split(' ').slice(1).join(' ') : '—')}
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-600">
                         {d.phone ? (
@@ -2511,7 +2568,7 @@ export default function AnalystPage() {
                         {d.actualAddress || '—'}
                       </td>
                       <td className="py-3 px-4 font-mono font-bold text-rose-600">
-                        {Number(d.amount).toLocaleString('ka-GE')} ₾
+                        {Number(d.currentAmount ?? d.remainingAmount ?? d.amount ?? 0).toLocaleString('ka-GE')} ₾
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-600">
                         {d.debtOriginationDate ? String(d.debtOriginationDate).slice(0, 10) : '—'}
@@ -2522,31 +2579,44 @@ export default function AnalystPage() {
                           {d.creditorName || 'შპს ჯეო ტრეიდინგი'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-600">
-                        {d.agreementNumber || '—'}
-                      </td>
-                      <td className="py-3 px-4 font-mono">
-                        {Number(d.overdueDays) > 0 ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px]">
+                      <td className="py-3 px-4">
+                        {d.claimStatusText === 'გადახდილი' || d.claimStatus === 'SETTLED' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            გადახდილი
+                          </span>
+                        ) : d.claimStatusText === 'დავაშია' || d.claimStatus === 'DISPUTED' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            {d.overdueDays} დღე
+                            დავაშია
+                          </span>
+                        ) : d.claimStatusText === 'ვადაგადაცილებული' || d.claimStatus === 'OVERDUE' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            ვადაგადაცილებული
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-[11px]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            ვადაშია
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            {d.claimStatusText || 'აქტიური'}
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        {d.isRegisteredOnPlatform ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            რეგისტრირებულია
+                      <td className="py-3 px-4 font-mono">
+                        {d.ratingGrade === 'Grade A' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-bold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+                            Grade A
+                          </span>
+                        ) : d.ratingGrade === 'Grade B' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            Grade B
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
-                            არ არის რეგისტრირებული
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 font-bold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            {d.ratingGrade || 'Grade C'}
                           </span>
                         )}
                       </td>
@@ -2566,20 +2636,19 @@ export default function AnalystPage() {
                   <th className="py-3 px-4">ელ-ფოსტა</th>
                   <th className="py-3 px-4">იურიდიული მისამართი</th>
                   <th className="py-3 px-4">ფაქტობრივი მისამართი</th>
-                  <th className="py-3 px-4">საწყისი დავალიანება</th>
+                  <th className="py-3 px-4">მიმდინარე დავალიანება</th>
                   <th className="py-3 px-4">წარმოქმნის თარიღი</th>
                   <th className="py-3 px-4">დირექტორი (სახელი, გვარი, პ/ნ)</th>
                   <th className="py-3 px-4">დირექტორის კონტაქტი</th>
                   <th className="py-3 px-4">კრედიტორი</th>
-                  <th className="py-3 px-4">ხელშეკრულების №</th>
-                  <th className="py-3 px-4">ვადაგადაცილება</th>
                   <th className="py-3 px-4">სტატუსი</th>
+                  <th className="py-3 px-4">რეიტინგი</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                 {filteredDebtors.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="py-12 text-center text-text-muted">
+                    <td colSpan={13} className="py-12 text-center text-text-muted">
                       <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">domain_disabled</span>
                       <span>იურიდიული პირები მითითებული ფილტრებით ვერ მოიძებნა</span>
                       {activeDebtorsFiltersCount > 0 && (
@@ -2642,7 +2711,7 @@ export default function AnalystPage() {
                         {d.actualAddress || '—'}
                       </td>
                       <td className="py-3 px-4 font-mono font-bold text-rose-600">
-                        {Number(d.amount).toLocaleString('ka-GE')} ₾
+                        {Number(d.currentAmount ?? d.remainingAmount ?? d.amount ?? 0).toLocaleString('ka-GE')} ₾
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-600">
                         {d.debtOriginationDate ? String(d.debtOriginationDate).slice(0, 10) : '—'}
@@ -2682,31 +2751,44 @@ export default function AnalystPage() {
                           {d.creditorName || 'სს ლიდერ კრედიტი'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-600">
-                        {d.agreementNumber || '—'}
-                      </td>
-                      <td className="py-3 px-4 font-mono">
-                        {Number(d.overdueDays) > 0 ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[11px]">
+                      <td className="py-3 px-4">
+                        {d.claimStatusText === 'გადახდილი' || d.claimStatus === 'SETTLED' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            გადახდილი
+                          </span>
+                        ) : d.claimStatusText === 'დავაშია' || d.claimStatus === 'DISPUTED' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold">
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            {d.overdueDays} დღე
+                            დავაშია
+                          </span>
+                        ) : d.claimStatusText === 'ვადაგადაცილებული' || d.claimStatus === 'OVERDUE' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            ვადაგადაცილებული
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-semibold text-[11px]">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            ვადაშია
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            {d.claimStatusText || 'აქტიური'}
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        {d.isRegisteredOnPlatform ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            რეგისტრირებულია
+                      <td className="py-3 px-4 font-mono">
+                        {d.ratingGrade === 'Grade A' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-bold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+                            Grade A
+                          </span>
+                        ) : d.ratingGrade === 'Grade B' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            Grade B
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
-                            არ არის რეგისტრირებული
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 font-bold text-[11px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            {d.ratingGrade || 'Grade C'}
                           </span>
                         )}
                       </td>
