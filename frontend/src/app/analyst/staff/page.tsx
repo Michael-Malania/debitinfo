@@ -370,7 +370,7 @@ export default function StaffRegistryPage() {
           <div className="space-y-1 z-10 max-w-2xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-xs font-semibold text-emerald-300 border border-white/10 mb-1">
               <span className="material-symbols-outlined text-sm">badge</span>
-              <span>HR &amp; საოპერაციო პერსონალის მონიტორინგი</span>
+              <span>საოპერაციო პერსონალის მონიტორინგი</span>
             </div>
             <h1 className="text-xl md:text-2xl font-bold tracking-tight">
               თანამშრომელთა რეესტრი, სამუშაო შედეგები &amp; პირდაპირი მონიტორინგი

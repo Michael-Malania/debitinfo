@@ -284,6 +284,184 @@ export default function AnalystPage() {
     }
   };
 
+  // Creditors Registry Switch & Filter States
+  const [creditorsEntityType, setCreditorsEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
+  const [isCreditorsFilterPanelOpen, setIsCreditorsFilterPanelOpen] = useState(false);
+
+  // Legal-specific Creditor Filters
+  const [cfTaxId, setCfTaxId] = useState('');
+  const [cfCompanyName, setCfCompanyName] = useState('');
+  const [cfCategory, setCfCategory] = useState('ALL');
+  const [cfDirectorName, setCfDirectorName] = useState('');
+  const [cfDirectorPhone, setCfDirectorPhone] = useState('');
+  const [cfDirectorEmail, setCfDirectorEmail] = useState('');
+  const [cfDirectorPin, setCfDirectorPin] = useState('');
+  const [cfAgreementNumber, setCfAgreementNumber] = useState('');
+  const [cfMinAmount, setCfMinAmount] = useState('');
+  const [cfMaxAmount, setCfMaxAmount] = useState('');
+  const [cfPlatformStatus, setCfPlatformStatus] = useState<'ALL' | 'REGISTERED' | 'NOT_REGISTERED'>('ALL');
+
+  // Physical-specific Creditor Filters
+  const [cfPersonalId, setCfPersonalId] = useState('');
+  const [cfFirstName, setCfFirstName] = useState('');
+  const [cfLastName, setCfLastName] = useState('');
+  const [cfPhone, setCfPhone] = useState('');
+  const [cfEmail, setCfEmail] = useState('');
+  const [cfActualAddress, setCfActualAddress] = useState('');
+
+  const resetCreditorsFilters = () => {
+    setCreditorsSearch('');
+    setCfTaxId('');
+    setCfCompanyName('');
+    setCfCategory('ALL');
+    setCfDirectorName('');
+    setCfDirectorPhone('');
+    setCfDirectorEmail('');
+    setCfDirectorPin('');
+    setCfAgreementNumber('');
+    setCfMinAmount('');
+    setCfMaxAmount('');
+    setCfPlatformStatus('ALL');
+    setCfPersonalId('');
+    setCfFirstName('');
+    setCfLastName('');
+    setCfPhone('');
+    setCfEmail('');
+    setCfActualAddress('');
+  };
+
+  const activeCreditorsFiltersCount = useMemo(() => {
+    let count = 0;
+    if (creditorsEntityType === 'LEGAL') {
+      if (cfTaxId.trim()) count++;
+      if (cfCompanyName.trim()) count++;
+      if (cfCategory !== 'ALL') count++;
+      if (cfDirectorName.trim()) count++;
+      if (cfDirectorPhone.trim()) count++;
+      if (cfDirectorEmail.trim()) count++;
+      if (cfDirectorPin.trim()) count++;
+      if (cfAgreementNumber.trim()) count++;
+      if (cfMinAmount.trim() || cfMaxAmount.trim()) count++;
+      if (cfPlatformStatus !== 'ALL') count++;
+    } else {
+      if (cfPersonalId.trim()) count++;
+      if (cfFirstName.trim()) count++;
+      if (cfLastName.trim()) count++;
+      if (cfPhone.trim()) count++;
+      if (cfEmail.trim()) count++;
+      if (cfActualAddress.trim()) count++;
+      if (cfAgreementNumber.trim()) count++;
+      if (cfMinAmount.trim() || cfMaxAmount.trim()) count++;
+      if (cfPlatformStatus !== 'ALL') count++;
+    }
+    return count;
+  }, [
+    creditorsEntityType,
+    cfTaxId, cfCompanyName, cfCategory, cfDirectorName, cfDirectorPhone, cfDirectorEmail, cfDirectorPin,
+    cfAgreementNumber, cfMinAmount, cfMaxAmount, cfPlatformStatus,
+    cfPersonalId, cfFirstName, cfLastName, cfPhone, cfEmail, cfActualAddress,
+  ]);
+
+  const legalCreditorsList = useMemo(() => {
+    return excelCreditors.filter((c) => c.entityType === 'LEGAL' || (c.personalId && c.personalId.length === 9));
+  }, [excelCreditors]);
+
+  const physicalCreditorsList = useMemo(() => {
+    return excelCreditors.filter((c) => c.entityType === 'PHYSICAL' && c.personalId && c.personalId.length === 11);
+  }, [excelCreditors]);
+
+  const filteredCreditors = useMemo(() => {
+    const list = creditorsEntityType === 'PHYSICAL' ? physicalCreditorsList : legalCreditorsList;
+    return list.filter((c) => {
+      // Global Search
+      if (creditorsSearch.trim()) {
+        const q = creditorsSearch.toLowerCase();
+        const matchesGlobal =
+          (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.personalId && c.personalId.toLowerCase().includes(q)) ||
+          (c.taxId && c.taxId.toLowerCase().includes(q)) ||
+          (c.phone && c.phone.toLowerCase().includes(q)) ||
+          (c.email && c.email.toLowerCase().includes(q)) ||
+          (c.firstName && c.firstName.toLowerCase().includes(q)) ||
+          (c.lastName && c.lastName.toLowerCase().includes(q)) ||
+          (c.directorFirstName && c.directorFirstName.toLowerCase().includes(q)) ||
+          (c.directorLastName && c.directorLastName.toLowerCase().includes(q)) ||
+          (c.agreementNumber && c.agreementNumber.toLowerCase().includes(q)) ||
+          (c.category && c.category.toLowerCase().includes(q));
+
+        if (!matchesGlobal) return false;
+      }
+
+      if (creditorsEntityType === 'LEGAL') {
+        if (cfTaxId.trim() && !c.personalId?.toLowerCase().includes(cfTaxId.trim().toLowerCase()) && !c.taxId?.toLowerCase().includes(cfTaxId.trim().toLowerCase())) {
+          return false;
+        }
+        if (cfCompanyName.trim() && !c.name?.toLowerCase().includes(cfCompanyName.trim().toLowerCase())) {
+          return false;
+        }
+        if (cfCategory !== 'ALL' && !c.category?.toLowerCase().includes(cfCategory.toLowerCase())) {
+          return false;
+        }
+        if (cfDirectorName.trim()) {
+          const dName = `${c.directorFirstName || ''} ${c.directorLastName || ''}`.toLowerCase();
+          if (!dName.includes(cfDirectorName.trim().toLowerCase())) return false;
+        }
+        if (cfDirectorPhone.trim() && !c.directorPhone?.includes(cfDirectorPhone.trim())) {
+          return false;
+        }
+        if (cfDirectorEmail.trim() && !c.directorEmail?.toLowerCase().includes(cfDirectorEmail.trim().toLowerCase())) {
+          return false;
+        }
+        if (cfDirectorPin.trim() && !c.directorPersonalId?.includes(cfDirectorPin.trim())) {
+          return false;
+        }
+      } else {
+        // Physical Creditor filters
+        if (cfPersonalId.trim() && !c.personalId?.toLowerCase().includes(cfPersonalId.trim().toLowerCase())) {
+          return false;
+        }
+        if (cfFirstName.trim() && !c.firstName?.toLowerCase().includes(cfFirstName.trim().toLowerCase())) {
+          return false;
+        }
+        if (cfLastName.trim() && !c.lastName?.toLowerCase().includes(cfLastName.trim().toLowerCase())) {
+          return false;
+        }
+        if (cfPhone.trim() && !c.phone?.includes(cfPhone.trim())) {
+          return false;
+        }
+        if (cfEmail.trim() && !c.email?.toLowerCase().includes(cfEmail.trim().toLowerCase())) {
+          return false;
+        }
+        if (cfActualAddress.trim() && !c.actualAddress?.toLowerCase().includes(cfActualAddress.trim().toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Shared filters
+      if (cfAgreementNumber.trim() && !c.agreementNumber?.toLowerCase().includes(cfAgreementNumber.trim().toLowerCase())) {
+        return false;
+      }
+
+      const amt = Number(c.amount) || 0;
+      if (cfMinAmount.trim() && amt < Number(cfMinAmount.trim())) return false;
+      if (cfMaxAmount.trim() && amt > Number(cfMaxAmount.trim())) return false;
+
+      if (cfPlatformStatus === 'REGISTERED' && !c.isRegisteredOnPlatform) return false;
+      if (cfPlatformStatus === 'NOT_REGISTERED' && c.isRegisteredOnPlatform) return false;
+
+      return true;
+    });
+  }, [
+    creditorsEntityType, physicalCreditorsList, legalCreditorsList, creditorsSearch,
+    cfTaxId, cfCompanyName, cfCategory, cfDirectorName, cfDirectorPhone, cfDirectorEmail, cfDirectorPin,
+    cfPersonalId, cfFirstName, cfLastName, cfPhone, cfEmail, cfActualAddress,
+    cfAgreementNumber, cfMinAmount, cfMaxAmount, cfPlatformStatus,
+  ]);
+
+  const filteredCreditorsTotalAmount = useMemo(() => {
+    return filteredCreditors.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
+  }, [filteredCreditors]);
+
   // Creditor Registration Modal State
   const [creditorEntityType, setCreditorEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
   const [creditorCategory, setCreditorCategory] = useState('შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)');
@@ -2819,6 +2997,7 @@ export default function AnalystPage() {
         </div>
       )}
       <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm space-y-5">
+        {/* Top Header Summary */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-border-subtle">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center text-white shadow-sm">
@@ -2829,36 +3008,137 @@ export default function AnalystPage() {
                 <h2 className="text-headline-sm font-headline-sm font-bold text-text-primary">
                   კრედიტორთა რეესტრი
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 font-mono text-xs font-bold">
-                  {excelCreditors.length} კრედიტორი
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200 font-mono text-xs font-bold">
+                  {excelCreditors.length} სულ ჩანაწერი
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-xs font-bold">
+                  პორტფელის ჯამი: {filteredCreditorsTotalAmount.toLocaleString('ka-GE')} ₾
                 </span>
               </div>
               <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
-                კრედიტორ კომპანიათა მონაცემთა ბაზა, პორტფელის მოცულობა და დებიტორების მიბმა
+                კრედიტორთა ერთიანი ბაზა იურიდიული და ფიზიკური პირების მიხედვით, პორტფელის მოცულობა და დებიტორების მართვა
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          {/* Quick Counter Summary */}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200 font-semibold">
+              <span className="material-symbols-outlined text-sm">domain</span>
+              <span>იურიდიული: {legalCreditorsList.length}</span>
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-800 border border-sky-200 font-semibold">
+              <span className="material-symbols-outlined text-sm">person</span>
+              <span>ფიზიკური: {physicalCreditorsList.length}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Toolbar: Switch Button on Left & Controls on Right */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200">
+          {/* Switch on the Left */}
+          <div className="inline-flex items-center p-1 bg-white rounded-xl shadow-xs border border-slate-200/80 gap-1 self-start lg:self-auto">
+            <button
+              type="button"
+              onClick={() => setCreditorsEntityType('LEGAL')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                creditorsEntityType === 'LEGAL'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-primary hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">domain</span>
+              <span>იურიდიული პირები</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+                  creditorsEntityType === 'LEGAL'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {legalCreditorsList.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCreditorsEntityType('PHYSICAL')}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                creditorsEntityType === 'PHYSICAL'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-text-muted hover:text-text-primary hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">person</span>
+              <span>ფიზიკური პირები</span>
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+                  creditorsEntityType === 'PHYSICAL'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {physicalCreditorsList.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Right Controls */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-2.5 text-text-muted text-[18px]">
+              <span className="material-symbols-outlined absolute left-3 top-2 text-text-muted text-[18px]">
                 search
               </span>
               <input
                 type="text"
                 value={creditorsSearch}
                 onChange={(e) => setCreditorsSearch(e.target.value)}
-                placeholder="ძიება კომპანიით, ს/კ-ით ან წარმომადგენლით..."
-                className="pl-9 pr-4 py-2 bg-surface-bg border border-border-subtle rounded-lg text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary w-72"
+                placeholder={
+                  creditorsEntityType === 'LEGAL'
+                    ? 'ძიება (კომპანია, ს/კ, დირექტორი, ხელშეკრულება)...'
+                    : 'ძიება (სახელი, გვარი, პ/ნ, ტელეფონი, ხელშეკრულება)...'
+                }
+                className="pl-9 pr-3 py-1.5 bg-white border border-border-subtle rounded-lg text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary w-64 sm:w-80 shadow-2xs"
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsCreditorsFilterPanelOpen(!isCreditorsFilterPanelOpen)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition cursor-pointer shadow-2xs ${
+                isCreditorsFilterPanelOpen || activeCreditorsFiltersCount > 0
+                  ? 'bg-blue-50 border-primary text-primary'
+                  : 'bg-white border-border-subtle text-text-primary hover:bg-slate-50'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">tune</span>
+              <span>ფილტრები</span>
+              {activeCreditorsFiltersCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center">
+                  {activeCreditorsFiltersCount}
+                </span>
+              )}
+            </button>
+
+            {activeCreditorsFiltersCount > 0 && (
+              <button
+                type="button"
+                onClick={resetCreditorsFilters}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 text-xs font-semibold transition cursor-pointer"
+                title="ყველა ფილტრის გასუფთავება"
+              >
+                <span className="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                <span>გასუფთავება</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={loadAnalystData}
               disabled={loadingData}
-              className="px-3.5 py-2 rounded-lg border border-border-subtle bg-surface-bg hover:bg-slate-100 text-body-sm text-text-primary font-medium flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-slate-50 text-xs text-text-primary font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
             >
-              <span className={`material-symbols-outlined text-base ${loadingData ? 'animate-spin' : ''}`}>
+              <span className={`material-symbols-outlined text-[16px] ${loadingData ? 'animate-spin' : ''}`}>
                 refresh
               </span>
               <span>განახლება</span>
@@ -2866,85 +3146,609 @@ export default function AnalystPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-border-subtle shadow-2xs">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider">
-                <th className="py-3 px-4">საიდენტიფიკაციო კოდი (ს/კ)</th>
-                <th className="py-3 px-4">კომპანიის დასახელება</th>
-                <th className="py-3 px-4">საკონტაქტო პირი / დირექტორი</th>
-                <th className="py-3 px-4">პორტფელის მოცულობა (GEL)</th>
-                <th className="py-3 px-4">ხელშეკრულების №</th>
-                <th className="py-3 px-4">დებიტორები</th>
-                <th className="py-3 px-4">პლატფორმაზე სტატუსი</th>
-                <th className="py-3 px-4 text-right">მოქმედება</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-subtle text-body-md font-body-md bg-white">
-              {excelCreditors
-                .filter((c) => {
-                  if (!creditorsSearch.trim()) return true;
-                  const q = creditorsSearch.toLowerCase();
-                  return (
-                    c.name?.toLowerCase().includes(q) ||
-                    c.personalId?.toLowerCase().includes(q) ||
-                    c.companyOrPerson?.toLowerCase().includes(q) ||
-                    c.agreementNumber?.toLowerCase().includes(q)
-                  );
-                })
-                .map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
-                      {c.personalId}
-                    </td>
-                    <td className="py-3 px-4 font-medium text-text-primary">
-                      {c.name}
-                    </td>
-                    <td className="py-3 px-4 text-text-muted text-body-sm">
-                      {c.companyOrPerson || '—'}
-                    </td>
-                    <td className="py-3 px-4 font-mono font-bold text-emerald-700">
-                      {Number(c.amount).toLocaleString('ka-GE')} ₾
-                    </td>
-                    <td className="py-3 px-4 font-mono text-xs text-slate-600">
-                      {c.agreementNumber || 'PORT-01'}
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-xs font-semibold">
-                        <span className="material-symbols-outlined text-[14px]">groups</span>
-                        <span>{c.debtorsCount || 0} დებიტორი</span>
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {c.isRegisteredOnPlatform ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          რეგისტრირებულია
-                        </span>
-                      ) : (
-                        <span className="text-text-muted text-xs">არ არის რეგისტრირებული</span>
+        {/* Comprehensive Expandable Filter Panel */}
+        {isCreditorsFilterPanelOpen && (
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[18px]">filter_list</span>
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  დეტალური ფილტრაცია ({creditorsEntityType === 'LEGAL' ? 'იურიდიული პირის 10 ველი' : 'ფიზიკური პირის 9 ველი'})
+                </span>
+              </div>
+              {activeCreditorsFiltersCount > 0 && (
+                <button
+                  type="button"
+                  onClick={resetCreditorsFilters}
+                  className="text-xs text-rose-600 hover:text-rose-800 font-semibold cursor-pointer flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-[14px]">refresh</span>
+                  ყველას გასუფთავება
+                </button>
+              )}
+            </div>
+
+            {creditorsEntityType === 'LEGAL' ? (
+              /* Legal Entity Filters */
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+                {/* 1. ს/კ */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ს/კ (9-ნიშნა საიდენტ. კოდი):</label>
+                  <input
+                    type="text"
+                    value={cfTaxId}
+                    onChange={(e) => setCfTaxId(e.target.value)}
+                    placeholder="მაგ: 405123456"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 2. კომპანიის დასახელება */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კომპანიის დასახელება:</label>
+                  <input
+                    type="text"
+                    value={cfCompanyName}
+                    onChange={(e) => setCfCompanyName(e.target.value)}
+                    placeholder="მაგ: შპს ჯეო ტრეიდინგი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 3. კატეგორია */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კრედიტორის კატეგორია:</label>
+                  <select
+                    value={cfCategory}
+                    onChange={(e) => setCfCategory(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">ყველა კატეგორია</option>
+                    <option value="შპს">შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)</option>
+                    <option value="სააქციო საზოგადოება">სააქციო საზოგადოება (სს)</option>
+                    <option value="ამხანაგობა">ამხანაგობა</option>
+                    <option value="ა(ა)იპ">ა(ა)იპ</option>
+                    <option value="ინდივიდუალური მეწარმე">ინდივიდუალური მეწარმე</option>
+                  </select>
+                </div>
+
+                {/* 4. ინდივიდუალური მეწარმის პირადი ნომერი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ინდ. მეწარმის პ/ნ (11-ნიშნა):</label>
+                  <input
+                    type="text"
+                    value={cfDirectorPin}
+                    onChange={(e) => setCfDirectorPin(e.target.value)}
+                    placeholder="მაგ: 01019012345"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 5. უფლებამოსილი წარმომადგენელი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">წარმომადგენელი / დირექტორი:</label>
+                  <input
+                    type="text"
+                    value={cfDirectorName}
+                    onChange={(e) => setCfDirectorName(e.target.value)}
+                    placeholder="მაგ: ნიკოლოზ გელოვანი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 6. წარმომადგენლის ტელეფონი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">წარმომადგენლის ტელეფონი:</label>
+                  <input
+                    type="text"
+                    value={cfDirectorPhone}
+                    onChange={(e) => setCfDirectorPhone(e.target.value)}
+                    placeholder="მაგ: +995 599..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 7. წარმომადგენლის ელ-ფოსტა */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">წარმომადგენლის ელ-ფოსტა:</label>
+                  <input
+                    type="text"
+                    value={cfDirectorEmail}
+                    onChange={(e) => setCfDirectorEmail(e.target.value)}
+                    placeholder="მაგ: director@mail.ge"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 8. ხელშეკრულების № */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ხელშეკრულების №:</label>
+                  <input
+                    type="text"
+                    value={cfAgreementNumber}
+                    onChange={(e) => setCfAgreementNumber(e.target.value)}
+                    placeholder="მაგ: PORT-GEO-01"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 9. პორტფელის მოცულობა (Min / Max) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პორტფელის მოცულობა (GEL):</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      value={cfMinAmount}
+                      onChange={(e) => setCfMinAmount(e.target.value)}
+                      placeholder="დან"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                    <span className="text-slate-400">-</span>
+                    <input
+                      type="number"
+                      value={cfMaxAmount}
+                      onChange={(e) => setCfMaxAmount(e.target.value)}
+                      placeholder="მდე"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* 10. პლატფორმაზე სტატუსი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პლატფორმაზე სტატუსი:</label>
+                  <select
+                    value={cfPlatformStatus}
+                    onChange={(e) => setCfPlatformStatus(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">ყველა</option>
+                    <option value="REGISTERED">რეგისტრირებულია</option>
+                    <option value="NOT_REGISTERED">არ არის რეგისტრირებული</option>
+                  </select>
+                </div>
+              </div>
+            ) : (
+              /* Physical Creditor Filters */
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+                {/* 1. პირადი ნომერი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პირადი ნომერი (პ/ნ 11-ნიშნა):</label>
+                  <input
+                    type="text"
+                    value={cfPersonalId}
+                    onChange={(e) => setCfPersonalId(e.target.value)}
+                    placeholder="მაგ: 01019099887"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 2. სახელი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">სახელი:</label>
+                  <input
+                    type="text"
+                    value={cfFirstName}
+                    onChange={(e) => setCfFirstName(e.target.value)}
+                    placeholder="მაგ: გიორგი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 3. გვარი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">გვარი:</label>
+                  <input
+                    type="text"
+                    value={cfLastName}
+                    onChange={(e) => setCfLastName(e.target.value)}
+                    placeholder="მაგ: ბერიძე"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 4. ტელეფონი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ტელეფონის ნომერი:</label>
+                  <input
+                    type="text"
+                    value={cfPhone}
+                    onChange={(e) => setCfPhone(e.target.value)}
+                    placeholder="მაგ: +995 599..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 5. ელ-ფოსტა */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ელ-ფოსტა:</label>
+                  <input
+                    type="text"
+                    value={cfEmail}
+                    onChange={(e) => setCfEmail(e.target.value)}
+                    placeholder="მაგ: giorgi@..."
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 6. ფაქტობრივი მისამართი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ფაქტობრივი მისამართი:</label>
+                  <input
+                    type="text"
+                    value={cfActualAddress}
+                    onChange={(e) => setCfActualAddress(e.target.value)}
+                    placeholder="მაგ: ქ. თბილისი, პეკინის გამზ. 15"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* 7. ხელშეკრულების № */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ხელშეკრულების №:</label>
+                  <input
+                    type="text"
+                    value={cfAgreementNumber}
+                    onChange={(e) => setCfAgreementNumber(e.target.value)}
+                    placeholder="მაგ: AGR-PHYS-2024"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+
+                {/* 8. პორტფელის მოცულობა (Min / Max) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პორტფელის მოცულობა (GEL):</label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      value={cfMinAmount}
+                      onChange={(e) => setCfMinAmount(e.target.value)}
+                      placeholder="დან"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                    <span className="text-slate-400">-</span>
+                    <input
+                      type="number"
+                      value={cfMaxAmount}
+                      onChange={(e) => setCfMaxAmount(e.target.value)}
+                      placeholder="მდე"
+                      className="w-1/2 px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* 9. პლატფორმაზე სტატუსი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პლატფორმაზე სტატუსი:</label>
+                  <select
+                    value={cfPlatformStatus}
+                    onChange={(e) => setCfPlatformStatus(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">ყველა</option>
+                    <option value="REGISTERED">რეგისტრირებულია</option>
+                    <option value="NOT_REGISTERED">არ არის რეგისტრირებული</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Filter Summary & Result Count Row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted px-1">
+          <div className="flex items-center gap-2">
+            <span>
+              ნაჩვენებია <strong className="text-text-primary font-bold">{filteredCreditors.length}</strong> ჩანაწერი{' '}
+              {creditorsEntityType === 'LEGAL' ? legalCreditorsList.length : physicalCreditorsList.length}-დან
+            </span>
+            {activeCreditorsFiltersCount > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-[11px] font-semibold">
+                ფილტრი გააქტიურებულია ({activeCreditorsFiltersCount})
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span>ნაჩვენები პორტფელის ჯამი:</span>
+            <span className="font-mono font-bold text-emerald-700 text-sm">
+              {filteredCreditorsTotalAmount.toLocaleString('ka-GE')} ₾
+            </span>
+          </div>
+        </div>
+
+        {/* Table: Conditional rendering for Legal vs Physical Creditors */}
+        <div className="overflow-x-auto rounded-xl border border-border-subtle shadow-2xs">
+          {creditorsEntityType === 'LEGAL' ? (
+            /* Legal Creditors Table */
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-4">ს/კ (9-ნიშნა)</th>
+                  <th className="py-3 px-4">კომპანიის დასახელება</th>
+                  <th className="py-3 px-4">კატეგორია</th>
+                  <th className="py-3 px-4">ინდ. მეწარმის პ/ნ</th>
+                  <th className="py-3 px-4">უფლებამოსილი წარმომადგენელი (დირექტორი)</th>
+                  <th className="py-3 px-4">წარმომადგენლის კონტაქტი</th>
+                  <th className="py-3 px-4">ხელშეკრულების №</th>
+                  <th className="py-3 px-4">პორტფელის მოცულობა (GEL)</th>
+                  <th className="py-3 px-4">დებიტორები</th>
+                  <th className="py-3 px-4">დოკუმენტები</th>
+                  <th className="py-3 px-4">სტატუსი</th>
+                  <th className="py-3 px-4 text-right">მოქმედება</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
+                {filteredCreditors.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="py-12 text-center text-text-muted">
+                      <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">domain_disabled</span>
+                      <span>იურიდიული პირი კრედიტორები მითითებული ფილტრებით ვერ მოიძებნა</span>
+                      {activeCreditorsFiltersCount > 0 && (
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={resetCreditorsFilters}
+                            className="px-3 py-1.5 rounded-lg border border-primary text-primary hover:bg-blue-50 text-xs font-semibold cursor-pointer"
+                          >
+                            ფილტრების გასუფთავება
+                          </button>
+                        </div>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTargetCreditorForDebtor(c);
-                            setAddDebtorModalOpen(true);
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-primary border border-blue-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-                          title="დებიტორის დამატება ამ კრედიტორისთვის"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">person_add</span>
-                          <span>+ დებიტორის მიბმა</span>
-                        </button>
-                      </div>
+                  </tr>
+                ) : (
+                  filteredCreditors.map((c) => {
+                    const repName = `${c.directorFirstName || ''} ${c.directorLastName || ''}`.trim() || c.companyOrPerson || '—';
+                    const docsCount = Array.isArray(c.supportingDocuments) ? c.supportingDocuments.length : 0;
+                    return (
+                      <tr key={c.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                        <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
+                          <div className="flex items-center gap-1.5">
+                            <span>{c.taxId || c.personalId}</span>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(c.taxId || c.personalId)}
+                              title="დაკოპირება"
+                              className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-text-primary">
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 text-primary flex items-center justify-center font-bold text-xs">
+                              <span className="material-symbols-outlined text-[16px]">domain</span>
+                            </span>
+                            <span>{c.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-slate-700">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-800 text-[11px] font-medium">
+                            {c.category || 'შპს'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {c.directorPersonalId ? (
+                            <span className="inline-flex items-center gap-1 font-semibold text-indigo-700">
+                              {c.directorPersonalId}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="py-3 px-4 font-medium text-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-[16px] text-slate-400">badge</span>
+                            <span>{repName}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600 text-[11px]">
+                          {c.directorPhone && (
+                            <div className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px] text-slate-400">call</span>
+                              <a href={`tel:${c.directorPhone}`} className="hover:text-primary transition">{c.directorPhone}</a>
+                            </div>
+                          )}
+                          {c.directorEmail && (
+                            <div className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[12px] text-slate-400">mail</span>
+                              <a href={`mailto:${c.directorEmail}`} className="hover:text-primary transition">{c.directorEmail}</a>
+                            </div>
+                          )}
+                          {!c.directorPhone && !c.directorEmail && '—'}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {c.agreementNumber || '—'}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-emerald-700">
+                          {Number(c.amount).toLocaleString('ka-GE')} ₾
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-[11px] font-semibold">
+                            <span className="material-symbols-outlined text-[14px]">groups</span>
+                            <span>{c.debtorsCount || 0} დებიტორი</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {docsCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-medium">
+                              <span className="material-symbols-outlined text-[13px]">description</span>
+                              <span>{docsCount} ფაილი</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {c.isRegisteredOnPlatform ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              რეგისტრირებულია
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                              არ არის რეგისტრირებული
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetCreditorForDebtor(c);
+                              setAddDebtorModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-primary border border-blue-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer ml-auto"
+                            title="დებიტორის დამატება ამ კრედიტორისთვის"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">person_add</span>
+                            <span>+ დებიტორის მიბმა</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          ) : (
+            /* Physical Creditors Table */
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-4">პირადი ნომერი (პ/ნ 11-ნიშნა)</th>
+                  <th className="py-3 px-4">სახელი</th>
+                  <th className="py-3 px-4">გვარი</th>
+                  <th className="py-3 px-4">ტელეფონის ნომერი</th>
+                  <th className="py-3 px-4">ელ-ფოსტა</th>
+                  <th className="py-3 px-4">ფაქტობრივი მისამართი</th>
+                  <th className="py-3 px-4">ხელშეკრულების №</th>
+                  <th className="py-3 px-4">პორტფელის მოცულობა (GEL)</th>
+                  <th className="py-3 px-4">დებიტორები</th>
+                  <th className="py-3 px-4">დოკუმენტები</th>
+                  <th className="py-3 px-4">სტატუსი</th>
+                  <th className="py-3 px-4 text-right">მოქმედება</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
+                {filteredCreditors.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="py-12 text-center text-text-muted">
+                      <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">person_off</span>
+                      <span>ფიზიკური პირი კრედიტორები მითითებული ფილტრებით ვერ მოიძებნა</span>
+                      {activeCreditorsFiltersCount > 0 && (
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={resetCreditorsFilters}
+                            className="px-3 py-1.5 rounded-lg border border-primary text-primary hover:bg-blue-50 text-xs font-semibold cursor-pointer"
+                          >
+                            ფილტრების გასუფთავება
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
-                ))}
-            </tbody>
-          </table>
+                ) : (
+                  filteredCreditors.map((c) => {
+                    const fName = c.firstName || (c.name ? c.name.split(' ')[0] : '—');
+                    const lName = c.lastName || (c.name ? c.name.split(' ').slice(1).join(' ') : '—');
+                    const docsCount = Array.isArray(c.supportingDocuments) ? c.supportingDocuments.length : 0;
+                    return (
+                      <tr key={c.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                        <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
+                          <div className="flex items-center gap-1.5">
+                            <span>{c.personalId}</span>
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(c.personalId)}
+                              title="დაკოპირება"
+                              className="text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-medium text-text-primary">
+                          {fName}
+                        </td>
+                        <td className="py-3 px-4 font-medium text-text-primary">
+                          {lName}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {c.phone ? (
+                            <a href={`tel:${c.phone}`} className="hover:text-primary transition flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[14px] text-slate-400">call</span>
+                              {c.phone}
+                            </a>
+                          ) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600">
+                          {c.email ? (
+                            <a href={`mailto:${c.email}`} className="hover:text-primary transition flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[14px] text-slate-400">mail</span>
+                              {c.email}
+                            </a>
+                          ) : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-slate-600 max-w-xs truncate" title={c.actualAddress || ''}>
+                          {c.actualAddress || '—'}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {c.agreementNumber || '—'}
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-emerald-700">
+                          {Number(c.amount).toLocaleString('ka-GE')} ₾
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-[11px] font-semibold">
+                            <span className="material-symbols-outlined text-[14px]">groups</span>
+                            <span>{c.debtorsCount || 0} დებიტორი</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {docsCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-medium">
+                              <span className="material-symbols-outlined text-[13px]">description</span>
+                              <span>{docsCount} ფაილი</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {c.isRegisteredOnPlatform ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              რეგისტრირებულია
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                              არ არის რეგისტრირებული
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetCreditorForDebtor(c);
+                              setAddDebtorModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-primary border border-blue-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer ml-auto"
+                            title="დებიტორის დამატება ამ კრედიტორისთვის"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">person_add</span>
+                            <span>+ დებიტორის მიბმა</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 
@@ -3026,7 +3830,7 @@ export default function AnalystPage() {
               }`}
             >
               <span className="material-symbols-outlined text-[18px]">domain</span>
-              <span>🏢 იურიდიული პირი</span>
+              <span>იურიდიული პირი</span>
             </button>
             <button
               type="button"
@@ -3038,7 +3842,7 @@ export default function AnalystPage() {
               }`}
             >
               <span className="material-symbols-outlined text-[18px]">person</span>
-              <span>👤 ფიზიკური პირი</span>
+              <span>ფიზიკური პირი</span>
             </button>
           </div>
 
@@ -3594,10 +4398,6 @@ export default function AnalystPage() {
               <span className="font-semibold text-text-primary text-xs uppercase tracking-wider flex items-center gap-1.5">
                 <span className="material-symbols-outlined text-base text-primary">attach_file</span>
                 დავალიანების დამადასტურებელი დოკუმენტები (სავალდებულო):
-              </span>
-              <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 font-semibold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span>RS.GE / საბუღალტრო დასტური</span>
               </span>
             </div>
             <p className="text-xs text-text-muted">

@@ -323,7 +323,15 @@ export class AnalystService {
     const taxIds = creditors.map((c) => c.personalId);
     const matchedUsers = await this.prisma.user.findMany({
       where: { personalId: { in: taxIds } },
-      select: { id: true, personalId: true, email: true, role: true },
+      select: {
+        id: true,
+        personalId: true,
+        email: true,
+        phone: true,
+        role: true,
+        companyProfile: true,
+        individualProfile: true,
+      },
     });
 
     const userMap = new Map(matchedUsers.map((u) => [u.personalId, u]));
@@ -337,8 +345,82 @@ export class AnalystService {
             creditorName: c.name,
           },
         });
+
+        // Accurately determine entityType
+        const isPhysical = c.entityType === 'PHYSICAL' && c.personalId?.length === 11;
+        const entityType: 'LEGAL' | 'PHYSICAL' = isPhysical ? 'PHYSICAL' : 'LEGAL';
+
+        // Legal entity enriched fields
+        const category =
+          matched?.companyProfile?.legalForm ||
+          (c.name.includes('შპს')
+            ? 'შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)'
+            : c.name.includes('სს')
+            ? 'სააქციო საზოგადოება'
+            : c.name.includes('იმ ') || c.name.includes('ინდ')
+            ? 'ინდივიდუალური მეწარმე'
+            : c.name.includes('ა(ა)იპ')
+            ? 'ა(ა)იპ'
+            : isPhysical
+            ? 'ფიზიკური პირი'
+            : 'შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)');
+
+        const directorFirstName =
+          c.directorFirstName ||
+          matched?.companyProfile?.directorName ||
+          (c.companyOrPerson ? c.companyOrPerson.split(' ')[0] : '');
+        const directorLastName =
+          c.directorLastName ||
+          matched?.companyProfile?.directorLastName ||
+          (c.companyOrPerson ? c.companyOrPerson.split(' ')[1] : '');
+        const directorPhone =
+          c.directorPhone ||
+          matched?.companyProfile?.directorPhone ||
+          c.phone ||
+          '';
+        const directorEmail =
+          c.directorEmail ||
+          matched?.companyProfile?.directorEmail ||
+          c.email ||
+          '';
+        const directorPersonalId =
+          c.directorPersonalId ||
+          matched?.companyProfile?.directorPin ||
+          '';
+
+        // Physical entity enriched fields
+        const firstName =
+          c.firstName ||
+          matched?.individualProfile?.firstName ||
+          (c.name ? c.name.trim().split(/\s+/)[0] : '');
+        const lastName =
+          c.lastName ||
+          matched?.individualProfile?.lastName ||
+          (c.name ? c.name.trim().split(/\s+/).slice(1).join(' ') : '');
+        const actualAddress =
+          c.actualAddress ||
+          matched?.individualProfile?.actualAddress ||
+          matched?.companyProfile?.actualAddress ||
+          '—';
+        const legalAddress =
+          c.legalAddress ||
+          matched?.companyProfile?.legalAddress ||
+          actualAddress;
+
         return {
           ...c,
+          entityType,
+          taxId: c.taxId || c.personalId,
+          category,
+          firstName,
+          lastName,
+          actualAddress,
+          legalAddress,
+          directorFirstName,
+          directorLastName,
+          directorPhone,
+          directorEmail,
+          directorPersonalId,
           matchedUser: matched || null,
           isRegisteredOnPlatform: !!matched,
           debtorsCount,
