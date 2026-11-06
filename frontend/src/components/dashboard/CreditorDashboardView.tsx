@@ -59,33 +59,77 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
     lastName: '',
   });
   const [importSuccessMessage, setImportSuccessMessage] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'OVERDUE' | 'CURRENT' | 'CLOSED'>('ALL');
+  const [selectedDebtor, setSelectedDebtor] = useState<any>(null);
 
-  // Selected debtor for right sidebar details & payment history inspection
-  const defaultSelectedDebtor = {
-    id: 'default-giorgi',
-    name: 'გიორგი გიორგაძე',
-    personalId: '01019012345',
-    entityType: 'PHYSICAL',
-    phone: '+995 599 12 34 56',
-    email: 'giorgi.g@gmail.com',
-    actualAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
-    legalAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
-    amount: 5000,
-    remainingAmount: 2200,
-    paidAmount: 2800,
-    rating: 'Grade B (ზომიერი რისკი)',
-    overdueDays: 45,
-    dueDate: '14 იან, 2025',
-    status: 'RESTRUCTURED',
-    agreementNumber: 'AGR-77142',
+  const normalizeClaimToRow = (c: any) => {
+    const init = Number(c.initialAmount || 0);
+    const rem = Number(c.remainingAmount ?? init);
+    const paid = Math.max(0, init - rem);
+    const debtorUser = c.debtor || {};
+    const isLegal =
+      debtorUser.entityType === 'LEGAL' ||
+      Boolean(debtorUser.companyProfile?.companyName) ||
+      (debtorUser.personalId && String(debtorUser.personalId).length === 9);
+    const fullName =
+      debtorUser.companyProfile?.companyName ||
+      `${debtorUser.individualProfile?.firstName || ''} ${debtorUser.individualProfile?.lastName || ''}`.trim() ||
+      debtorUser.email ||
+      'დებიტორი';
+    const gradeCode = c.rating || 'B';
+    const gradeLabel =
+      gradeCode === 'A'
+        ? 'Grade A (საიმედო)'
+        : gradeCode === 'C'
+        ? 'Grade C (მაღალი რისკი)'
+        : 'Grade B (ზომიერი რისკი)';
+
+    return {
+      id: c.id,
+      claimId: c.id,
+      name: fullName,
+      personalId: debtorUser.personalId || debtorUser.companyProfile?.taxId || '—',
+      taxId: isLegal ? (debtorUser.companyProfile?.taxId || debtorUser.personalId) : undefined,
+      entityType: isLegal ? 'LEGAL' : 'PHYSICAL',
+      phone: debtorUser.phone || '—',
+      email: debtorUser.email || '—',
+      legalAddress:
+        debtorUser.companyProfile?.legalAddress ||
+        debtorUser.individualProfile?.address ||
+        'ქ. თბილისი',
+      actualAddress:
+        debtorUser.companyProfile?.actualAddress ||
+        debtorUser.companyProfile?.legalAddress ||
+        debtorUser.individualProfile?.address ||
+        'ქ. თბილისი',
+      amount: init,
+      remainingAmount: rem,
+      paidAmount: paid,
+      rating: gradeLabel,
+      gradeCode,
+      overdueDays: Number(c.daysOverdue || 0),
+      debtOriginationDate: c.debtOriginationDate,
+      dueDate: c.dueDate
+        ? new Date(c.dueDate).toLocaleDateString('ka-GE')
+        : c.debtOriginationDate
+        ? new Date(c.debtOriginationDate).toLocaleDateString('ka-GE')
+        : '—',
+      agreementNumber: c.agreementNumber || '—',
+      status: c.status || 'ACTIVE',
+    };
   };
-
-  const [selectedDebtor, setSelectedDebtor] = useState<any>(defaultSelectedDebtor);
 
   const handleSelectDebtor = (debtor: any) => {
     const init = Number(debtor.amount || debtor.initialAmount || 0);
-    const rem = debtor.remainingAmount !== undefined ? Number(debtor.remainingAmount) : (debtor.paidAmount !== undefined ? Math.max(0, init - Number(debtor.paidAmount)) : init);
-    const paid = debtor.paidAmount !== undefined ? Number(debtor.paidAmount) : Math.max(0, init - rem);
+    const rem =
+      debtor.remainingAmount !== undefined
+        ? Number(debtor.remainingAmount)
+        : debtor.paidAmount !== undefined
+        ? Math.max(0, init - Number(debtor.paidAmount))
+        : init;
+    const paid =
+      debtor.paidAmount !== undefined ? Number(debtor.paidAmount) : Math.max(0, init - rem);
 
     setSelectedDebtor({
       id: debtor.id || debtor.personalId || String(Math.random()),
@@ -93,7 +137,7 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
       personalId: debtor.personalId || debtor.taxId || '—',
       taxId: debtor.taxId,
       entityType: debtor.entityType || (debtor.taxId ? 'LEGAL' : 'PHYSICAL'),
-      phone: debtor.phone || '+995 599 00 00 00',
+      phone: debtor.phone || '—',
       email: debtor.email || '—',
       legalAddress: debtor.legalAddress || 'ქ. თბილისი',
       actualAddress: debtor.actualAddress || debtor.legalAddress || 'ქ. თბილისი',
@@ -101,10 +145,14 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
       remainingAmount: rem,
       paidAmount: paid,
       rating: debtor.rating || 'Grade B (ზომიერი რისკი)',
-      overdueDays: debtor.overdueDays || 30,
+      overdueDays: Number(debtor.overdueDays ?? 0),
       debtOriginationDate: debtor.debtOriginationDate,
-      dueDate: debtor.dueDate || (debtor.debtOriginationDate ? new Date(debtor.debtOriginationDate).toLocaleDateString('ka-GE') : '14 იან, 2025'),
-      agreementNumber: debtor.agreementNumber || 'AGR-GENERAL',
+      dueDate:
+        debtor.dueDate ||
+        (debtor.debtOriginationDate
+          ? new Date(debtor.debtOriginationDate).toLocaleDateString('ka-GE')
+          : '—'),
+      agreementNumber: debtor.agreementNumber || '—',
       directorFirstName: debtor.directorFirstName,
       directorLastName: debtor.directorLastName,
       directorPhone: debtor.directorPhone,
@@ -119,6 +167,9 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         const data = await creditorBackendService.getMyClaims();
         if (isMounted && data) {
           setClaimsData(data);
+          if (data.claims && data.claims.length > 0) {
+            setSelectedDebtor((prev: any) => prev || normalizeClaimToRow(data.claims[0]));
+          }
         }
       } catch (e) {
         console.warn('Could not fetch creditor claims:', e);
@@ -144,6 +195,9 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         const up = await creditorBackendService.getUploadedDebtors();
         if (isMounted && up) {
           setUploadedDebtors(up);
+          if (up.length > 0) {
+            setSelectedDebtor((prev: any) => prev || up[0]);
+          }
         }
       } catch (err) {
         console.warn('Could not load uploaded debtors:', err);
@@ -299,8 +353,36 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         selectedReceiptForConfirm.id,
         confirmFile ? `/receipts/${confirmFile}` : undefined,
       );
-      setReceipts(prev => prev.map(r => r.id === updated.id ? updated : r));
-      setPendingReceipts(prev => prev.filter(r => r.id !== updated.id));
+      setReceipts((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setPendingReceipts((prev) => prev.filter((r) => r.id !== updated.id));
+
+      // Re-fetch claims and uploaded debtors so KPIs, row balances, and inspector drawer reflect the confirmed payment
+      try {
+        const [freshClaims, freshUploaded] = await Promise.all([
+          creditorBackendService.getMyClaims(),
+          creditorBackendService.getUploadedDebtors(),
+        ]);
+        if (freshClaims) {
+          setClaimsData(freshClaims);
+          if (selectedDebtor && Array.isArray(freshClaims.claims)) {
+            const matchingClaim = freshClaims.claims.find(
+              (c: any) =>
+                c.id === selectedDebtor.id ||
+                c.id === selectedDebtor.claimId ||
+                c.debtor?.personalId === selectedDebtor.personalId,
+            );
+            if (matchingClaim) {
+              setSelectedDebtor(normalizeClaimToRow(matchingClaim));
+            }
+          }
+        }
+        if (freshUploaded) {
+          setUploadedDebtors(freshUploaded);
+        }
+      } catch (refreshErr) {
+        console.warn('Could not refresh creditor claims after confirmation:', refreshErr);
+      }
+
       setConfirmSuccess(true);
       setTimeout(() => {
         setConfirmSuccess(false);
@@ -417,12 +499,65 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
   const taxId = user?.personalId || user?.companyProfile?.taxId || '405123456';
 
   const kpis = claimsData?.kpis || {
-    totalPrincipal: 1540,
-    totalRecovered: 650,
-    recoveryRate: 42.2,
-    activeClaimsCount: 1,
-    activeDebtorsCount: 1,
+    totalPrincipal: 0,
+    totalRecovered: 0,
+    recoveryRate: 0,
+    activeClaimsCount: 0,
+    activeDebtorsCount: 0,
   };
+
+  const claimsRows: any[] = (claimsData?.claims || []).map(normalizeClaimToRow);
+  const allRowsCombined = [...uploadedDebtors, ...claimsRows];
+  const totalRowsCount = allRowsCombined.length;
+
+  const activeClaimsStatCount = claimsRows.filter(
+    (c) => c.status !== 'SETTLED' && c.status !== 'WRITTEN_OFF',
+  ).length;
+  const litigationStatCount = claimsRows.filter((c) => c.status === 'IN_LITIGATION').length;
+  const closedStatCount = claimsRows.filter(
+    (c) => c.status === 'SETTLED' || c.status === 'WRITTEN_OFF' || Number(c.remainingAmount) === 0,
+  ).length;
+  const overdueStatCount = allRowsCombined.filter(
+    (r) =>
+      Number(r.overdueDays || 0) > 0 &&
+      r.status !== 'SETTLED' &&
+      r.status !== 'WRITTEN_OFF' &&
+      Number(r.remainingAmount ?? r.amount ?? 0) > 0,
+  ).length;
+  const currentStatCount = allRowsCombined.filter(
+    (r) =>
+      r.status !== 'SETTLED' &&
+      r.status !== 'WRITTEN_OFF' &&
+      Number(r.remainingAmount ?? r.amount ?? 0) > 0,
+  ).length;
+
+  const matchesSearch = (item: any) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      String(item.name || '').toLowerCase().includes(q) ||
+      String(item.personalId || '').toLowerCase().includes(q) ||
+      String(item.taxId || '').toLowerCase().includes(q) ||
+      String(item.agreementNumber || '').toLowerCase().includes(q)
+    );
+  };
+
+  const matchesStatusTab = (item: any) => {
+    const rem = Number(item.remainingAmount ?? item.amount ?? 0);
+    const isClosed = item.status === 'SETTLED' || item.status === 'WRITTEN_OFF' || rem === 0;
+    if (statusFilter === 'CLOSED') return isClosed;
+    if (statusFilter === 'OVERDUE') return !isClosed && Number(item.overdueDays || 0) > 0;
+    if (statusFilter === 'CURRENT') return !isClosed;
+    return true;
+  };
+
+  const filteredUploadedDebtors = uploadedDebtors.filter(
+    (ud) => matchesSearch(ud) && matchesStatusTab(ud),
+  );
+  const filteredClaimsRows = claimsRows.filter(
+    (cr) => matchesSearch(cr) && matchesStatusTab(cr),
+  );
+  const filteredTotalCount = filteredUploadedDebtors.length + filteredClaimsRows.length;
 
   return (
     <div className="bg-surface-bg text-text-primary antialiased font-body-md text-body-md min-h-screen flex flex-col" suppressHydrationWarning>
@@ -640,11 +775,11 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
         </div>
         <div className="mt-3">
           <div className="text-headline-lg font-headline-lg font-bold text-text-primary font-data-mono-lg tracking-tight">
-            18 <span className="text-sm font-normal text-text-muted">აქტიური</span>
+            {activeClaimsStatCount} <span className="text-sm font-normal text-text-muted">აქტიური</span>
           </div>
           <div className="flex items-center gap-2 mt-2 text-body-sm font-medium">
-            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded text-xs border border-rose-200">4 სამართლებრივი</span>
-            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs border border-emerald-200">2 დახურული</span>
+            <span className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded text-xs border border-rose-200">{litigationStatCount} სამართლებრივი</span>
+            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs border border-emerald-200">{closedStatCount} დახურული</span>
           </div>
         </div>
       </div>
@@ -658,29 +793,67 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
           <div>
             <h2 className="text-headline-sm font-headline-sm font-bold text-text-primary flex items-center gap-2">
               დებიტორთა (მოვალეთა) სრული რეესტრი
-              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold font-data-mono-md">24</span>
+              <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold font-data-mono-md">{totalRowsCount}</span>
             </h2>
             <p className="text-body-sm text-text-muted mt-0.5">მონაცემები ავტომატურად განახლებულია სამოქალაქო რეესტრიდან</p>
           </div>
           {/* Quick Search Filter Inside Table */}
           <div className="relative w-full sm:w-56">
             <span className="material-symbols-outlined absolute left-2.5 top-2 text-text-muted text-[18px]" data-icon="filter_list">filter_list</span>
-            <input className="w-full pl-8 pr-3 py-1.5 bg-surface-bg border border-border-subtle rounded-lg text-body-sm font-body-sm text-text-primary focus:outline-none focus:border-secondary-container" placeholder="ფილტრი სახელით..." type="text" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-surface-bg border border-border-subtle rounded-lg text-body-sm font-body-sm text-text-primary focus:outline-none focus:border-secondary-container"
+              placeholder="ფილტრი სახელით / პ/ნ..."
+              type="text"
+            />
           </div>
         </div>
         {/* Filter Tabs */}
         <div className="px-5 pt-3 border-b border-border-subtle flex items-center space-x-2 overflow-x-auto">
-          <button className="px-3 py-2 text-body-sm font-semibold text-primary border-b-2 border-primary whitespace-nowrap">
-            ყველა დებიტორი (24)
+          <button
+            type="button"
+            onClick={() => setStatusFilter('ALL')}
+            className={`px-3 py-2 text-body-sm whitespace-nowrap cursor-pointer ${
+              statusFilter === 'ALL'
+                ? 'font-semibold text-primary border-b-2 border-primary'
+                : 'text-text-muted hover:text-text-primary'
+            }`}
+          >
+            ყველა დებიტორი ({totalRowsCount})
           </button>
-          <button className="px-3 py-2 text-body-sm text-text-muted hover:text-text-primary whitespace-nowrap">
-            ვადაგადაცილებული (9)
+          <button
+            type="button"
+            onClick={() => setStatusFilter('OVERDUE')}
+            className={`px-3 py-2 text-body-sm whitespace-nowrap cursor-pointer ${
+              statusFilter === 'OVERDUE'
+                ? 'font-semibold text-primary border-b-2 border-primary'
+                : 'text-text-muted hover:text-text-primary'
+            }`}
+          >
+            ვადაგადაცილებული ({overdueStatCount})
           </button>
-          <button className="px-3 py-2 text-body-sm text-text-muted hover:text-text-primary whitespace-nowrap">
-            მიმდინარე (13)
+          <button
+            type="button"
+            onClick={() => setStatusFilter('CURRENT')}
+            className={`px-3 py-2 text-body-sm whitespace-nowrap cursor-pointer ${
+              statusFilter === 'CURRENT'
+                ? 'font-semibold text-primary border-b-2 border-primary'
+                : 'text-text-muted hover:text-text-primary'
+            }`}
+          >
+            მიმდინარე ({currentStatCount})
           </button>
-          <button className="px-3 py-2 text-body-sm text-text-muted hover:text-text-primary whitespace-nowrap">
-            დახურული (2)
+          <button
+            type="button"
+            onClick={() => setStatusFilter('CLOSED')}
+            className={`px-3 py-2 text-body-sm whitespace-nowrap cursor-pointer ${
+              statusFilter === 'CLOSED'
+                ? 'font-semibold text-primary border-b-2 border-primary'
+                : 'text-text-muted hover:text-text-primary'
+            }`}
+          >
+            დახურული ({closedStatCount})
           </button>
         </div>
         {/* Master Data Table Container */}
@@ -697,8 +870,8 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle text-body-sm">
-              {/* Uploaded / Imported Debtors by Creditor */}
-              {uploadedDebtors.map((ud: any) => {
+              {/* Unverified Uploaded / Imported Debtors by Creditor */}
+              {filteredUploadedDebtors.map((ud: any) => {
                 const isSelected = selectedDebtor?.personalId === ud.personalId || selectedDebtor?.id === ud.id;
                 const isLegal = ud.entityType === 'LEGAL' || (ud.taxId && ud.taxId.length === 9);
                 return (
@@ -735,7 +908,7 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
                         {ud.debtOriginationDate && (
                           <span>• წარმოქმნის თარიღი: {String(ud.debtOriginationDate).split('T')[0]}</span>
                         )}
-                        <span>• {ud.agreementNumber || 'AGR-88451'}</span>
+                        <span>• {ud.agreementNumber || '—'}</span>
                       </div>
                       {isLegal && (ud.directorFirstName || ud.directorLastName) && (
                         <div className="text-[11px] text-slate-600 mt-0.5 flex items-center gap-1">
@@ -782,489 +955,119 @@ export default function CreditorDashboardView({ user }: CreditorDashboardViewPro
                 );
               })}
 
-              {/* Sample Debtor: ლევან მაისურაძე (if not present in uploadedDebtors) */}
-              {!uploadedDebtors.some((d) => d.personalId === '01015099882' || d.name?.includes('მაისურაძე')) && (
-                (() => {
-                  const levanItem = {
-                    id: 'levan-maisuradze-sample',
-                    name: 'ლევან მაისურაძე',
-                    personalId: '01015099882',
-                    agreementNumber: 'AGR-88451',
-                    amount: 4500,
-                    remainingAmount: 4500,
-                    paidAmount: 0,
-                    rating: 'Grade B (ზომიერი რისკი)',
-                    overdueDays: 90,
-                    phone: '+995 591 22 33 44',
-                    email: 'levan.m@gmail.com',
-                    actualAddress: 'ქ. თბილისი, პეკინის გამზ. #14',
-                    legalAddress: 'ქ. თბილისი, პეკინის გამზ. #14',
-                    status: 'დასადასტურებელი',
-                    entityType: 'PHYSICAL',
-                  };
-                  const isSelected = selectedDebtor?.personalId === levanItem.personalId;
-                  return (
-                    <tr
-                      key="sample-levan"
-                      onClick={() => handleSelectDebtor(levanItem)}
-                      className={`transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
-                          : 'bg-amber-50/15 hover:bg-amber-50/35 border-l-4 border-l-amber-400'
-                      }`}
-                    >
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-text-primary flex items-center gap-2">
-                          <span>{levanItem.name}</span>
+              {/* Verified DebtClaims from PostgreSQL */}
+              {filteredClaimsRows.map((cr: any) => {
+                const isSelected = selectedDebtor?.id === cr.id || selectedDebtor?.personalId === cr.personalId;
+                const isLegal = cr.entityType === 'LEGAL';
+                const statusBadge = getClaimStatusBadge(cr.status, claimsData?.statusConfigs);
+                const gradeBadgeClass =
+                  cr.gradeCode === 'A'
+                    ? 'bg-accent-mint/20 text-emerald-800 border-accent-mint/40'
+                    : cr.gradeCode === 'C'
+                    ? 'bg-rose-500/15 text-rose-700 border-rose-500/30'
+                    : 'bg-amber-500/15 text-amber-700 border-amber-500/30';
+
+                return (
+                  <tr
+                    key={cr.id}
+                    onClick={() => handleSelectDebtor(cr)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
+                        : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4">
+                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
+                        <span>{cr.name}</span>
+                        {isLegal ? (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                            <span className="material-symbols-outlined text-[12px]">apartment</span>
+                            <span>იურიდიული</span>
+                          </span>
+                        ) : (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                             <span className="material-symbols-outlined text-[12px]">person</span>
                             <span>ფიზიკური</span>
                           </span>
-                          {isSelected && (
-                            <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
-                          )}
-                        </div>
-                        <div className="font-data-mono-md text-[11px] text-text-muted mt-0.5 flex flex-wrap items-center gap-x-2">
-                          <span>პ/ნ: {levanItem.personalId}</span>
-                          <span>• ტელ: {levanItem.phone}</span>
-                          <span>• {levanItem.agreementNumber}</span>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                        ₾ {levanItem.amount.toLocaleString('ka-GE')}.00
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <span className="font-data-mono-md font-bold text-amber-700">₾ {levanItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
-                        <div className="text-[10px] text-text-muted font-data-mono-md">ვადა: {levanItem.overdueDays} დღე</div>
-                      </td>
-                      <td className="py-3.5 px-3 text-center">
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
-                          Grade B
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 text-center">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-semibold border border-amber-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
-                          <span>დასადასტურებელი</span>
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 text-right">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectDebtor(levanItem);
-                          }}
-                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                            isSelected ? 'text-primary bg-primary/15' : 'text-slate-600 hover:text-primary hover:bg-slate-100'
-                          }`}
-                          title="დეტალები & გადახდების ისტორია"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">visibility</span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })()
+                        )}
+                        {isSelected && (
+                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
+                        )}
+                      </div>
+                      <div className="font-data-mono-md text-[11px] text-text-muted">
+                        {isLegal ? 'ს/კ' : 'პ/ნ'}: {cr.taxId || cr.personalId} • {cr.agreementNumber}
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
+                      ₾ {cr.amount.toLocaleString('ka-GE')}.00
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <span
+                        className={`font-data-mono-md font-bold ${
+                          cr.remainingAmount === 0
+                            ? 'text-emerald-700'
+                            : cr.gradeCode === 'C'
+                            ? 'text-rose-600'
+                            : 'text-amber-600'
+                        }`}
+                      >
+                        ₾ {cr.remainingAmount.toLocaleString('ka-GE')}.00
+                      </span>
+                      <div className="text-[10px] text-emerald-700 font-data-mono-md">
+                        დაფარულია: {cr.paidAmount.toLocaleString('ka-GE')}.00
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold border ${gradeBadgeClass}`}>
+                        Grade {cr.gradeCode}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${statusBadge.badgeClass}`}>
+                        {statusBadge.label}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectDebtor(cr);
+                        }}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
+                        }`}
+                        title="დეტალები & გადახდების ისტორია"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">visibility</span>
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {filteredTotalCount === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-10 px-4 text-center text-text-muted text-body-sm">
+                    ამ ფილტრით დებიტორი ვერ მოიძებნა.
+                  </td>
+                </tr>
               )}
-
-              {/* Row 1: გიორგი გიორგაძე */}
-              {(() => {
-                const giorgiItem = {
-                  id: 'default-giorgi',
-                  name: 'გიორგი გიორგაძე',
-                  personalId: '01019012345',
-                  entityType: 'PHYSICAL',
-                  phone: '+995 599 12 34 56',
-                  email: 'giorgi.g@gmail.com',
-                  actualAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
-                  legalAddress: 'თბილისი, ვაჟა-ფშაველას გამზ. 25, ბინა 42',
-                  amount: 5000,
-                  remainingAmount: 2200,
-                  paidAmount: 2800,
-                  rating: 'Grade B (ზომიერი რისკი)',
-                  overdueDays: 45,
-                  dueDate: '14 იან, 2025',
-                  status: 'RESTRUCTURED',
-                  agreementNumber: 'AGR-77142',
-                };
-                const isSelected = selectedDebtor?.personalId === giorgiItem.personalId;
-                return (
-                  <tr
-                    key="row-giorgi"
-                    onClick={() => handleSelectDebtor(giorgiItem)}
-                    className={`transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
-                        <span>{giorgiItem.name}</span>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
-                        )}
-                      </div>
-                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {giorgiItem.personalId} • {giorgiItem.agreementNumber}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                      ₾ {giorgiItem.amount.toLocaleString('ka-GE')}.00
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <span className="font-data-mono-md font-bold text-amber-600">₾ {giorgiItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
-                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {giorgiItem.paidAmount.toLocaleString('ka-GE')}.00</div>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
-                        Grade B
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).badgeClass}`}>
-                        {getClaimStatusBadge('RESTRUCTURED', claimsData?.statusConfigs).label}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectDebtor(giorgiItem);
-                        }}
-                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
-                        }`}
-                        title="დეტალები & გადახდების ისტორია"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">visibility</span>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })()}
-
-              {/* Row 2: ნინო აბაშიძე */}
-              {(() => {
-                const ninoItem = {
-                  id: 'default-nino',
-                  name: 'ნინო აბაშიძე',
-                  personalId: '01024098765',
-                  entityType: 'PHYSICAL',
-                  amount: 18200,
-                  remainingAmount: 18200,
-                  paidAmount: 0,
-                  rating: 'Grade C (მაღალი რისკი)',
-                  overdueDays: 120,
-                  phone: '+995 595 44 33 22',
-                  email: 'nino.a@gmail.com',
-                  actualAddress: 'ქ. თბილისი, რუსთაველის გამზ. 18',
-                  legalAddress: 'ქ. თბილისი, რუსთაველის გამზ. 18',
-                  status: 'IN_LITIGATION',
-                  agreementNumber: 'AGR-99321',
-                };
-                const isSelected = selectedDebtor?.personalId === ninoItem.personalId;
-                return (
-                  <tr
-                    key="row-nino"
-                    onClick={() => handleSelectDebtor(ninoItem)}
-                    className={`transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
-                        <span>{ninoItem.name}</span>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
-                        )}
-                      </div>
-                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {ninoItem.personalId} • {ninoItem.agreementNumber}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                      ₾ {ninoItem.amount.toLocaleString('ka-GE')}.00
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <span className="font-data-mono-md font-bold text-rose-600">₾ {ninoItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
-                      <div className="text-[10px] text-text-muted font-data-mono-md">დაფარულია: 0.00</div>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-700 border border-rose-500/30">
-                        Grade C
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).badgeClass}`}>
-                        {getClaimStatusBadge('IN_LITIGATION', claimsData?.statusConfigs).label}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectDebtor(ninoItem);
-                        }}
-                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
-                        }`}
-                        title="დეტალები & გადახდების ისტორია"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">visibility</span>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })()}
-
-              {/* Row 3: შპს ალფა ლოჯისტიკსი */}
-              {(() => {
-                const alfaItem = {
-                  id: 'default-alfa',
-                  name: 'შპს ალფა ლოჯისტიკსი',
-                  taxId: '405991823',
-                  personalId: '405991823',
-                  entityType: 'LEGAL',
-                  amount: 42500,
-                  remainingAmount: 12500,
-                  paidAmount: 30000,
-                  rating: 'Grade A (საიმედო)',
-                  overdueDays: 15,
-                  phone: '+995 591 88 77 66',
-                  email: 'info@alfalogistics.ge',
-                  actualAddress: 'ქ. თბილისი, აეროპორტის გზატკეცილი #4',
-                  legalAddress: 'ქ. თბილისი, აეროპორტის გზატკეცილი #4',
-                  directorFirstName: 'ნიკოლოზ',
-                  directorLastName: 'სვანიძე',
-                  directorPhone: '+995 591 88 77 66',
-                  status: 'ACTIVE',
-                  agreementNumber: 'AGR-44120',
-                };
-                const isSelected = selectedDebtor?.taxId === alfaItem.taxId;
-                return (
-                  <tr
-                    key="row-alfa"
-                    onClick={() => handleSelectDebtor(alfaItem)}
-                    className={`transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
-                        <span>{alfaItem.name}</span>
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-                          <span className="material-symbols-outlined text-[12px]">apartment</span>
-                          <span>იურიდიული</span>
-                        </span>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
-                        )}
-                      </div>
-                      <div className="font-data-mono-md text-[11px] text-text-muted">ს/კ: {alfaItem.taxId} • {alfaItem.agreementNumber}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                      ₾ {alfaItem.amount.toLocaleString('ka-GE')}.00
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <span className="font-data-mono-md font-bold text-amber-600">₾ {alfaItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
-                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {alfaItem.paidAmount.toLocaleString('ka-GE')}.00</div>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-mint/20 text-emerald-800 border border-accent-mint/40">
-                        Grade A
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
-                        {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectDebtor(alfaItem);
-                        }}
-                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
-                        }`}
-                        title="დეტალები & გადახდების ისტორია"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">visibility</span>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })()}
-
-              {/* Row 4: დავით კაპანაძე */}
-              {(() => {
-                const davitItem = {
-                  id: 'default-davit',
-                  name: 'დავით კაპანაძე',
-                  personalId: '62001004321',
-                  entityType: 'PHYSICAL',
-                  amount: 4500,
-                  remainingAmount: 0,
-                  paidAmount: 4500,
-                  rating: 'Grade A (საიმედო)',
-                  overdueDays: 0,
-                  phone: '+995 599 33 22 11',
-                  email: 'davit.k@gmail.com',
-                  actualAddress: 'ქ. ბათუმი, გორგილაძის ქ. 32',
-                  legalAddress: 'ქ. ბათუმი, გორგილაძის ქ. 32',
-                  status: 'SETTLED',
-                  agreementNumber: 'AGR-11204',
-                };
-                const isSelected = selectedDebtor?.personalId === davitItem.personalId;
-                return (
-                  <tr
-                    key="row-davit"
-                    onClick={() => handleSelectDebtor(davitItem)}
-                    className={`transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
-                        <span>{davitItem.name}</span>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
-                        )}
-                      </div>
-                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {davitItem.personalId} • {davitItem.agreementNumber}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                      ₾ {davitItem.amount.toLocaleString('ka-GE')}.00
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <span className="font-data-mono-md font-bold text-emerald-700">₾ 0.00</span>
-                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {davitItem.paidAmount.toLocaleString('ka-GE')}.00</div>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-accent-mint/20 text-emerald-800 border border-accent-mint/40">
-                        Grade A
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).badgeClass}`}>
-                        {getClaimStatusBadge('SETTLED', claimsData?.statusConfigs).label}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectDebtor(davitItem);
-                        }}
-                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
-                        }`}
-                        title="დეტალები & გადახდების ისტორია"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">visibility</span>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })()}
-
-              {/* Row 5: მარიამ წიკლაური */}
-              {(() => {
-                const mariamItem = {
-                  id: 'default-mariam',
-                  name: 'მარიამ წიკლაური',
-                  personalId: '01008022119',
-                  entityType: 'PHYSICAL',
-                  amount: 9800,
-                  remainingAmount: 6300,
-                  paidAmount: 3500,
-                  rating: 'Grade B (ზომიერი რისკი)',
-                  overdueDays: 55,
-                  phone: '+995 577 66 55 44',
-                  email: 'mariam.ts@gmail.com',
-                  actualAddress: 'ქ. ქუთაისი, წერეთლის ქ. 12',
-                  legalAddress: 'ქ. ქუთაისი, წერეთლის ქ. 12',
-                  status: 'ACTIVE',
-                  agreementNumber: 'AGR-55823',
-                };
-                const isSelected = selectedDebtor?.personalId === mariamItem.personalId;
-                return (
-                  <tr
-                    key="row-mariam"
-                    onClick={() => handleSelectDebtor(mariamItem)}
-                    className={`transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-blue-50/70 hover:bg-blue-50 border-l-4 border-l-primary'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-text-primary flex items-center gap-1.5">
-                        <span>{mariamItem.name}</span>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded-full bg-primary" title="შერჩეულია" />
-                        )}
-                      </div>
-                      <div className="font-data-mono-md text-[11px] text-text-muted">პ/ნ: {mariamItem.personalId} • {mariamItem.agreementNumber}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-data-mono-md font-semibold text-text-primary">
-                      ₾ {mariamItem.amount.toLocaleString('ka-GE')}.00
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <span className="font-data-mono-md font-bold text-amber-600">₾ {mariamItem.remainingAmount.toLocaleString('ka-GE')}.00</span>
-                      <div className="text-[10px] text-emerald-700 font-data-mono-md">დაფარულია: {mariamItem.paidAmount.toLocaleString('ka-GE')}.00</div>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-700 border border-amber-500/30">
-                        Grade B
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-center">
-                      <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-medium border ${getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).badgeClass}`}>
-                        {getClaimStatusBadge('ACTIVE', claimsData?.statusConfigs).label}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSelectDebtor(mariamItem);
-                        }}
-                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                          isSelected ? 'text-primary bg-primary/15' : 'text-slate-500 hover:text-primary hover:bg-slate-100'
-                        }`}
-                        title="დეტალები & გადახდების ისტორია"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">visibility</span>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })()}
             </tbody>
           </table>
         </div>
         {/* Table Pagination & Counter */}
         <div className="p-4 border-t border-border-subtle flex items-center justify-between text-body-sm text-text-muted">
-          <span>ნაჩვენებია <strong>1-5</strong> / სულ <strong>24</strong> ჩანაწერი</span>
+          <span>
+            ნაჩვენებია <strong>{filteredTotalCount}</strong> / სულ <strong>{totalRowsCount}</strong> ჩანაწერი
+          </span>
           <div className="flex items-center gap-1">
             <button className="px-2.5 py-1 rounded border border-border-subtle bg-surface-card hover:bg-surface-bg disabled:opacity-40" disabled>
               <span className="material-symbols-outlined text-[16px]" data-icon="chevron_left">chevron_left</span>
             </button>
             <button className="px-3 py-1 rounded bg-primary text-white font-semibold">1</button>
-            <button className="px-3 py-1 rounded border border-border-subtle hover:bg-surface-bg">2</button>
-            <button className="px-3 py-1 rounded border border-border-subtle hover:bg-surface-bg">3</button>
-            <button className="px-2.5 py-1 rounded border border-border-subtle bg-surface-card hover:bg-surface-bg">
+            <button className="px-2.5 py-1 rounded border border-border-subtle bg-surface-card hover:bg-surface-bg disabled:opacity-40" disabled>
               <span className="material-symbols-outlined text-[16px]" data-icon="chevron_right">chevron_right</span>
             </button>
           </div>

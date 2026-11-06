@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { MOCK_FIELD_TASKS } from '@/data/mockData';
 
 export async function GET() {
-  return NextResponse.json(MOCK_FIELD_TASKS);
+  return NextResponse.json([]);
 }
 
 export async function POST(request: Request) {

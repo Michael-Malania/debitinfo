@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { UserRole, PaymentReceiptStatus } from '@prisma/client';
+import { UserRole, PaymentReceiptStatus, PaymentStatus, ClaimStatus } from '@prisma/client';
 
 export interface SubmitDebtorReceiptDto {
   claimId?: string;
@@ -120,46 +120,157 @@ export class PaymentsService {
   }
 
   /**
+   * Shared transactional helper for confirming a payment receipt idempotently
+   * and synchronizing DebtClaim, StagedRegistryItem, PaymentTransaction, and RepaymentInstallment
+   */
+  private async processReceiptConfirmation(
+    receiptId: string,
+    buildReceiptUpdate: (receipt: any, alreadyConfirmed: boolean) => any,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const receipt = await tx.paymentReceipt.findUnique({
+        where: { id: receiptId },
+        include: {
+          claim: {
+            include: {
+              debtor: true,
+            },
+          },
+        },
+      });
+
+      if (!receipt) {
+        throw new NotFoundException('ქვითარი ვერ მოიძებნა');
+      }
+
+      const alreadyConfirmed =
+        receipt.status === PaymentReceiptStatus.CONFIRMED_BY_CREDITOR ||
+        receipt.status === PaymentReceiptStatus.CONFIRMED_BY_ACCOUNTANT;
+
+      const updated = await tx.paymentReceipt.update({
+        where: { id: receiptId },
+        data: buildReceiptUpdate(receipt, alreadyConfirmed),
+      });
+
+      // Only deduct balance and allocate installments on the first confirmation
+      if (!alreadyConfirmed && receipt.claim) {
+        const paidAmt = Number(receipt.amount || 0);
+        const currentRemaining = Number(receipt.claim.remainingAmount || 0);
+        const newRemaining = Math.max(0, Math.round((currentRemaining - paidAmt) * 100) / 100);
+        const newStatus = newRemaining === 0 ? ClaimStatus.SETTLED : receipt.claim.status;
+
+        await tx.debtClaim.update({
+          where: { id: receipt.claimId },
+          data: {
+            remainingAmount: newRemaining,
+            status: newStatus,
+            lastActivityAt: new Date(),
+          },
+        });
+
+        // Upsert PaymentTransaction for BI Analytics & Ledger
+        const txRef = receipt.receiptNumber || `RCP-${receipt.id}`;
+        await tx.paymentTransaction.upsert({
+          where: { transactionRef: txRef },
+          update: {
+            amount: paidAmt,
+            status: PaymentStatus.COMPLETED,
+            paidAt: new Date(),
+          },
+          create: {
+            claimId: receipt.claimId,
+            amount: paidAmt,
+            currency: 'GEL',
+            provider: 'BANK_TRANSFER',
+            transactionRef: txRef,
+            status: PaymentStatus.COMPLETED,
+            paidAt: new Date(),
+          },
+        });
+
+        // FIFO allocation across unpaid RepaymentInstallment rows
+        const unpaidInstallments = await tx.repaymentInstallment.findMany({
+          where: {
+            schedule: { claimId: receipt.claimId, isActive: true },
+            isPaid: false,
+          },
+          orderBy: { installmentNo: 'asc' },
+        });
+
+        let remainingToAllocate = paidAmt;
+        for (const inst of unpaidInstallments) {
+          if (remainingToAllocate <= 0) break;
+          const instTotal = Number(inst.amount || 0);
+          const instPaid = Number(inst.paidAmount || 0);
+          const instNeed = Math.max(0, instTotal - instPaid);
+          if (instNeed <= 0) continue;
+
+          const applied = Math.min(remainingToAllocate, instNeed);
+          const newInstPaid = Math.round((instPaid + applied) * 100) / 100;
+          const isNowPaid = newInstPaid >= instTotal - 0.01;
+          remainingToAllocate = Math.max(0, Math.round((remainingToAllocate - applied) * 100) / 100);
+
+          await tx.repaymentInstallment.update({
+            where: { id: inst.id },
+            data: {
+              paidAmount: newInstPaid,
+              isPaid: isNowPaid,
+              paidAt: isNowPaid ? new Date() : inst.paidAt,
+            },
+          });
+        }
+
+        // Synchronize linked StagedRegistryItem balance and status
+        const debtorPin = receipt.claim.debtor?.personalId;
+        const agrNum = receipt.claim.agreementNumber;
+        const stagedCandidates = await tx.stagedRegistryItem.findMany({
+          where: {
+            type: 'DEBTOR',
+            OR: [
+              { matchedUserId: receipt.debtorId },
+              ...(debtorPin ? [{ personalId: debtorPin }, { taxId: debtorPin }] : []),
+              ...(agrNum ? [{ agreementNumber: agrNum }] : []),
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        const exactStaged =
+          stagedCandidates.find((s) => agrNum && s.agreementNumber === agrNum) ||
+          stagedCandidates[0];
+
+        if (exactStaged) {
+          await tx.stagedRegistryItem.update({
+            where: { id: exactStaged.id },
+            data: {
+              amount: newRemaining,
+              status: newRemaining === 0 ? 'CLOSED' : exactStaged.status,
+              matchedUserId: receipt.debtorId || exactStaged.matchedUserId,
+            },
+          });
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  /**
    * 4: Creditor confirms receipt of payment
    */
   async confirmByCreditor(receiptId: string, dto: ConfirmByCreditorDto, user: any) {
-    const receipt = await this.prisma.paymentReceipt.findUnique({
-      where: { id: receiptId },
-      include: { claim: true },
-    });
+    const creditorName =
+      user?.companyProfile?.companyName || user?.email || 'შპს ჯეო ტრეიდინგი (კრედიტორი)';
 
-    if (!receipt) {
-      throw new NotFoundException('ქვითარი ვერ მოიძებნა');
-    }
-
-    const creditorName = user?.companyProfile?.companyName || user?.email || 'შპს ჯეო ტრეიდინგი (კრედიტორი)';
-
-    const updated = await this.prisma.paymentReceipt.update({
-      where: { id: receiptId },
-      data: {
-        status: PaymentReceiptStatus.CONFIRMED_BY_CREDITOR,
-        confirmedByRole: UserRole.CREDITOR,
-        confirmedByUserId: user?.id,
-        confirmedByUserName: `${creditorName}`,
-        confirmationReceiptUrl: dto.confirmationReceiptUrl || `/receipts/creditor_confirm_${receipt.receiptNumber}.pdf`,
-        confirmedAt: new Date(),
-      },
-    });
-
-    // Update claim remaining amount
-    if (receipt.claim) {
-      const currentRemaining = Number(receipt.claim.remainingAmount);
-      const newRemaining = Math.max(0, currentRemaining - Number(receipt.amount));
-      await this.prisma.debtClaim.update({
-        where: { id: receipt.claimId },
-        data: {
-          remainingAmount: newRemaining,
-          status: newRemaining === 0 ? 'SETTLED' : receipt.claim.status,
-        },
-      });
-    }
-
-    return updated;
+    return this.processReceiptConfirmation(receiptId, (receipt) => ({
+      status: PaymentReceiptStatus.CONFIRMED_BY_CREDITOR,
+      confirmedByRole: UserRole.CREDITOR,
+      confirmedByUserId: user?.id,
+      confirmedByUserName: `${creditorName}`,
+      confirmationReceiptUrl:
+        dto.confirmationReceiptUrl || `/receipts/creditor_confirm_${receipt.receiptNumber}.pdf`,
+      confirmedAt: new Date(),
+    }));
   }
 
   /**
@@ -204,45 +315,19 @@ export class PaymentsService {
    * 6: Accountant confirms payment on behalf of creditor and generates official order
    */
   async confirmByAccountant(receiptId: string, dto: ConfirmByAccountantDto, user: any) {
-    const receipt = await this.prisma.paymentReceipt.findUnique({
-      where: { id: receiptId },
-      include: { claim: true },
-    });
-
-    if (!receipt) {
-      throw new NotFoundException('ქვითარი ვერ მოიძებნა');
-    }
-
     const orderNumber = `ACC-ORD-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const accountantName = user?.staffProfile?.fullName || 'მარიამ წიკლაური (მთავარი ბუღალტერი)';
 
-    const updated = await this.prisma.paymentReceipt.update({
-      where: { id: receiptId },
-      data: {
-        status: PaymentReceiptStatus.CONFIRMED_BY_ACCOUNTANT,
-        confirmedByRole: UserRole.ACCOUNTANT,
-        confirmedByUserId: user?.id,
-        confirmedByUserName: accountantName,
-        accountantOrderNumber: orderNumber,
-        accountantOrderNotes: dto.notes || 'დადასტურებულია კრედიტორის სატელეფონო დასტურის საფუძველზე',
-        confirmedAt: new Date(),
-      },
-    });
-
-    // Update claim remaining amount
-    if (receipt.claim) {
-      const currentRemaining = Number(receipt.claim.remainingAmount);
-      const newRemaining = Math.max(0, currentRemaining - Number(receipt.amount));
-      await this.prisma.debtClaim.update({
-        where: { id: receipt.claimId },
-        data: {
-          remainingAmount: newRemaining,
-          status: newRemaining === 0 ? 'SETTLED' : receipt.claim.status,
-        },
-      });
-    }
-
-    return updated;
+    return this.processReceiptConfirmation(receiptId, () => ({
+      status: PaymentReceiptStatus.CONFIRMED_BY_ACCOUNTANT,
+      confirmedByRole: UserRole.ACCOUNTANT,
+      confirmedByUserId: user?.id,
+      confirmedByUserName: accountantName,
+      accountantOrderNumber: orderNumber,
+      accountantOrderNotes:
+        dto.notes || 'დადასტურებულია კრედიტორის სატელეფონო დასტურის საფუძველზე',
+      confirmedAt: new Date(),
+    }));
   }
 
   /**

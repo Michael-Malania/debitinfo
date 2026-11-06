@@ -17,20 +17,6 @@ import {
   ContactPersonInfo,
   ContactInquiry
 } from '@/types';
-import {
-  MOCK_DEBTORS,
-  MOCK_LIABILITIES,
-  MOCK_CREDITOR_KPIS,
-  MOCK_CREDITOR_CLAIMS,
-  MOCK_MACRO_INDICATORS,
-  MOCK_AGING_BUCKETS,
-  MOCK_SECTOR_RISKS,
-  MOCK_LEGAL_CASES,
-  MOCK_CALL_QUEUE,
-  MOCK_CALL_LOGS,
-  MOCK_FIELD_TASKS,
-  MOCK_EMPLOYEES
-} from '@/data/mockData';
 
 // ==========================================
 // REGISTRY SERVICE
@@ -38,23 +24,18 @@ import {
 export const registryService = {
   async search(query: string): Promise<DebtorRecord[]> {
     try {
-      return await apiFetch<DebtorRecord[]>(`/api/registry?q=${encodeURIComponent(query)}`);
+      return await apiFetch<DebtorRecord[]>(`/api/v1/analyst/debtors-registry?search=${encodeURIComponent(query)}`);
     } catch {
-      const q = query.trim().toLowerCase();
-      if (!q) return MOCK_DEBTORS;
-      return MOCK_DEBTORS.filter(d => 
-        d.name.toLowerCase().includes(q) || 
-        d.personalId.includes(q) ||
-        d.caseNumber.toLowerCase().includes(q)
-      );
+      return [];
     }
   },
 
   async getById(id: string): Promise<DebtorRecord | undefined> {
     try {
-      return await apiFetch<DebtorRecord>(`/api/registry/${id}`);
+      const items = await apiFetch<DebtorRecord[]>(`/api/v1/analyst/debtors-registry?search=${encodeURIComponent(id)}`);
+      return items.find((d: any) => d.id === id || d.personalId === id || d.taxId === id);
     } catch {
-      return MOCK_DEBTORS.find(d => d.id === id || d.personalId === id);
+      return undefined;
     }
   }
 };
@@ -65,17 +46,31 @@ export const registryService = {
 export const creditorService = {
   async getKPIs(): Promise<CreditorKPIs> {
     try {
-      return await apiFetch<CreditorKPIs>('/api/creditor/kpis');
+      const data = await apiFetch<any>('/api/v1/creditor/my-claims');
+      return data?.kpis || {
+        totalPrincipal: 0,
+        totalRecovered: 0,
+        recoveryRate: 0,
+        activeClaimsCount: 0,
+        activeDebtorsCount: 0,
+      } as any;
     } catch {
-      return MOCK_CREDITOR_KPIS;
+      return {
+        totalPrincipal: 0,
+        totalRecovered: 0,
+        recoveryRate: 0,
+        activeClaimsCount: 0,
+        activeDebtorsCount: 0,
+      } as any;
     }
   },
 
   async getClaims(): Promise<CreditorClaim[]> {
     try {
-      return await apiFetch<CreditorClaim[]>('/api/creditor/claims');
+      const data = await apiFetch<any>('/api/v1/creditor/my-claims');
+      return data?.claims || [];
     } catch {
-      return MOCK_CREDITOR_CLAIMS;
+      return [];
     }
   }
 };
@@ -84,42 +79,37 @@ export const creditorService = {
 // DEBTOR SERVICE
 // ==========================================
 export const debtorService = {
-  async getActiveProfile(): Promise<DebtorRecord> {
+  async getActiveProfile(): Promise<DebtorRecord | null> {
     try {
-      return await apiFetch<DebtorRecord>('/api/debtor/profile');
+      return await apiFetch<DebtorRecord>('/api/v1/auth/me');
     } catch {
-      return MOCK_DEBTORS[0]; // Giorgi Beridze
+      return null;
     }
   },
 
   async getLiabilities(): Promise<DebtorLiabilityItem[]> {
     try {
-      return await apiFetch<DebtorLiabilityItem[]>('/api/debtor/liabilities');
+      const res = await apiFetch<any>('/api/v1/debtor/my-liabilities');
+      return res?.claims || [];
     } catch {
-      return MOCK_LIABILITIES;
+      return [];
     }
   },
 
   async submitPayment(liabilityId: string, amount: number): Promise<{ success: boolean; transactionId: string }> {
-    try {
-      return await apiFetch('/api/debtor/pay', {
-        method: 'POST',
-        body: JSON.stringify({ liabilityId, amount })
-      });
-    } catch {
-      return { success: true, transactionId: `TX-${Date.now()}` };
-    }
+    const res = await apiFetch<any>('/api/v1/payments/submit-receipt', {
+      method: 'POST',
+      body: JSON.stringify({ claimId: liabilityId, amount })
+    });
+    return { success: true, transactionId: res?.receiptNumber || res?.id || '' };
   },
 
   async submitDispute(liabilityId: string, reason: string): Promise<{ success: boolean; disputeId: string }> {
-    try {
-      return await apiFetch('/api/debtor/dispute', {
-        method: 'POST',
-        body: JSON.stringify({ liabilityId, reason })
-      });
-    } catch {
-      return { success: true, disputeId: `DISP-${Date.now()}` };
-    }
+    const res = await apiFetch<any>(`/api/v1/debtor/claims/${liabilityId}/dispute`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+    return { success: true, disputeId: res?.id || '' };
   }
 };
 
@@ -131,7 +121,7 @@ export const analyticsService = {
     try {
       return await apiFetch<MacroIndicator[]>('/api/analytics/macro');
     } catch {
-      return MOCK_MACRO_INDICATORS;
+      return [];
     }
   },
 
@@ -139,7 +129,7 @@ export const analyticsService = {
     try {
       return await apiFetch<DebtAgingBucket[]>('/api/analytics/aging');
     } catch {
-      return MOCK_AGING_BUCKETS;
+      return [];
     }
   },
 
@@ -147,7 +137,7 @@ export const analyticsService = {
     try {
       return await apiFetch<SectorRisk[]>('/api/analytics/sectors');
     } catch {
-      return MOCK_SECTOR_RISKS;
+      return [];
     }
   }
 };
@@ -191,18 +181,18 @@ export const legalService = {
     } catch (err) {
       console.warn('[legalService.getStats] Fetch failed:', err);
       return {
-        activeCases: 14,
-        totalDisputedAmount: 284500,
-        successfulSettlementRate: 78,
-        urgentDeadlinesCount: 3,
+        activeCases: 0,
+        totalDisputedAmount: 0,
+        successfulSettlementRate: 0,
+        urgentDeadlinesCount: 0,
         countsByStage: {
-          all: 14,
-          court: 6,
-          lawsuit: 5,
-          settlement: 1,
-          enforcement: 1,
-          warning: 1,
-          closed: 32,
+          all: 0,
+          court: 0,
+          lawsuit: 0,
+          settlement: 0,
+          enforcement: 0,
+          warning: 0,
+          closed: 0,
         },
       };
     }
@@ -282,9 +272,9 @@ export const legalService = {
 export const crmService = {
   async getCallQueue(): Promise<CallQueueItem[]> {
     try {
-      return await apiFetch<CallQueueItem[]>('/api/crm/queue');
+      return await apiFetch<CallQueueItem[]>('/api/v1/crm/queue');
     } catch {
-      return MOCK_CALL_QUEUE;
+      return [];
     }
   },
 
@@ -292,18 +282,18 @@ export const crmService = {
     try {
       return await apiFetch<CallInteractionLog[]>('/api/crm/logs');
     } catch {
-      return MOCK_CALL_LOGS;
+      return [];
     }
   },
 
   async logInteraction(log: Partial<CallInteractionLog>): Promise<{ success: boolean }> {
     try {
-      return await apiFetch('/api/crm/logs', {
+      return await apiFetch('/api/v1/crm/call-log', {
         method: 'POST',
         body: JSON.stringify(log)
       });
     } catch {
-      return { success: true };
+      return { success: false };
     }
   }
 };
@@ -314,20 +304,20 @@ export const crmService = {
 export const fieldOfficerService = {
   async getTasks(): Promise<FieldVisitTask[]> {
     try {
-      return await apiFetch<FieldVisitTask[]>('/api/field-officer/tasks');
+      return await apiFetch<FieldVisitTask[]>('/api/v1/visits/tasks');
     } catch {
-      return MOCK_FIELD_TASKS;
+      return [];
     }
   },
 
   async completeTask(taskId: string, outcome: { notes: string; signature: string }): Promise<{ success: boolean }> {
     try {
-      return await apiFetch(`/api/field-officer/tasks/${taskId}`, {
+      return await apiFetch(`/api/v1/visits/tasks/${taskId}/complete`, {
         method: 'POST',
-        body: JSON.stringify(outcome)
+        body: JSON.stringify({ status: 'COMPLETED', notes: outcome.notes, signatureUrl: outcome.signature })
       });
     } catch {
-      return { success: true };
+      return { success: false };
     }
   }
 };
@@ -338,9 +328,9 @@ export const fieldOfficerService = {
 export const hrService = {
   async getEmployees(): Promise<Employee[]> {
     try {
-      return await apiFetch<Employee[]>('/api/hr/employees');
+      return await apiFetch<Employee[]>('/api/v1/ops/staff');
     } catch {
-      return MOCK_EMPLOYEES;
+      return [];
     }
   }
 };
@@ -364,74 +354,26 @@ export const contactService = {
 // ==========================================
 // BLOG & NEWS CMS SERVICE (CRM PUBLISHING)
 // ==========================================
-export const INITIAL_BLOG_POSTS: import('@/types').BlogPost[] = [
-  {
-    id: 'post-1',
-    title: 'რა იცვლება ელექტრონულ დეკლარირებასა და დებიტორული დავალიანებების საგადასახადო აღრიცხვაში',
-    slug: 'tax-changes-debt-accounting-2024',
-    category: 'tax_updates',
-    categoryKa: 'საგადასახადო სიახლეები',
-    excerpt: 'შემოსავლების სამსახურის (RS.GE) ახალი რეგულაციები და ვადაგადაცილებული მოთხოვნების ჩამოწერის წესები.',
-    content: 'საქართველოს საგადასახადო კოდექსში შესული ცვლილებების მიხედვით, უიმედო ვალების აღიარებისა და ჩამოწერის პროცედურები მნიშვნელოვნად გამარტივდა...',
-    authorName: 'თეონა პეტრიაშვილი',
-    authorRole: 'CRM & მედიაციის სპეციალისტი',
-    published: true,
-    publishedAt: '2024-10-20',
-    viewsCount: 1420,
-    tags: ['RS.GE', 'საგადასახადო', 'დებიტორები']
-  },
-  {
-    id: 'post-2',
-    title: 'პრაქტიკული გზამკვლევი: დებიტორული დავალიანებების ეფექტური მართვა და პრევენცია',
-    slug: 'practical-guide-debt-management-prevention',
-    category: 'credit_risks',
-    categoryKa: 'საკრედიტო რისკები',
-    excerpt: 'როგორ შევამოწმოთ კონტრაგენტის სანდოობა ხელშეკრულების დადებამდე და რა პრევენციული ზომები მივიღოთ.',
-    content: 'ბიზნესის უწყვეტობისთვის გადამწყვეტია კონტრაგენტის რისკ-პროფილის გადამოწმება Debitinfo.GE-ის ერთიან ეროვნულ ბაზაში...',
-    authorName: 'გიორგი მაისურაძე',
-    authorRole: 'საკრედიტო ანალიტიკოსი',
-    published: true,
-    publishedAt: '2024-10-18',
-    viewsCount: 2890,
-    tags: ['რისკების მართვა', 'სკორინგი', 'მედიაცია']
-  }
-];
+export const INITIAL_BLOG_POSTS: import('@/types').BlogPost[] = [];
 
 export const blogService = {
   async getPosts(): Promise<import('@/types').BlogPost[]> {
     try {
-      return await apiFetch<import('@/types').BlogPost[]>('/api/blog');
+      return await apiFetch<import('@/types').BlogPost[]>('/api/v1/crm/blog');
     } catch {
-      return INITIAL_BLOG_POSTS;
+      return [];
     }
   },
 
   async createPost(post: Omit<import('@/types').BlogPost, 'id' | 'viewsCount' | 'publishedAt'>): Promise<import('@/types').BlogPost> {
-    const newPost: import('@/types').BlogPost = {
-      ...post,
-      id: `post-${Date.now()}`,
-      viewsCount: 0,
-      publishedAt: new Date().toISOString().split('T')[0]
-    };
-    try {
-      return await apiFetch<import('@/types').BlogPost>('/api/crm/blog', {
-        method: 'POST',
-        body: JSON.stringify(newPost)
-      });
-    } catch {
-      INITIAL_BLOG_POSTS.unshift(newPost);
-      return newPost;
-    }
+    return await apiFetch<import('@/types').BlogPost>('/api/v1/crm/blog', {
+      method: 'POST',
+      body: JSON.stringify(post)
+    });
   },
 
   async deletePost(id: string): Promise<{ success: boolean }> {
-    try {
-      return await apiFetch(`/api/crm/blog/${id}`, { method: 'DELETE' });
-    } catch {
-      const idx = INITIAL_BLOG_POSTS.findIndex(p => p.id === id);
-      if (idx !== -1) INITIAL_BLOG_POSTS.splice(idx, 1);
-      return { success: true };
-    }
+    return await apiFetch(`/api/v1/crm/blog/${id}`, { method: 'DELETE' });
   }
 };
 

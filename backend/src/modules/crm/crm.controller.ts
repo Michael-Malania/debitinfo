@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Body,
   Query,
@@ -11,6 +12,7 @@ import { CrmService, LogCallDto } from './crm.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '@prisma/client';
 
@@ -24,8 +26,9 @@ export class CrmController {
   async getQueue(
     @Query('search') search?: string,
     @Query('priority') priority?: string,
+    @CurrentUser() user?: any,
   ) {
-    return await this.crmService.getQueue(search, priority);
+    return await this.crmService.getQueue(search, priority, user);
   }
 
   @Get('claims/:id')
@@ -45,5 +48,22 @@ export class CrmController {
   async getCrmStats(@CurrentUser() user: any) {
     const operatorId = user.role === UserRole.OPERATOR ? user.id : undefined;
     return await this.crmService.getCrmStats(operatorId);
+  }
+
+  @Public()
+  @Roles()
+  @Get('blog')
+  async getBlogPosts() {
+    return await this.crmService.getBlogPosts();
+  }
+
+  @Post('blog')
+  async createBlogPost(@Body() dto: any, @CurrentUser() user: any) {
+    return await this.crmService.createBlogPost(dto, user);
+  }
+
+  @Delete('blog/:id')
+  async deleteBlogPost(@Param('id') id: string) {
+    return await this.crmService.deleteBlogPost(id);
   }
 }

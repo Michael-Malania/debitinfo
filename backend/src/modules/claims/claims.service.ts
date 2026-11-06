@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
@@ -77,8 +77,11 @@ export class ClaimsService {
           select: {
             id: true,
             email: true,
+            phone: true,
             personalId: true,
+            entityType: true,
             individualProfile: true,
+            companyProfile: true,
           },
         },
         schedules: {
@@ -186,11 +189,21 @@ export class ClaimsService {
    * These arrive with status 'PENDING_VERIFICATION' for the Analyst to cross-check in RS.GE
    */
   async importCreditorDebtors(creditorUserId: string, debtors: any[]) {
+    if (!debtors || !Array.isArray(debtors) || debtors.length === 0) {
+      throw new BadRequestException('გთხოვთ ატვირთოთ მინიმუმ ერთი დებიტორის მონაცემი');
+    }
+
     const creditor = await this.prisma.user.findUnique({
       where: { id: creditorUserId },
-      include: { companyProfile: true },
+      include: { companyProfile: true, individualProfile: true },
     });
-    const creditorName = creditor?.companyProfile?.companyName || creditor?.email || 'კრედიტორი';
+    const creditorName =
+      creditor?.companyProfile?.companyName ||
+      (creditor?.individualProfile
+        ? `${creditor.individualProfile.firstName} ${creditor.individualProfile.lastName}`.trim()
+        : null) ||
+      creditor?.email ||
+      'კრედიტორი';
 
     const createdItems = [];
     for (const d of debtors) {
@@ -240,18 +253,25 @@ export class ClaimsService {
   }
 
   /**
-   * Get all debtors uploaded by this creditor (including PENDING_VERIFICATION and VERIFIED)
+   * Get unverified debtors uploaded by this creditor (waiting for RS.GE verification).
+   * Once verified by an analyst, debtors are promoted to DebtClaim and returned in getCreditorClaims.
    */
   async getCreditorUploadedDebtors(creditorUserId: string) {
     const creditor = await this.prisma.user.findUnique({
       where: { id: creditorUserId },
-      include: { companyProfile: true },
+      include: { companyProfile: true, individualProfile: true },
     });
-    const creditorName = creditor?.companyProfile?.companyName || creditor?.email;
+    const creditorName =
+      creditor?.companyProfile?.companyName ||
+      (creditor?.individualProfile
+        ? `${creditor.individualProfile.firstName} ${creditor.individualProfile.lastName}`.trim()
+        : null) ||
+      creditor?.email;
     return this.prisma.stagedRegistryItem.findMany({
       where: {
         type: 'DEBTOR',
         creditorName: creditorName,
+        status: { in: ['PENDING', 'PENDING_VERIFICATION'] },
       },
       orderBy: { createdAt: 'desc' },
     });

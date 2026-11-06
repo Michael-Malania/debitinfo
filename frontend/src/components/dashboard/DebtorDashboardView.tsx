@@ -229,97 +229,63 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
 
   const primaryClaim = liabilities?.claims?.[0];
   const summary = liabilities?.summary || {
-    totalInitial: 1540,
-    totalRemaining: 890,
-    totalPaid: 650,
+    totalInitial: 0,
+    totalRemaining: 0,
+    totalPaid: 0,
     rating: 'B',
-    riskScore: 68,
-    activeClaimsCount: 1,
+    riskScore: 0,
+    activeClaimsCount: 0,
   };
 
-  const creditorCompanyName = primaryClaim?.creditor?.companyProfile?.companyName || 'შპს ჯეო ტრეიდინგი';
-  const caseNumber = primaryClaim?.caseNumber || 'DB-2024-8841';
+  const creditorCompanyName =
+    primaryClaim?.creditor?.companyProfile?.companyName ||
+    (primaryClaim?.creditor?.individualProfile
+      ? `${primaryClaim.creditor.individualProfile.firstName || ''} ${primaryClaim.creditor.individualProfile.lastName || ''}`.trim()
+      : '') ||
+    '—';
+  const caseNumber = primaryClaim?.caseNumber || '—';
 
   const schedule = primaryClaim?.schedules?.[0];
   const scheduleType = primaryClaim?.scheduleType || 'STANDARD';
   const isNonStandard = scheduleType === 'NON_STANDARD';
 
-  // Supporting proof of debt documents from database
-  const supportingDocs = (primaryClaim?.supportingDocuments as any[]) || [
-    {
-      id: 'doc-01',
-      title: 'სასაქონლო ზედნადები (RS.GE #WAYBILL-8841)',
-      docType: 'WAYBILL',
-      fileName: 'rs_waybill_8841.pdf',
-      fileUrl: '/documents/rs_waybill_8841.pdf',
-      fileSize: '1.2 MB',
-      uploadedAt: '2024-03-01T10:00:00Z',
-      description: 'საქონლის მიწოდების ოფიციალური საგადასახადო ზედნადები',
-    },
-    {
-      id: 'doc-02',
-      title: 'ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი',
-      docType: 'ACCOUNT_TURNOVER',
-      fileName: 'brunviti_barati_2024.xlsx',
-      fileUrl: '/documents/brunviti_barati_2024.xlsx',
-      fileSize: '480 KB',
-      uploadedAt: '2024-03-01T10:05:00Z',
-      description: 'ურთიერთშედარების აქტი და ბრუნვის ამონაწერი Excel ფორმატში',
-    },
-    {
-      id: 'doc-03',
-      title: 'ხელშეკრულება & მიღება-ჩაბარების აქტი #AGR-8841',
-      docType: 'CONTRACT',
-      fileName: 'khelshekruleba_8841.pdf',
-      fileUrl: '/documents/khelshekruleba_8841.pdf',
-      fileSize: '2.4 MB',
-      uploadedAt: '2024-03-01T10:10:00Z',
-      description: 'მხარეთა შორის გაფორმებული საკრედიტო ხელშეკრულება',
-    },
-  ];
+  // Supporting proof of debt documents strictly from database
+  const supportingDocs: any[] = Array.isArray(primaryClaim?.supportingDocuments)
+    ? primaryClaim.supportingDocuments
+    : [];
 
-  // Dynamic installments from DB
+  // Dynamic installments strictly from DB
   const rawInstallments = schedule?.installments || [];
-  const allInstallments = rawInstallments.length > 0
-    ? rawInstallments.map((inst: any, idx: number) => {
-        const num = inst.installmentNo || idx + 1;
-        const formattedNo = num.toString().padStart(2, '0');
-        const d = new Date(inst.dueDate);
-        const monthsGe = ['იან', 'თებ', 'მარ', 'აპრ', 'მაის', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
-        const dateStr = `${d.getDate()} ${monthsGe[d.getMonth()]}, ${d.getFullYear()}`;
-        const amount = Number(inst.amount) || 300;
-        const isPaid = inst.isPaid;
-        const initialDebt = Number(primaryClaim?.initialAmount) || 5000;
-        const remainingBalance = Math.max(0, initialDebt - (num * amount));
-        const isNextDue = !isPaid && (idx === 0 || rawInstallments[idx - 1]?.isPaid);
+  let runningDebt = Number(primaryClaim?.initialAmount || 0);
+  const allInstallments = rawInstallments.map((inst: any, idx: number) => {
+    const num = inst.installmentNo || idx + 1;
+    const formattedNo = num.toString().padStart(2, '0');
+    const d = new Date(inst.dueDate);
+    const monthsGe = ['იან', 'თებ', 'მარ', 'აპრ', 'მაის', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+    const dateStr = !isNaN(d.getTime())
+      ? `${d.getDate()} ${monthsGe[d.getMonth()]}, ${d.getFullYear()}`
+      : '—';
+    const amount = Number(inst.amount) || 0;
+    const paidAmount = Number(inst.paidAmount) || 0;
+    const isPaid = Boolean(inst.isPaid);
+    runningDebt = Math.max(0, runningDebt - amount);
+    const isNextDue = !isPaid && (idx === 0 || Boolean(rawInstallments[idx - 1]?.isPaid));
 
-        return {
-          id: inst.id || `inst-${num}`,
-          installmentNo: formattedNo,
-          num,
-          dueDate: dateStr,
-          amount: `${amount.toFixed(2)} ₾`,
-          remaining: `${remainingBalance.toLocaleString()}.00 ₾`,
-          isPaid,
-          isNextDue,
-          receiptNumber: isPaid ? `REC-8841-${formattedNo}` : null,
-        };
-      })
-    : [
-        { id: '1', installmentNo: '01', num: 1, dueDate: '25 მარ, 2024', amount: '300.00 ₾', remaining: '4,700.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-01' },
-        { id: '2', installmentNo: '02', num: 2, dueDate: '25 აპრ, 2024', amount: '300.00 ₾', remaining: '4,400.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-02' },
-        { id: '3', installmentNo: '03', num: 3, dueDate: '25 მაის, 2024', amount: '300.00 ₾', remaining: '4,100.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-03' },
-        { id: '4', installmentNo: '04', num: 4, dueDate: '25 ივნ, 2024', amount: '300.00 ₾', remaining: '3,800.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-04' },
-        { id: '5', installmentNo: '05', num: 5, dueDate: '25 ივლ, 2024', amount: '300.00 ₾', remaining: '3,500.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-05' },
-        { id: '6', installmentNo: '06', num: 6, dueDate: '25 აგვ, 2024', amount: '300.00 ₾', remaining: '3,200.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-06' },
-        { id: '7', installmentNo: '07', num: 7, dueDate: '25 სექ, 2024', amount: '300.00 ₾', remaining: '2,900.00 ₾', isPaid: true, isNextDue: false, receiptNumber: 'REC-8841-07' },
-        { id: '8', installmentNo: '08', num: 8, dueDate: '25 ოქტ, 2024', amount: '300.00 ₾', remaining: '2,600.00 ₾', isPaid: false, isNextDue: true, receiptNumber: null },
-        { id: '9', installmentNo: '09', num: 9, dueDate: '25 ნოე, 2024', amount: '300.00 ₾', remaining: '2,300.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
-        { id: '10', installmentNo: '10', num: 10, dueDate: '25 დეკ, 2024', amount: '300.00 ₾', remaining: '2,000.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
-        { id: '11', installmentNo: '11', num: 11, dueDate: '25 იან, 2025', amount: '300.00 ₾', remaining: '1,700.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
-        { id: '12', installmentNo: '12', num: 12, dueDate: '25 თებ, 2025', amount: '300.00 ₾', remaining: '1,400.00 ₾', isPaid: false, isNextDue: false, receiptNumber: null },
-      ];
+    return {
+      id: inst.id || `inst-${num}`,
+      installmentNo: formattedNo,
+      num,
+      dueDate: dateStr,
+      rawAmount: Math.max(0, amount - paidAmount),
+      amount: `${amount.toFixed(2)} ₾`,
+      remaining: `${runningDebt.toLocaleString('ka-GE')}.00 ₾`,
+      isPaid,
+      isNextDue,
+      receiptNumber: isPaid ? `REC-${caseNumber}-${formattedNo}` : null,
+    };
+  });
 
+  const nextDueInstallment = allInstallments.find((i: any) => !i.isPaid) || null;
   const paidPeriodsCount = allInstallments.filter((i: any) => i.isPaid).length;
   const totalPeriodsCount = allInstallments.length;
 
@@ -667,47 +633,53 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {supportingDocs.map((doc: any) => {
-            const isExcel = doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx');
-            return (
-              <div
-                key={doc.id}
-                className="p-3.5 rounded-xl bg-surface-bg border border-border-subtle hover:border-primary/40 transition-all flex flex-col justify-between gap-3 shadow-2xs group"
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
-                    isExcel 
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                      : 'bg-rose-50 text-rose-700 border-rose-200'
-                  }`}>
-                    <span className="material-symbols-outlined text-[20px]">
-                      {isExcel ? 'table_view' : 'description'}
-                    </span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h5 className="text-body-sm font-semibold text-text-primary truncate" title={doc.title}>
-                      {doc.title}
-                    </h5>
-                    <p className="text-[11px] text-text-muted font-data-mono-md mt-0.5">
-                      {doc.fileName} • {doc.fileSize}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleOpenSupportingDoc(doc)}
-                  className="w-full py-1.5 px-3 rounded-lg border border-border-subtle hover:border-primary hover:bg-white text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+        {supportingDocs.length === 0 ? (
+          <div className="p-4 rounded-xl bg-surface-bg border border-dashed border-border-subtle text-center text-body-sm text-text-muted">
+            ამ მოთხოვნაზე დამადასტურებელი დოკუმენტები ჯერ არ არის ატვირთული.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {supportingDocs.map((doc: any) => {
+              const isExcel = doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx');
+              return (
+                <div
+                  key={doc.id}
+                  className="p-3.5 rounded-xl bg-surface-bg border border-border-subtle hover:border-primary/40 transition-all flex flex-col justify-between gap-3 shadow-2xs group"
                 >
-                  <span className="material-symbols-outlined text-[15px]">
-                    {isExcel ? 'download' : 'visibility'}
-                  </span>
-                  <span>{isExcel ? 'Excel ჩამოტვირთვა' : 'დოკუმენტის ნახვა (PDF)'}</span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
+                  <div className="flex items-start gap-3">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border ${
+                      isExcel 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                        : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
+                      <span className="material-symbols-outlined text-[20px]">
+                        {isExcel ? 'table_view' : 'description'}
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h5 className="text-body-sm font-semibold text-text-primary truncate" title={doc.title}>
+                        {doc.title}
+                      </h5>
+                      <p className="text-[11px] text-text-muted font-data-mono-md mt-0.5">
+                        {doc.fileName} • {doc.fileSize}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenSupportingDoc(doc)}
+                    className="w-full py-1.5 px-3 rounded-lg border border-border-subtle hover:border-primary hover:bg-white text-primary text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">
+                      {isExcel ? 'download' : 'visibility'}
+                    </span>
+                    <span>{isExcel ? 'Excel ჩამოტვირთვა' : 'დოკუმენტის ნახვა (PDF)'}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </section>
     {/* ================= 3. საკრედიტო რეიტინგის დიდი ვიზუალური ბარათი (Gauge Card) ================= */}
@@ -887,15 +859,20 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
           <div className="flex items-start justify-between">
             <span className="text-body-sm font-semibold text-primary">მომდევნო შენატანი</span>
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm font-bold bg-amber-100 text-amber-800">
-              დარჩენილია 4 დღე
+              {nextDueInstallment ? `შენატანი #${nextDueInstallment.installmentNo}` : 'დაფარულია'}
             </span>
           </div>
           <div className="my-3">
-            <div className="text-headline-lg font-data-mono-lg font-extrabold text-primary-container">300 <span className="text-body-md font-normal text-text-muted">₾</span></div>
+            <div className="text-headline-lg font-data-mono-lg font-extrabold text-primary-container">
+              {nextDueInstallment ? nextDueInstallment.rawAmount.toFixed(2) : '0.00'}{' '}
+              <span className="text-body-md font-normal text-text-muted">₾</span>
+            </div>
           </div>
           <div className="pt-2 border-t border-blue-100 text-body-sm flex items-center justify-between">
             <span className="text-text-muted">გადახდის ბოლო დღე:</span>
-            <span className="font-data-mono-md font-bold text-text-primary">25 ოქტ, 2024</span>
+            <span className="font-data-mono-md font-bold text-text-primary">
+              {nextDueInstallment ? nextDueInstallment.dueDate : '—'}
+            </span>
           </div>
         </div>
       </div>

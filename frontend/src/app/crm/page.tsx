@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { INITIAL_BLOG_POSTS, blogService, authService, crmBackendService } from '@/services';
+import { blogService, authService, crmBackendService } from '@/services';
 import { BlogPost } from '@/types';
 import { downloadDebtorAccountTurnoverXLSX } from '@/utils/excel';
 
@@ -40,7 +40,7 @@ export default function CrmPage() {
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
   // Blog CMS State
-  const [posts, setPosts] = useState<BlogPost[]>(INITIAL_BLOG_POSTS);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
   const [postTitle, setPostTitle] = useState('');
   const [postCategory, setPostCategory] = useState<'financial_literacy' | 'credit_risks' | 'tax_updates' | 'legal_mediation' | 'news'>('tax_updates');
   const [postExcerpt, setPostExcerpt] = useState('');
@@ -950,72 +950,53 @@ export default function CrmPage() {
 
                     {/* Documents List */}
                     <div className="space-y-2">
-                      {((activeClaim.supportingDocuments && activeClaim.supportingDocuments.length > 0)
-                        ? activeClaim.supportingDocuments
-                        : [
-                            {
-                              id: 'doc-01',
-                              title: `სასაქონლო ზედნადები (RS.GE #${activeClaim.caseNumber})`,
-                              docType: 'RS_WAYBILL',
-                              fileName: `rs_waybill_${activeClaim.caseNumber}.pdf`,
-                              description: 'ოფიციალური სასაქონლო ზედნადები RS.GE დამოწმებით',
-                            },
-                            {
-                              id: 'doc-02',
-                              title: 'საბუღალტრო ბრუნვითი ბარათი (XLSX)',
-                              docType: 'ACCOUNT_TURNOVER',
-                              fileName: `brunviti_barati_${activeClaim.debtorPersonalId}.xlsx`,
-                              description: 'ურთიერთშედარების აქტი და ბრუნვის ამონაწერი Excel-ში',
-                            },
-                            {
-                              id: 'doc-03',
-                              title: `საკრედიტო ხელშეკრულება #${activeClaim.agreementNumber}`,
-                              docType: 'CONTRACT',
-                              fileName: `contract_${activeClaim.agreementNumber}.pdf`,
-                              description: 'კრედიტორთან გაფორმებული ხელშეკრულება',
-                            },
-                          ]
-                      ).map((doc: any, idx: number) => {
-                        const isExcel = doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx') || doc.fileName?.endsWith('.csv');
-                        return (
-                          <div
-                            key={doc.id || idx}
-                            className="flex items-center justify-between p-2.5 rounded-lg border border-border-subtle bg-surface-bg hover:border-slate-300 transition-colors"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                isExcel ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                              }`}>
-                                <span className="material-symbols-outlined text-base">
-                                  {isExcel ? 'table_view' : 'picture_as_pdf'}
-                                </span>
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-xs font-semibold text-text-primary truncate">
-                                  {doc.title}
-                                </p>
-                                <p className="text-[11px] text-text-muted truncate">
-                                  {doc.fileName} • {doc.description || 'დამოწმებული ფაილი'}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenDoc(doc)}
-                              className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 shrink-0 transition-colors cursor-pointer ${
-                                isExcel
-                                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                                  : 'bg-blue-50 text-primary border border-blue-200 hover:bg-blue-100'
-                              }`}
+                      {Array.isArray(activeClaim.supportingDocuments) && activeClaim.supportingDocuments.length > 0 ? (
+                        activeClaim.supportingDocuments.map((doc: any, idx: number) => {
+                          const isExcel = doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx') || doc.fileName?.endsWith('.csv');
+                          return (
+                            <div
+                              key={doc.id || idx}
+                              className="flex items-center justify-between p-2.5 rounded-lg border border-border-subtle bg-surface-bg hover:border-slate-300 transition-colors"
                             >
-                              <span className="material-symbols-outlined text-sm">
-                                {isExcel ? 'download' : 'visibility'}
-                              </span>
-                              <span>{isExcel ? 'XLSX ექსპორტი' : 'დათვალიერება'}</span>
-                            </button>
-                          </div>
-                        );
-                      })}
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                  isExcel ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                                }`}>
+                                  <span className="material-symbols-outlined text-base">
+                                    {isExcel ? 'table_view' : 'picture_as_pdf'}
+                                  </span>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-text-primary truncate">
+                                    {doc.title}
+                                  </p>
+                                  <p className="text-[11px] text-text-muted truncate">
+                                    {doc.fileName} • {doc.description || 'დამოწმებული ფაილი'}
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDoc(doc)}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 shrink-0 transition-colors cursor-pointer ${
+                                  isExcel
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-blue-50 text-primary border border-blue-200 hover:bg-blue-100'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-sm">
+                                  {isExcel ? 'download' : 'visibility'}
+                                </span>
+                                <span>{isExcel ? 'XLSX ექსპორტი' : 'დათვალიერება'}</span>
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-3 rounded-lg border border-dashed border-border-subtle bg-surface-bg text-center text-xs text-text-muted">
+                          დამადასტურებელი დოკუმენტები ამ საქმეზე ატვირთული არ არის.
+                        </div>
+                      )}
 
                       {/* Debtor Uploaded Payment Receipts */}
                       {activeClaim.paymentReceipts && activeClaim.paymentReceipts.length > 0 && (

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, OnModuleInit, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CallDisposition, ClaimStatus, UserRole } from '@prisma/client';
 
@@ -11,15 +11,71 @@ export interface LogCallDto {
 }
 
 @Injectable()
-export class CrmService {
+export class CrmService implements OnModuleInit {
   private readonly logger = new Logger(CrmService.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
+  async onModuleInit() {
+    try {
+      await this.seedInitialBlogPostsIfEmpty();
+    } catch (err) {
+      this.logger.warn(`Blog seed warning: ${(err as Error)?.message}`);
+    }
+  }
+
+  private async seedInitialBlogPostsIfEmpty() {
+    const count = await this.prisma.blogPost.count();
+    if (count > 0) return;
+
+    const initialPosts = [
+      {
+        title: 'საკრედიტო რისკების მართვა და B2B მედიაციის სტანდარტები 2026 წელს',
+        slug: 'credit-risk-management-b2b-mediation-2026',
+        category: 'credit_risks',
+        categoryKa: 'საკრედიტო რისკები',
+        excerpt: 'როგორ ეხმარება დროული ანალიტიკა და წინასასამართლო მედიაცია ბიზნესს ლიკვიდურობის შენარჩუნებასა და ვადაგადაცილებული პორტფელის შემცირებაში.',
+        content: 'კორპორაციულ სექტორში დებიტორული დავალიანების მართვა მოითხოვს სისტემურ მონიტორინგს, RS.GE დოკუმენტაციის სრულ ვერიფიკაციას და სტრუქტურირებულ მოლაპარაკებებს.',
+        authorName: 'გიორგი მალანია',
+        authorRole: 'რისკების მართვის დეპარტამენტი',
+        published: true,
+        tags: ['რისკები', 'მედიაცია', 'B2B'],
+      },
+      {
+        title: 'RS.GE ზედნადებებისა და ბრუნვითი ბარათების სამართლებრივი მნიშვნელობა',
+        slug: 'rs-ge-waybills-legal-significance',
+        category: 'tax_updates',
+        categoryKa: 'საგადასახადო და სამართლებრივი',
+        excerpt: 'რა დოკუმენტაციაა აუცილებელი სასაქონლო დავალიანების დასადასტურებლად და როგორ ამარტივებს ელექტრონული რეესტრი სასამართლო წარმოებას.',
+        content: 'სასაქონლო ზედნადები, მიღება-ჩაბარების აქტი და ბუღალტრული ბრუნვითი უწყისი წარმოადგენს მოთხოვნის ნამდვილობის უმთავრეს მტკიცებულებას.',
+        authorName: 'ნინო გელაშვილი',
+        authorRole: 'იურიდიული სამსახურის უფროსი',
+        published: true,
+        tags: ['RS.GE', 'სამართალი', 'დოკუმენტაცია'],
+      },
+      {
+        title: 'რესტრუქტურიზაცია და ინდივიდუალური გრაფიკები: მოვალესთან შეთანხმების პრაქტიკა',
+        slug: 'restructuring-and-repayment-schedules',
+        category: 'financial_literacy',
+        categoryKa: 'ფინანსური ანალიტიკა',
+        excerpt: 'რატომ არის მოქნილი გადახდის გრაფიკი ორივე მხარისთვის უფრო ეფექტური, ვიდრე ხანგრძლივი სასამართლო დავა.',
+        content: 'ფიზიკურ და იურიდიულ პირებთან შეთანხმებული 12-თვიანი გრაფიკი ზრდის ამოღების მაჩვენებელს და უნარჩუნებს მხარეებს საქმიან რეპუტაციას.',
+        authorName: 'ლევან კვარაცხელია',
+        authorRole: 'უფროსი ფინანსური ანალიტიკოსი',
+        published: true,
+        tags: ['გრაფიკი', 'რესტრუქტურიზაცია', 'ფინანსები'],
+      },
+    ];
+
+    for (const p of initialPosts) {
+      await this.prisma.blogPost.create({ data: p });
+    }
+  }
+
   /**
    * Get queue of claims that need calls / follow-up
    */
-  async getQueue(search?: string, priority?: string) {
+  async getQueue(search?: string, priority?: string, user?: any) {
     const claims = await this.prisma.debtClaim.findMany({
       where: {
         status: {
@@ -58,6 +114,16 @@ export class CrmService {
     });
 
     let formatted = claims.map((c) => this.formatQueueItem(c));
+
+    // Prioritize claims assigned directly to the logged-in operator
+    if (user?.id && user?.role === UserRole.OPERATOR) {
+      formatted.sort((a, b) => {
+        const aAssigned = a.assignedOperatorId === user.id ? 1 : 0;
+        const bAssigned = b.assignedOperatorId === user.id ? 1 : 0;
+        if (aAssigned !== bAssigned) return bAssigned - aAssigned;
+        return b.daysOverdue - a.daysOverdue;
+      });
+    }
 
     if (search && search.trim()) {
       const q = search.toLowerCase().trim();
@@ -274,6 +340,7 @@ export class CrmService {
       status: c.status,
       rating: c.rating,
       riskScore: c.riskScore,
+      assignedOperatorId: c.assignedOperatorId || null,
       lastDisposition: lastLog?.disposition || null,
       lastCallDate: lastLog?.createdAt || null,
       lastCallNotes: lastLog?.notes || null,
@@ -325,37 +392,97 @@ export class CrmService {
         description: e.description,
         createdAt: e.createdAt,
       })),
-      supportingDocuments: c.supportingDocuments || [
-        {
-          id: 'doc-01',
-          title: 'სასაქონლო ზედნადები (RS.GE #WAYBILL-8841)',
-          docType: 'WAYBILL',
-          fileName: 'rs_waybill_8841.pdf',
-          fileUrl: '/documents/rs_waybill_8841.pdf',
-          fileSize: '1.2 MB',
-          description: 'საქონლის მიწოდების ოფიციალური საგადასახადო ზედნადები',
-        },
-        {
-          id: 'doc-02',
-          title: 'ბრუნვითი ბარათი / ანგარიშსწორების რეესტრი',
-          docType: 'ACCOUNT_TURNOVER',
-          fileName: 'brunviti_barati_2024.xlsx',
-          fileUrl: '/documents/brunviti_barati_2024.xlsx',
-          fileSize: '480 KB',
-          description: 'ურთიერთშედარების აქტი და ბრუნვის ამონაწერი Excel ფორმატში',
-        },
-        {
-          id: 'doc-03',
-          title: 'ხელშეკრულება & მიღება-ჩაბარების აქტი #AGR-8841',
-          docType: 'CONTRACT',
-          fileName: 'khelshekruleba_8841.pdf',
-          fileUrl: '/documents/khelshekruleba_8841.pdf',
-          fileSize: '2.4 MB',
-          description: 'მხარეთა შორის გაფორმებული საკრედიტო ხელშეკრულება',
-        },
-      ],
+      supportingDocuments: Array.isArray(c.supportingDocuments) ? c.supportingDocuments : [],
       paymentReceipts: c.paymentReceipts || [],
       schedules: c.schedules || [],
     };
+  }
+
+  /**
+   * Blog CRUD connected directly to Prisma BlogPost in PostgreSQL
+   */
+  async getBlogPosts() {
+    const posts = await this.prisma.blogPost.findMany({
+      where: { published: true },
+      orderBy: { publishedAt: 'desc' },
+    });
+
+    return posts.map((p) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      category: p.categoryKa || p.category,
+      categoryCode: p.category,
+      categoryKa: p.categoryKa,
+      excerpt: p.excerpt,
+      content: p.content,
+      coverImage: p.coverImage || null,
+      author: p.authorName,
+      authorName: p.authorName,
+      authorRole: p.authorRole,
+      date: p.publishedAt.toLocaleDateString('ka-GE'),
+      publishedAt: p.publishedAt.toISOString(),
+      readTime: `${Math.max(2, Math.ceil((p.content?.length || 300) / 500))} წთ`,
+      viewsCount: p.viewsCount,
+      tags: p.tags || [],
+    }));
+  }
+
+  async createBlogPost(dto: any, user?: any) {
+    const title = (dto.title || '').trim();
+    if (!title) {
+      throw new BadRequestException('სტატიის სათაური სავალდებულოა');
+    }
+    const categoryKa = dto.categoryKa || dto.category || 'ფინანსური ანალიტიკა';
+    const category = dto.categoryCode || 'financial_literacy';
+    const excerpt = (dto.excerpt || dto.summary || dto.content || title).trim();
+    const content = (dto.content || dto.excerpt || title).trim();
+    const authorName =
+      dto.author || dto.authorName || user?.staffProfile?.fullName || user?.email || 'Debitinfo.GE რედაქცია';
+    const authorRole = dto.authorRole || 'საკრედიტო ანალიტიკოსი';
+    const slug = `post-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+    const created = await this.prisma.blogPost.create({
+      data: {
+        title,
+        slug,
+        category,
+        categoryKa,
+        excerpt,
+        content,
+        coverImage: dto.coverImage || null,
+        authorId: user?.id || null,
+        authorName,
+        authorRole,
+        published: true,
+        tags: Array.isArray(dto.tags) ? dto.tags : [categoryKa],
+      },
+    });
+
+    return {
+      id: created.id,
+      title: created.title,
+      slug: created.slug,
+      category: created.categoryKa,
+      categoryKa: created.categoryKa,
+      excerpt: created.excerpt,
+      content: created.content,
+      author: created.authorName,
+      authorName: created.authorName,
+      authorRole: created.authorRole,
+      date: created.publishedAt.toLocaleDateString('ka-GE'),
+      publishedAt: created.publishedAt.toISOString(),
+      readTime: `${Math.max(2, Math.ceil((created.content?.length || 300) / 500))} წთ`,
+      tags: created.tags,
+    };
+  }
+
+  async deleteBlogPost(id: string) {
+    const existing = await this.prisma.blogPost.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('ბლოგის სტატია ვერ მოიძებნა');
+    }
+    await this.prisma.blogPost.delete({ where: { id } });
+    return { success: true, id };
   }
 }

@@ -3,11 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import OpsPage from './ops/page';
-import { authService, AuthUser } from '@/services';
+import { authService, AuthUser, blogService } from '@/services';
+import { BlogPost } from '@/types';
 
 export default function LandingPage() {
   const [isOps, setIsOps] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [blogCategoryFilter, setBlogCategoryFilter] = useState<string>('ALL');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -28,6 +31,12 @@ export default function LandingPage() {
     }
     authService.getMe().then((fresh) => {
       if (fresh) setCurrentUser(fresh);
+    }).catch(() => {});
+
+    blogService.getPosts().then((posts) => {
+      if (Array.isArray(posts)) {
+        setBlogPosts(posts);
+      }
     }).catch(() => {});
   }, []);
 
@@ -530,101 +539,76 @@ export default function LandingPage() {
           </div>
           {/* Filter tags */}
           <div className="flex flex-wrap items-center gap-2">
-            <button className="px-3.5 py-1.5 rounded-full bg-primary-container text-on-primary text-label-md font-label-md font-medium">ყველა</button>
-            <button className="px-3.5 py-1.5 rounded-full bg-surface-bg hover:bg-border-subtle text-text-muted text-label-md font-label-md transition-colors">საკრედიტო განათლება</button>
-            <button className="px-3.5 py-1.5 rounded-full bg-surface-bg hover:bg-border-subtle text-text-muted text-label-md font-label-md transition-colors">საგადასახადო სიახლეები</button>
-            <button className="px-3.5 py-1.5 rounded-full bg-surface-bg hover:bg-border-subtle text-text-muted text-label-md font-label-md transition-colors">ტრენინგები</button>
+            {[
+              { code: 'ALL', label: 'ყველა' },
+              { code: 'credit_risks', label: 'საკრედიტო რისკები' },
+              { code: 'tax_updates', label: 'საგადასახადო სიახლეები' },
+              { code: 'legal_mediation', label: 'სამართლებრივი მედიაცია' },
+            ].map((cat) => (
+              <button
+                key={cat.code}
+                type="button"
+                onClick={() => setBlogCategoryFilter(cat.code)}
+                className={`px-3.5 py-1.5 rounded-full text-label-md font-label-md transition-colors cursor-pointer ${
+                  blogCategoryFilter === cat.code
+                    ? 'bg-primary-container text-on-primary font-medium'
+                    : 'bg-surface-bg hover:bg-border-subtle text-text-muted'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
           </div>
         </div>
-        {/* 3 Rich Blog Cards Grid */}
+        {/* Dynamic Blog Cards Grid from PostgreSQL */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Article 1 */}
-          <article className="bg-surface-bg rounded-xl border border-border-subtle overflow-hidden flex flex-col group hover:shadow-md transition-all">
-            <div className="h-48 overflow-hidden relative bg-border-subtle">
-              <img className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Modern corporate financial dashboard interface displayed on high-resolution monitor in bright modern office space, showcasing blue credit score graphs, clear data cards, clean high-key ambient lighting, fintech analytic workspace." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBw042bPozb2YVyuya7uTw8Lmi2bSCThH_jd528e71cjyInSKZ4O1zHPoaSJMVQSd7dsc6ikN_RRbEHzW6KY3jTaGL1rbs-FPCTBGhkLv_AFK4hPYPL6Tyq78hC1eMtKttJmoYatDNFf0iuqf8jCb5Z_bR4DyesXc1HW3NQwIkfKituVQw1RUHewUhlCSlbRCBzOw4TSkvbKZ6SBP0qfFfGkwbSPUPq7z6uCac5ZjBePpjt9ByegpaCYw" />
-              <span className="absolute top-3 left-3 px-2.5 py-1 rounded bg-surface-card/90 backdrop-blur-xs text-primary-container text-label-sm font-label-sm font-semibold border border-border-subtle">
-                საკრედიტო განათლება
-              </span>
-            </div>
-            <div className="p-6 flex flex-col justify-between flex-grow">
-              <div>
-                <div className="flex items-center gap-2 text-text-muted text-body-sm font-body-sm mb-2">
-                  <span className="material-symbols-outlined text-xs">calendar_today</span>
-                  <span>12 ოქტომბერი, 2024</span>
-                  <span>•</span>
-                  <span>5 წთ საკითხავი</span>
-                </div>
-                <h3 className="text-headline-sm font-headline-sm text-text-primary group-hover:text-primary-container transition-colors line-clamp-2 mb-3">
-                  როგორ ავიმაღლოთ საკრედიტო რეიტინგი და შევამციროთ დავალიანების რისკები
-                </h3>
-                <p className="text-body-md font-body-md text-text-muted line-clamp-3 mb-4">
-                  პრაქტიკული რჩევები ბიზნესისთვის და ფიზიკური პირებისთვის: როგორ მოვახდინოთ დავალიანებების რესტრუქტურიზაცია და თავიდან ავირიდოთ უარყოფითი ჩანაწერები.
-                </p>
-              </div>
-              <a className="inline-flex items-center gap-1.5 text-primary-container font-label-md text-label-md group-hover:gap-2 transition-all" href="#">
-                სრულად წაკითხვა
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </a>
-            </div>
-          </article>
-          {/* Article 2 */}
-          <article className="bg-surface-bg rounded-xl border border-border-subtle overflow-hidden flex flex-col group hover:shadow-md transition-all">
-            <div className="h-48 overflow-hidden relative bg-border-subtle">
-              <img className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Georgian business taxation and legal office setting with modern tablets displaying Revenue Service portal data charts, clean minimalist architecture with crisp white desks and subtle blue lighting reflections." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnaGcbiKn09T6ykq6X8vg6fXaOCYJTMlssZSf-8vlI1-jlOtEI3k7XoYlmGA2Q_G9BaH6I2gU4UjwXGqmlp5v70dcLU5fexnGJjyCvm_Eu8BVtz85eM1Hw9iJn6L8byCLiw_WwfbMnWwueMZY5hdQZaJPuY_2ICu69MKsNJYQo0DUDmTv0XQBdoHFMraDt1_jKBQk4x1-fkda0BeMffQmCocd7IFI_3C9xQlcL4A-RAL1v8OFW3e6m3Q" />
-              <span className="absolute top-3 left-3 px-2.5 py-1 rounded bg-surface-card/90 backdrop-blur-xs text-primary-container text-label-sm font-label-sm font-semibold border border-border-subtle">
-                საგადასახადო სიახლეები
-              </span>
-            </div>
-            <div className="p-6 flex flex-col justify-between flex-grow">
-              <div>
-                <div className="flex items-center gap-2 text-text-muted text-body-sm font-body-sm mb-2">
-                  <span className="material-symbols-outlined text-xs">calendar_today</span>
-                  <span>8 ოქტომბერი, 2024</span>
-                  <span>•</span>
-                  <span>7 წთ საკითხავი</span>
-                </div>
-                <h3 className="text-headline-sm font-headline-sm text-text-primary group-hover:text-primary-container transition-colors line-clamp-2 mb-3">
-                  საგადასახადო კანონმდებლობის ცვლილებები და RS.GE-ს ახალი მოთხოვნები ბიზნესისთვის
-                </h3>
-                <p className="text-body-md font-body-md text-text-muted line-clamp-3 mb-4">
-                  რა იცვლება ელექტრონულ დეკლარირებასა და დებიტორული დავალიანებების საგადასახადო აღრიცხვაში 2024 წლის ბოლოდან.
-                </p>
-              </div>
-              <a className="inline-flex items-center gap-1.5 text-primary-container font-label-md text-label-md group-hover:gap-2 transition-all" href="#">
-                სრულად წაკითხვა
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </a>
-            </div>
-          </article>
-          {/* Article 3 */}
-          <article className="bg-surface-bg rounded-xl border border-border-subtle overflow-hidden flex flex-col group hover:shadow-md transition-all">
-            <div className="h-48 overflow-hidden relative bg-border-subtle">
-              <img className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" data-alt="Professional financial workshop conference room with attendees reviewing risk analysis slides on widescreen projection, sleek corporate ambiance, bright natural daylight streaming through large commercial windows." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsfF_HtUJWABH7ijPdNma_cUGWSGd_-eiaWVV_8DG1rYy-DkGhSil9iAiMqD0Nl295kX1HfYXv8T0KTfua0NxMMy7MKltGhC9FI-RvVVsBD30o4RLVPvLoTodpZw3udxCz9uM5frMGq04rArS2Dwyn76sJZRraU95ytIrLYAANZGIirqp48zkxNxGGQCae-4RADyopFMA49lOvj_EvtoeO8MM5wuZ8rlnu54XL55yqMNEOyG1FqJ9J8Q" />
-              <span className="absolute top-3 left-3 px-2.5 py-1 rounded bg-surface-card/90 backdrop-blur-xs text-primary-container text-label-sm font-label-sm font-semibold border border-border-subtle">
-                ტრენინგები
-              </span>
-            </div>
-            <div className="p-6 flex flex-col justify-between flex-grow">
-              <div>
-                <div className="flex items-center gap-2 text-text-muted text-body-sm font-body-sm mb-2">
-                  <span className="material-symbols-outlined text-xs">calendar_today</span>
-                  <span>1 ოქტომბერი, 2024</span>
-                  <span>•</span>
-                  <span className="text-accent-mint font-semibold">რეგისტრაცია ღიაა</span>
-                </div>
-                <h3 className="text-headline-sm font-headline-sm text-text-primary group-hover:text-primary-container transition-colors line-clamp-2 mb-3">
-                  პრაქტიკული ვორქშოპი: დებიტორული დავალიანებების ეფექტური მართვა და პრევენცია
-                </h3>
-                <p className="text-body-md font-body-md text-text-muted line-clamp-3 mb-4">
-                  ინტერაქტიული ონლაინ სესია მთავარ ბუღალტრებთან და იურისტებთან ერთად. გაეცანით დავალიანების ამოღების სამართლებრივ მექანიზმებს.
-                </p>
-              </div>
-              <a className="inline-flex items-center gap-1.5 text-primary-container font-label-md text-label-md group-hover:gap-2 transition-all" href="#">
-                სრულად წაკითხვა
-                <span className="material-symbols-outlined text-sm">arrow_forward</span>
-              </a>
-            </div>
-          </article>
+          {blogPosts
+            .filter((p) => blogCategoryFilter === 'ALL' || p.category === blogCategoryFilter)
+            .map((post, idx) => {
+              const fallbackImages = [
+                'https://lh3.googleusercontent.com/aida-public/AB6AXuBw042bPozb2YVyuya7uTw8Lmi2bSCThH_jd528e71cjyInSKZ4O1zHPoaSJMVQSd7dsc6ikN_RRbEHzW6KY3jTaGL1rbs-FPCTBGhkLv_AFK4hPYPL6Tyq78hC1eMtKttJmoYatDNFf0iuqf8jCb5Z_bR4DyesXc1HW3NQwIkfKituVQw1RUHewUhlCSlbRCBzOw4TSkvbKZ6SBP0qfFfGkwbSPUPq7z6uCac5ZjBePpjt9ByegpaCYw',
+                'https://lh3.googleusercontent.com/aida-public/AB6AXuBnaGcbiKn09T6ykq6X8vg6fXaOCYJTMlssZSf-8vlI1-jlOtEI3k7XoYlmGA2Q_G9BaH6I2gU4UjwXGqmlp5v70dcLU5fexnGJjyCvm_Eu8BVtz85eM1Hw9iJn6L8byCLiw_WwfbMnWwueMZY5hdQZaJPuY_2ICu69MKsNJYQo0DUDmTv0XQBdoHFMraDt1_jKBQk4x1-fkda0BeMffQmCocd7IFI_3C9xQlcL4A-RAL1v8OFW3e6m3Q',
+                'https://lh3.googleusercontent.com/aida-public/AB6AXuAsfF_HtUJWABH7ijPdNma_cUGWSGd_-eiaWVV_8DG1rYy-DkGhSil9iAiMqD0Nl295kX1HfYXv8T0KTfua0NxMMy7MKltGhC9FI-RvVVsBD30o4RLVPvLoTodpZw3udxCz9uM5frMGq04rArS2Dwyn76sJZRraU95ytIrLYAANZGIirqp48zkxNxGGQCae-4RADyopFMA49lOvj_EvtoeO8MM5wuZ8rlnu54XL55yqMNEOyG1FqJ9J8Q',
+              ];
+              const coverImg = post.coverImage || fallbackImages[idx % fallbackImages.length];
+              return (
+                <article
+                  key={post.id}
+                  className="bg-surface-bg rounded-xl border border-border-subtle overflow-hidden flex flex-col group hover:shadow-md transition-all"
+                >
+                  <div className="h-48 overflow-hidden relative bg-border-subtle">
+                    <img
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      alt={post.title}
+                      src={coverImg}
+                    />
+                    <span className="absolute top-3 left-3 px-2.5 py-1 rounded bg-surface-card/90 backdrop-blur-xs text-primary-container text-label-sm font-label-sm font-semibold border border-border-subtle">
+                      {post.categoryKa || 'სიახლეები'}
+                    </span>
+                  </div>
+                  <div className="p-6 flex flex-col justify-between flex-grow">
+                    <div>
+                      <div className="flex items-center gap-2 text-text-muted text-body-sm font-body-sm mb-2">
+                        <span className="material-symbols-outlined text-xs">calendar_today</span>
+                        <span>{post.publishedAt}</span>
+                        <span>•</span>
+                        <span>{post.authorName}</span>
+                      </div>
+                      <h3 className="text-headline-sm font-headline-sm text-text-primary group-hover:text-primary-container transition-colors line-clamp-2 mb-3">
+                        {post.title}
+                      </h3>
+                      <p className="text-body-md font-body-md text-text-muted line-clamp-3 mb-4">
+                        {post.excerpt || post.content}
+                      </p>
+                    </div>
+                    <a className="inline-flex items-center gap-1.5 text-primary-container font-label-md text-label-md group-hover:gap-2 transition-all" href="#blog">
+                      სრულად წაკითხვა
+                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                    </a>
+                  </div>
+                </article>
+              );
+            })}
         </div>
         {/* View All Action Button */}
         <div className="text-center mt-12">
