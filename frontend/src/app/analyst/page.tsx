@@ -632,6 +632,15 @@ export default function AnalystPage() {
         analystBackendService.getPendingDebtors(),
       ]);
 
+      if (
+        (dRes.status === 'rejected' && String(dRes.reason).includes('401')) ||
+        (cRes.status === 'rejected' && String(cRes.reason).includes('401'))
+      ) {
+        authService.clearSession();
+        window.location.href = '/login?expired=true';
+        return;
+      }
+
       const d = dRes.status === 'fulfilled' ? dRes.value : [];
       const c = cRes.status === 'fulfilled' ? cRes.value : [];
       const staff = staffRes.status === 'fulfilled' ? staffRes.value : [];
@@ -731,7 +740,7 @@ export default function AnalystPage() {
   useEffect(() => {
     const u = authService.getCurrentUser();
     if (!u) {
-      router.replace('/ops?redirect=/analyst');
+      router.replace('/login?expired=true');
       return;
     }
     if (u.role !== 'ANALYST' && u.role !== 'ADMIN') {
@@ -781,6 +790,13 @@ export default function AnalystPage() {
   const handleRegisterCreditorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errs: { [key: string]: string } = {};
+
+    if (creditorDebtorsList.length === 0) {
+      setCreditorFormErrors({
+        submit: 'კრედიტორის რეგისტრაციისთვის მინიმუმ ერთი დებიტორის დამატება სავალდებულოა (კრედიტორი დებიტორის გარეშე ვერ იარსებებს).',
+      });
+      return;
+    }
 
     if (creditorEntityType === 'PHYSICAL') {
       const cleanPhysPin = physPersonalId.trim().replace(/\D/g, '');
@@ -957,12 +973,11 @@ export default function AnalystPage() {
   }
 
   return (
-    <div className="bg-surface-bg text-text-primary min-h-screen antialiased flex flex-col font-body-md select-none selection:bg-primary-container selection:text-white" suppressHydrationWarning>
-<div>
+    <div className="flex-1 flex flex-col min-h-screen w-full justify-between bg-surface-bg text-text-primary antialiased font-body-md select-none selection:bg-primary-container selection:text-white" suppressHydrationWarning>
   {/* ========================================================================= */}
   {/* 1. TOP NAVIGATION BAR / OPERATIONS HEADER */}
   {/* ========================================================================= */}
-  <header className="w-full bg-surface-card border-b border-border-subtle sticky top-0 z-40 shadow-sm">
+  <header className="w-full bg-surface-card border-b border-border-subtle sticky top-0 z-40 shadow-sm shrink-0">
     <div className="w-full px-4 lg:px-6 flex items-center justify-between h-16">
       {/* Brand & Operations Subtitle */}
       <div className="flex items-center gap-4">
@@ -1276,7 +1291,7 @@ export default function AnalystPage() {
           },
           {
             code: 'FIELD_OFFICER',
-            label: 'საველე ვიზიტორი / კურიერი',
+            label: 'ვიზიტორი',
             subtitle: 'ადგილზე ვიზიტი & ოქმის შედგენა',
             icon: 'directions_car',
             color: 'amber',
@@ -4627,7 +4642,7 @@ export default function AnalystPage() {
   {/* ========================================================================= */}
   {/* SHARED FOOTER COMPONENT */}
   {/* ========================================================================= */}
-  <footer className="w-full bg-surface-card border-t border-border-subtle mt-auto">
+  <footer className="w-full bg-surface-card border-t border-border-subtle mt-auto shrink-0">
     <div className="w-full px-4 lg:px-6 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <div className="flex items-center">
@@ -4648,8 +4663,6 @@ export default function AnalystPage() {
       </nav>
     </div>
   </footer>
-</div>
-
     </div>
   );
 }

@@ -259,7 +259,7 @@ export default function HrPage() {
                 <div className="mt-2 text-xs text-text-muted border-t border-border-subtle pt-2">CRM კომუნიკაციები</div>
               </div>
               <div className="bg-surface-card border border-border-subtle rounded-xl p-4 shadow-sm">
-                <span className="text-body-sm font-medium text-text-muted">საველე ოფიცრები</span>
+                <span className="text-body-sm font-medium text-text-muted">ვიზიტორები</span>
                 <div className="mt-2 text-headline-lg font-bold text-amber-700">
                   {staffList.filter((s) => s.role === 'FIELD_OFFICER').length}
                 </div>

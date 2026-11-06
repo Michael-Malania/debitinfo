@@ -184,7 +184,7 @@ export class VisitsService {
         claimId: task.claimId,
         authorId: user.id,
         department: 'FIELD_VISIT',
-        authorRoleTitle: `საველე ოფიცერი - ${officerName}`,
+        authorRoleTitle: `ვიზიტორი - ${officerName}`,
         actionType: 'VISIT_COMPLETED',
         description: `საველე ვიზიტის შედეგი: ${statusTitle}. ${dto.notes ? `ოქმი / შენიშვნა: ${dto.notes}` : ''}`,
       },
@@ -267,7 +267,7 @@ export class VisitsService {
         department: 'FIELD_VISIT',
         authorRoleTitle: `დისპეტჩერი - ${user.staffProfile?.fullName || user.email}`,
         actionType: 'HANDOFF_ANALYST',
-        description: `საველე ვიზიტის დავალება გაიცა ოფიცერზე. მისამართი: ${task.addressSnapshot}`,
+        description: `ვიზიტის დავალება გაიცა ვიზიტორზე. მისამართი: ${task.addressSnapshot}`,
       },
     });
 

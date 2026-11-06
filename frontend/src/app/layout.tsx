@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ka" className="scroll-smooth" suppressHydrationWarning>
+    <html lang="ka" className="h-full scroll-smooth" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -27,7 +27,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen flex flex-col bg-surface-bg text-text-primary antialiased" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col bg-surface-bg text-text-primary antialiased" suppressHydrationWarning>
         <ImpersonationBanner />
         <PortalSwitcher />
         <div className="flex-1 flex flex-col" suppressHydrationWarning>{children}</div>

@@ -492,7 +492,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     fullName: 'გიორგი ჩხიკვაძე',
     email: 'g.chkhikvadze@debitinfo.ge',
     role: 'field_officer',
-    roleKa: 'საველე ოფიცერი',
+    roleKa: 'ვიზიტორი',
     department: 'საველე მონიტორინგი',
     status: 'active',
     assignedCasesCount: 34,

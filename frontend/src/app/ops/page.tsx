@@ -543,9 +543,9 @@ export default function OpsPage() {
                   type="button"
                   onClick={() => handleQuickFill('visitor')}
                   className="px-2 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 font-semibold hover:bg-teal-100 transition shadow-2xs text-[11px] text-center"
-                  title="საველე ოფიცერი — ვიზიტები & ინსპექცია"
+                  title="ვიზიტორი — ვიზიტები & ინსპექცია"
                 >
-                  📍 საველე ოფიცერი
+                  📍 ვიზიტორი
                 </button>
               </div>
             </div>

@@ -336,7 +336,7 @@ export class AnalystService {
 
     const userMap = new Map(matchedUsers.map((u) => [u.personalId, u]));
 
-    return await Promise.all(
+    const enriched = await Promise.all(
       creditors.map(async (c) => {
         const matched = userMap.get(c.personalId);
         const debtorsCount = await this.prisma.stagedRegistryItem.count({
@@ -427,6 +427,9 @@ export class AnalystService {
         };
       })
     );
+
+    // Business rule: A Creditor cannot exist without at least 1 linked Debtor (debtorsCount > 0)
+    return enriched.filter((c) => c.debtorsCount > 0);
   }
 
   /**
@@ -479,7 +482,7 @@ export class AnalystService {
       const roleTitles: Record<string, string> = {
         OPERATOR: 'კრედიტ-მენეჯერი / ოპერატორი',
         LEGAL: 'იურისტი',
-        FIELD_OFFICER: 'საველე ვიზიტორი / კურიერი',
+        FIELD_OFFICER: 'ვიზიტორი',
         ACCOUNTANT: 'ბუღალტერი',
         ANALYST: 'რისკ-ანალიტიკოსი',
         ADMIN: 'ადმინისტრატორი',
@@ -869,6 +872,14 @@ export class AnalystService {
     debtors?: any[];
     supportingDocuments?: any[];
   }) {
+    // Strict Business Rule: Creditor and Debtor cannot exist independently.
+    // A Creditor MUST have at least 1 debtor attached during registration.
+    if (!dto.debtors || !Array.isArray(dto.debtors) || dto.debtors.length === 0) {
+      throw new BadRequestException(
+        'კრედიტორის რეგისტრაციისთვის მინიმუმ ერთი დებიტორის მიბმა სავალდებულოა (კრედიტორი დებიტორის გარეშე ვერ იარსებებს)',
+      );
+    }
+
     const isPhysical = dto.entityType === 'PHYSICAL';
 
     if (isPhysical) {

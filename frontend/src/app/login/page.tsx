@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/services';
@@ -12,6 +12,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('expired=true')) {
+      setSessionExpiredNotice(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -200,6 +207,13 @@ export default function LoginPage() {
 
           {/* Login Form */}
           <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
+            {sessionExpiredNotice && !error && (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-body-sm flex items-start gap-2 animate-in fade-in">
+                <span className="material-symbols-outlined text-base mt-0.5 text-amber-600">warning</span>
+                <span>თქვენი ავტორიზაციის ვადა ამოიწურა. გთხოვთ ხელახლა გაიაროთ ავტორიზაცია სისტემაში შესასვლელად.</span>
+              </div>
+            )}
+
             {error && (
               <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-body-sm flex items-start gap-2 animate-in fade-in">
                 <span className="material-symbols-outlined text-base mt-0.5">error</span>

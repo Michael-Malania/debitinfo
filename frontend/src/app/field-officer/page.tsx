@@ -146,7 +146,7 @@ export default function FieldOfficerPage() {
               </a>
               <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-border-subtle">
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-label-sm font-label-sm bg-primary/10 text-primary uppercase tracking-wider font-semibold">
-                  საველე ოფიცერი
+                  ვიზიტორი
                 </span>
                 <span className="text-text-muted text-body-sm font-body-sm">Field Officer Console</span>
               </div>

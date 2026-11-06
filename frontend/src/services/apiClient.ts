@@ -44,6 +44,19 @@ export async function apiFetch<T>(endpoint: string, options?: RequestInit): Prom
     const json = await res.json().catch(() => null);
 
     if (!res.ok) {
+      if (res.status === 401) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('debitinfo_access_token');
+          localStorage.removeItem('debitinfo_refresh_token');
+          localStorage.removeItem('debitinfo_user');
+          document.cookie = 'access_token=; path=/; max-age=0; SameSite=Lax';
+          document.cookie = 'user_role=; path=/; max-age=0; SameSite=Lax';
+          const pathname = window.location.pathname;
+          if (!pathname.includes('/login') && !pathname.includes('/register')) {
+            window.location.href = '/login?expired=true';
+          }
+        }
+      }
       const message = json?.message || json?.error || `API error: ${res.status} ${res.statusText}`;
       throw new Error(Array.isArray(message) ? message.join(', ') : message);
     }
