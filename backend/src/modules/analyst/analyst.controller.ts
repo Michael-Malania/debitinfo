@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { AnalystService, DispatchTaskDto } from './analyst.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -63,6 +63,11 @@ export class AnalystController {
   @Post('verify-debtor/:id')
   async verifyDebtor(@Param('id') id: string) {
     return await this.analystService.verifyDebtor(id);
+  }
+
+  @Post('upload-document')
+  async uploadDocument(@Req() req: any, @Body() body: any) {
+    return await this.analystService.saveUploadedDocument(req, body);
   }
 
   @Post('register-creditor')

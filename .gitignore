@@ -22,6 +22,12 @@ __pycache__/
 *.pyc
 focus.py
 
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/documents/
+!backend/uploads/documents/.gitkeep
+
 # Environment files
 .env
 .env*.local

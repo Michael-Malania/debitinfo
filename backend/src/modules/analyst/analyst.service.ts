@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import * as path from 'path';
+import * as fs from 'fs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from '../auth/auth.service';
 import { UserRole, EntityType, ClaimStatus, ScheduleType, VisitStatus, LegalCaseStatus, CallDisposition } from '@prisma/client';
@@ -583,14 +585,109 @@ export class AnalystService {
   }
 
   /**
-   * Register a new Creditor directly from Analyst Console
+   * Save uploaded document physically to disk in backend/uploads/documents/
+   */
+  async saveUploadedDocument(req: any, body?: any) {
+    const uploadsDir = path.resolve(process.cwd(), 'backend', 'uploads', 'documents');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    let originalName = 'document.pdf';
+    let mimeType = 'application/pdf';
+    let buffer: Buffer;
+
+    if (typeof req.isMultipart === 'function' && req.isMultipart()) {
+      const part = await req.file();
+      if (!part) {
+        throw new BadRequestException('ფაილი არ არის მოწოდებული');
+      }
+      originalName = part.filename;
+      mimeType = part.mimetype;
+      buffer = await part.toBuffer();
+    } else if (body && (body.fileData || body.base64)) {
+      originalName = body.fileName || body.name || 'document.pdf';
+      mimeType = body.fileType || body.mimeType || 'application/octet-stream';
+      const rawData = body.fileData || body.base64;
+      const base64Str = rawData.includes(';base64,') ? rawData.split(';base64,')[1] : rawData;
+      buffer = Buffer.from(base64Str, 'base64');
+    } else {
+      throw new BadRequestException('ფაილის მონაცემები არ არის მოწოდებული');
+    }
+
+    const ext = path.extname(originalName) || '.bin';
+    const safeBase = path.basename(originalName, ext).replace(/[^a-zA-Z0-9_\u10A0-\u10FF-]/g, '_');
+    const uniqueFileName = `${Date.now()}_${safeBase}${ext}`;
+    const filePath = path.join(uploadsDir, uniqueFileName);
+
+    await fs.promises.writeFile(filePath, buffer);
+
+    const sizeBytes = buffer.length;
+    let sizeFormatted = `${sizeBytes} B`;
+    if (sizeBytes >= 1024 * 1024) {
+      sizeFormatted = `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+    } else if (sizeBytes >= 1024) {
+      sizeFormatted = `${(sizeBytes / 1024).toFixed(1)} KB`;
+    }
+
+    let category = body?.category || 'სასაქონლო ზედნადები (RS.GE)';
+    const lowerName = originalName.toLowerCase();
+    if (lowerName.includes('barat') || lowerName.includes('ბარათ') || lowerName.includes('უწყის') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+      category = 'ბრუნვითი უწყისი / ბარათი';
+    } else if (lowerName.includes('khelsh') || lowerName.includes('ხელშეკრ') || lowerName.includes('contract')) {
+      category = 'ხელშეკრულება';
+    } else if (lowerName.includes('akt') || lowerName.includes('აქტ') || lowerName.includes('act')) {
+      category = 'მიღება-ჩაბარების აქტი';
+    } else if (lowerName.includes('bank') || lowerName.includes('საბანკო') || lowerName.includes('amonatseri')) {
+      category = 'საბანკო ამონაწერი';
+    }
+
+    let docType = 'WAYBILL';
+    if (category.includes('ბრუნვით')) docType = 'ACCOUNT_TURNOVER';
+    else if (category.includes('ხელშეკრ')) docType = 'CONTRACT';
+    else if (category.includes('აქტ')) docType = 'ACCEPTANCE_ACT';
+    else if (category.includes('საბანკო')) docType = 'BANK_STATEMENT';
+
+    return {
+      id: `doc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: originalName,
+      fileName: originalName,
+      fileUrl: `/uploads/documents/${uniqueFileName}`,
+      storagePath: filePath,
+      sizeBytes,
+      sizeFormatted,
+      category,
+      docType,
+      fileType: mimeType,
+      uploadedAt: new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' }),
+    };
+  }
+
+  /**
+   * Register a new Creditor directly from Analyst Console (Supports both Legal and Physical entities)
    */
   async registerCreditor(dto: {
-    taxId: string;
-    companyName: string;
+    entityType?: 'LEGAL' | 'PHYSICAL';
+    taxId?: string;
+    personalId?: string;
+    individualPin?: string;
+    companyName?: string;
+    firstName?: string;
+    lastName?: string;
+    actualAddress?: string;
+    legalAddress?: string;
     category?: string;
     agreementNumber?: string;
     iban?: string;
+    representativeFirstName?: string;
+    representativeLastName?: string;
+    representativePhone?: string;
+    representativeEmail?: string;
+    repFirstName?: string;
+    repLastName?: string;
+    repPhone?: string;
+    repEmail?: string;
+    representativeRole?: string;
     representativeName?: string;
     phone?: string;
     email?: string;
@@ -598,110 +695,285 @@ export class AnalystService {
     debtors?: any[];
     supportingDocuments?: any[];
   }) {
-    if (!dto.taxId || !dto.companyName) {
-      throw new BadRequestException('საიდენტიფიკაციო კოდი და კომპანიის დასახელება სავალდებულოა');
-    }
+    const isPhysical = dto.entityType === 'PHYSICAL';
 
-    const cleanTaxId = dto.taxId.trim();
-    if (!/^\d{9}$/.test(cleanTaxId)) {
-      throw new BadRequestException('საიდენტიფიკაციო კოდი (ს/კ) უნდა შედგებოდეს ზუსტად 9 ციფრისგან');
-    }
+    if (isPhysical) {
+      // Physical Person Creditor Registration
+      const cleanPin = (dto.personalId || '').trim();
+      if (!cleanPin) {
+        throw new BadRequestException('პირადი ნომერი (პ/ნ 11 ნიშნა) სავალდებულოა');
+      }
+      if (!/^\d{11}$/.test(cleanPin)) {
+        throw new BadRequestException('პირადი ნომერი უნდა შედგებოდეს ზუსტად 11 ციფრისგან');
+      }
 
-    // 1. Check or create User
-    let user = await this.prisma.user.findFirst({
-      where: { personalId: cleanTaxId },
-    });
+      const firstName = (dto.firstName || '').trim();
+      const lastName = (dto.lastName || '').trim();
+      const fullName = firstName && lastName ? `${firstName} ${lastName}` : (dto.companyName || 'ფიზიკური პირი').trim();
+      if (!firstName && !lastName && !dto.companyName) {
+        throw new BadRequestException('სახელი და გვარი სავალდებულოა');
+      }
 
-    if (user) {
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: {
-          role: UserRole.CREDITOR,
-          phone: dto.phone || user.phone,
-        },
+      const phone = (dto.phone || '+995 599 00 00 00').trim();
+      const email = (dto.email || `creditor_phys_${cleanPin}@debitinfo.ge`).trim();
+      const actualAddress = (dto.actualAddress || 'ქ. თბილისი').trim();
+
+      // Check or create User
+      let user = await this.prisma.user.findFirst({
+        where: { personalId: cleanPin },
       });
-    } else {
-      const generatedEmail = dto.email || `creditor_${cleanTaxId}@debitinfo.ge`;
-      user = await this.prisma.user.create({
-        data: {
-          email: generatedEmail,
-          passwordHash: '$2b$10$w4r0y.fSj2L9YQG/Wf0z2e9Bq8Gg4D0m3o1q9V5b3r7T4w6Y1u2S.',
-          personalId: cleanTaxId,
-          entityType: EntityType.LEGAL,
-          role: UserRole.CREDITOR,
-          phone: dto.phone || '+995 599 00 00 00',
-          isRsVerified: true,
-          status: 'ACTIVE',
-          companyProfile: {
-            create: {
-              companyName: dto.companyName,
-              legalForm: 'შპს',
-              taxId: cleanTaxId,
-              legalAddress: 'საქართველო',
-              actualAddress: 'საქართველო',
-              isVatPayer: true,
-              directorName: dto.representativeName || 'დირექტორი',
-              directorLastName: '',
-              directorPin: cleanTaxId,
-              directorPhone: dto.phone || '+995 599 00 00 00',
-              directorEmail: dto.email || generatedEmail,
-            },
-          },
-        },
-      });
-    }
 
-    // 2. Create or update StagedRegistryItem for Creditor
-    const existingStaged = await this.prisma.stagedRegistryItem.findFirst({
-      where: { personalId: cleanTaxId, type: 'CREDITOR' },
-    });
-
-    const stagedCreditor = existingStaged
-      ? await this.prisma.stagedRegistryItem.update({
-          where: { id: existingStaged.id },
+      if (user) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
           data: {
-            name: dto.companyName,
-            companyOrPerson: dto.representativeName || 'დირექტორი',
-            agreementNumber: dto.agreementNumber || `PORT-${cleanTaxId.slice(-4)}`,
-            amount: Number(dto.initialAmount) || 0,
-            status: 'VERIFIED',
-            supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
-          },
-        })
-      : await this.prisma.stagedRegistryItem.create({
-          data: {
-            type: 'CREDITOR',
-            personalId: cleanTaxId,
-            name: dto.companyName,
-            companyOrPerson: dto.representativeName || 'დირექტორი',
-            agreementNumber: dto.agreementNumber || `PORT-${cleanTaxId.slice(-4)}`,
-            amount: Number(dto.initialAmount) || 0,
-            creditorName: null,
-            overdueDays: 0,
-            status: 'VERIFIED',
-            sourceFile: 'analyst_registration',
-            supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
+            role: UserRole.CREDITOR,
+            phone: phone || user.phone,
           },
         });
-
-    // 3. Attach debtors if provided
-    let attachedDebtorsCount = 0;
-    if (dto.debtors && Array.isArray(dto.debtors) && dto.debtors.length > 0) {
-      for (const d of dto.debtors) {
-        await this.createDebtorItemForCreditor(cleanTaxId, dto.companyName, d);
-        attachedDebtorsCount++;
+      } else {
+        user = await this.prisma.user.create({
+          data: {
+            email,
+            passwordHash: '$2b$10$w4r0y.fSj2L9YQG/Wf0z2e9Bq8Gg4D0m3o1q9V5b3r7T4w6Y1u2S.',
+            personalId: cleanPin,
+            entityType: EntityType.PHYSICAL,
+            role: UserRole.CREDITOR,
+            phone,
+            isRsVerified: true,
+            status: 'ACTIVE',
+            individualProfile: {
+              create: {
+                firstName: firstName || fullName,
+                lastName: lastName || '',
+                actualAddress,
+                legalAddress: actualAddress,
+              },
+            },
+          },
+        });
       }
-    }
 
-    return {
-      success: true,
-      message: `კრედიტორი „${dto.companyName}“ წარმატებით დარეგისტრირდა!${
-        attachedDebtorsCount > 0 ? ` მიება ${attachedDebtorsCount} დებიტორი.` : ''
-      }`,
-      creditor: stagedCreditor,
-      user,
-      attachedDebtorsCount,
-    };
+      // Create or update StagedRegistryItem
+      const existingStaged = await this.prisma.stagedRegistryItem.findFirst({
+        where: { personalId: cleanPin, type: 'CREDITOR' },
+      });
+
+      const stagedCreditor = existingStaged
+        ? await this.prisma.stagedRegistryItem.update({
+            where: { id: existingStaged.id },
+            data: {
+              name: fullName,
+              entityType: 'PHYSICAL',
+              companyOrPerson: 'ფიზიკური პირი',
+              firstName,
+              lastName,
+              phone,
+              email,
+              actualAddress,
+              legalAddress: actualAddress,
+              agreementNumber: dto.agreementNumber || `PORT-PHYS-${cleanPin.slice(-4)}`,
+              amount: Number(dto.initialAmount) || 0,
+              status: 'VERIFIED',
+              supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
+            },
+          })
+        : await this.prisma.stagedRegistryItem.create({
+            data: {
+              type: 'CREDITOR',
+              entityType: 'PHYSICAL',
+              personalId: cleanPin,
+              name: fullName,
+              firstName,
+              lastName,
+              phone,
+              email,
+              actualAddress,
+              legalAddress: actualAddress,
+              companyOrPerson: 'ფიზიკური პირი',
+              agreementNumber: dto.agreementNumber || `PORT-PHYS-${cleanPin.slice(-4)}`,
+              amount: Number(dto.initialAmount) || 0,
+              creditorName: null,
+              overdueDays: 0,
+              status: 'VERIFIED',
+              sourceFile: 'analyst_registration_physical',
+              supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
+            },
+          });
+
+      // Attach debtors if provided
+      let attachedDebtorsCount = 0;
+      if (dto.debtors && Array.isArray(dto.debtors) && dto.debtors.length > 0) {
+        for (const d of dto.debtors) {
+          await this.createDebtorItemForCreditor(cleanPin, fullName, d);
+          attachedDebtorsCount++;
+        }
+      }
+
+      return {
+        success: true,
+        message: `ფიზიკური პირი კრედიტორი „${fullName}“ წარმატებით დარეგისტრირდა!${
+          attachedDebtorsCount > 0 ? ` მიება ${attachedDebtorsCount} დებიტორი.` : ''
+        }`,
+        creditor: stagedCreditor,
+        user,
+        attachedDebtorsCount,
+      };
+    } else {
+      // Legal Entity Creditor Registration
+      const cleanTaxId = (dto.taxId || '').trim();
+      if (!cleanTaxId) {
+        throw new BadRequestException('საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) სავალდებულოა');
+      }
+      if (!/^\d{9}$/.test(cleanTaxId)) {
+        throw new BadRequestException('საიდენტიფიკაციო კოდი (ს/კ) უნდა შედგებოდეს ზუსტად 9 ციფრისგან');
+      }
+
+      if (!dto.companyName || !dto.companyName.trim()) {
+        throw new BadRequestException('კრედიტორი კომპანიის დასახელება სავალდებულოა');
+      }
+
+      // Check category: if "ინდივიდუალური მეწარმე", personalId is mandatory
+      const category = dto.category || 'შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)';
+      const isSoleProprietor = category.includes('ინდივიდუალური მეწარმე');
+      const individualPin = (dto.individualPin || dto.personalId || '').trim();
+      if (isSoleProprietor) {
+        if (!individualPin) {
+          throw new BadRequestException('ინდივიდუალური მეწარმისთვის პირადი ნომრის (11 ნიშნა) შეტანა სავალდებულოა');
+        }
+        if (!/^\d{11}$/.test(individualPin)) {
+          throw new BadRequestException('ინდივიდუალური მეწარმის პირადი ნომერი უნდა შედგებოდეს ზუსტად 11 ციფრისგან');
+        }
+      }
+
+      // Mandatory Authorized Representative (უფლებამოსილი წარმომადგენელი)
+      const repFirstName = (dto.representativeFirstName || dto.repFirstName || '').trim();
+      const repLastName = (dto.representativeLastName || dto.repLastName || '').trim();
+      const repPhone = (dto.representativePhone || dto.repPhone || dto.phone || '').trim();
+      const repEmail = (dto.representativeEmail || dto.repEmail || dto.email || '').trim();
+      const repRole = 'დირექტორი';
+
+      if (!repFirstName || !repLastName || !repPhone || !repEmail) {
+        throw new BadRequestException('უფლებამოსილი წარმომადგენლის სახელი, გვარი, ტელეფონის ნომერი და ემაილი სავალდებულოა');
+      }
+
+      const repFullName = `${repFirstName} ${repLastName}`.trim();
+      const cleanCompanyName = dto.companyName.trim();
+      const generatedEmail = repEmail || `creditor_${cleanTaxId}@debitinfo.ge`;
+
+      // Check or create User
+      let user = await this.prisma.user.findFirst({
+        where: { personalId: cleanTaxId },
+      });
+
+      if (user) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            role: UserRole.CREDITOR,
+            phone: repPhone || user.phone,
+          },
+        });
+      } else {
+        user = await this.prisma.user.create({
+          data: {
+            email: generatedEmail,
+            passwordHash: '$2b$10$w4r0y.fSj2L9YQG/Wf0z2e9Bq8Gg4D0m3o1q9V5b3r7T4w6Y1u2S.',
+            personalId: cleanTaxId,
+            entityType: EntityType.LEGAL,
+            role: UserRole.CREDITOR,
+            phone: repPhone,
+            isRsVerified: true,
+            status: 'ACTIVE',
+            companyProfile: {
+              create: {
+                companyName: cleanCompanyName,
+                legalForm: category,
+                taxId: cleanTaxId,
+                legalAddress: dto.legalAddress || 'საქართველო',
+                actualAddress: dto.actualAddress || dto.legalAddress || 'საქართველო',
+                isVatPayer: true,
+                directorName: repFirstName,
+                directorLastName: repLastName,
+                directorPin: individualPin || cleanTaxId,
+                directorPhone: repPhone,
+                directorEmail: repEmail,
+              },
+            },
+          },
+        });
+      }
+
+      // Create or update StagedRegistryItem
+      const existingStaged = await this.prisma.stagedRegistryItem.findFirst({
+        where: { personalId: cleanTaxId, type: 'CREDITOR' },
+      });
+
+      const stagedCreditor = existingStaged
+        ? await this.prisma.stagedRegistryItem.update({
+            where: { id: existingStaged.id },
+            data: {
+              name: cleanCompanyName,
+              entityType: 'LEGAL',
+              taxId: cleanTaxId,
+              companyOrPerson: `${repFullName} (${repRole})`,
+              phone: repPhone,
+              email: repEmail,
+              directorFirstName: repFirstName,
+              directorLastName: repLastName,
+              directorPhone: repPhone,
+              directorEmail: repEmail,
+              directorPersonalId: individualPin || undefined,
+              agreementNumber: dto.agreementNumber || `PORT-${cleanTaxId.slice(-4)}`,
+              amount: Number(dto.initialAmount) || 0,
+              status: 'VERIFIED',
+              supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
+            },
+          })
+        : await this.prisma.stagedRegistryItem.create({
+            data: {
+              type: 'CREDITOR',
+              entityType: 'LEGAL',
+              personalId: cleanTaxId,
+              taxId: cleanTaxId,
+              name: cleanCompanyName,
+              companyOrPerson: `${repFullName} (${repRole})`,
+              phone: repPhone,
+              email: repEmail,
+              directorFirstName: repFirstName,
+              directorLastName: repLastName,
+              directorPhone: repPhone,
+              directorEmail: repEmail,
+              directorPersonalId: individualPin || undefined,
+              agreementNumber: dto.agreementNumber || `PORT-${cleanTaxId.slice(-4)}`,
+              amount: Number(dto.initialAmount) || 0,
+              creditorName: null,
+              overdueDays: 0,
+              status: 'VERIFIED',
+              sourceFile: 'analyst_registration_legal',
+              supportingDocuments: dto.supportingDocuments ? (dto.supportingDocuments as any) : undefined,
+            },
+          });
+
+      // Attach debtors if provided
+      let attachedDebtorsCount = 0;
+      if (dto.debtors && Array.isArray(dto.debtors) && dto.debtors.length > 0) {
+        for (const d of dto.debtors) {
+          await this.createDebtorItemForCreditor(cleanTaxId, cleanCompanyName, d);
+          attachedDebtorsCount++;
+        }
+      }
+
+      return {
+        success: true,
+        message: `კრედიტორი „${cleanCompanyName}“ (${category}) წარმატებით დარეგისტრირდა!${
+          attachedDebtorsCount > 0 ? ` მიება ${attachedDebtorsCount} დებიტორი.` : ''
+        }`,
+        creditor: stagedCreditor,
+        user,
+        attachedDebtorsCount,
+      };
+    }
   }
 
   /**

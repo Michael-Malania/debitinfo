@@ -913,19 +913,25 @@ export const analystBackendService = {
     });
   },
 
-  async registerCreditor(data: {
-    taxId: string;
-    companyName: string;
-    category?: string;
-    agreementNumber?: string;
-    iban?: string;
-    representativeName?: string;
-    phone?: string;
-    email?: string;
-    initialAmount?: number;
-    debtors?: any[];
-    supportingDocuments?: any[];
-  }): Promise<any> {
+  async uploadCreditorDocument(file: File, category?: string): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (category) formData.append('category', category);
+
+    const token = authService.getToken();
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    const res = await fetch(`${baseUrl}/api/v1/analyst/upload-document`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+    const json = await res.json();
+    return json?.data || json;
+  },
+
+  async registerCreditor(data: Record<string, any>): Promise<any> {
     return await apiFetch('/api/v1/analyst/register-creditor', {
       method: 'POST',
       body: JSON.stringify(data),

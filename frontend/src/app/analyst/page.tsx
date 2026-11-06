@@ -249,42 +249,69 @@ export default function AnalystPage() {
   }, [filteredDebtors]);
 
   // Creditor Registration Modal State
-  const [creditorCategory, setCreditorCategory] = useState('კომერციული ორგანიზაცია / B2B');
+  const [creditorEntityType, setCreditorEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
+  const [creditorCategory, setCreditorCategory] = useState('შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)');
   const [creditorTaxId, setCreditorTaxId] = useState('');
   const [creditorCompanyName, setCreditorCompanyName] = useState('');
+  const [creditorIndividualPin, setCreditorIndividualPin] = useState('');
   const [creditorAgreement, setCreditorAgreement] = useState('');
   const [creditorIban, setCreditorIban] = useState('');
-  const [creditorRepresentative, setCreditorRepresentative] = useState('');
-  const [creditorPhone, setCreditorPhone] = useState('');
-  const [creditorEmail, setCreditorEmail] = useState('');
+  const [repFirstName, setRepFirstName] = useState('');
+  const [repLastName, setRepLastName] = useState('');
+  const [repPhone, setRepPhone] = useState('');
+  const [repEmail, setRepEmail] = useState('');
   const [creditorInitialAmount, setCreditorInitialAmount] = useState('');
+
+  // Physical Creditor State
+  const [physPersonalId, setPhysPersonalId] = useState('');
+  const [physFirstName, setPhysFirstName] = useState('');
+  const [physLastName, setPhysLastName] = useState('');
+  const [physActualAddress, setPhysActualAddress] = useState('');
+  const [physPhone, setPhysPhone] = useState('');
+  const [physEmail, setPhysEmail] = useState('');
+  const [physAgreement, setPhysAgreement] = useState('');
+  const [physIban, setPhysIban] = useState('');
+  const [physInitialAmount, setPhysInitialAmount] = useState('');
+
   const [creditorDebtorsList, setCreditorDebtorsList] = useState<DebtorFormData[]>([]);
   const [isAddDebtorForNewCreditorOpen, setIsAddDebtorForNewCreditorOpen] = useState(false);
   const [registeringCreditor, setRegisteringCreditor] = useState(false);
   const [creditorFormErrors, setCreditorFormErrors] = useState<{ [key: string]: string }>({});
 
-  // Creditor Document Attachments State
-  const [attachedDocuments, setAttachedDocuments] = useState<any[]>([
-    {
-      id: 'doc_init_1',
-      name: 'rs_waybill_8841.pdf',
-      sizeFormatted: '1.2 MB',
-      sizeBytes: 1258291,
-      category: 'სასაქონლო ზედნადები (RS.GE)',
-      fileType: 'application/pdf',
-      uploadedAt: '12:40',
-    },
-    {
-      id: 'doc_init_2',
-      name: 'brunviti_barati_2024.xlsx',
-      sizeFormatted: '480 KB',
-      sizeBytes: 491520,
-      category: 'ბრუნვითი უწყისი / ბარათი',
-      fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      uploadedAt: '12:42',
-    },
-  ]);
+  // Creditor Document Attachments State - Starts completely empty!
+  const [attachedDocuments, setAttachedDocuments] = useState<any[]>([]);
   const [isDraggingDocs, setIsDraggingDocs] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [uploadDocError, setUploadDocError] = useState<string | null>(null);
+
+  const resetCreditorRegistrationForm = () => {
+    setCreditorEntityType('LEGAL');
+    setCreditorCategory('შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)');
+    setCreditorTaxId('');
+    setCreditorCompanyName('');
+    setCreditorIndividualPin('');
+    setCreditorAgreement('');
+    setCreditorIban('');
+    setCreditorInitialAmount('');
+    setRepFirstName('');
+    setRepLastName('');
+    setRepPhone('');
+    setRepEmail('');
+    setPhysPersonalId('');
+    setPhysFirstName('');
+    setPhysLastName('');
+    setPhysActualAddress('');
+    setPhysPhone('');
+    setPhysEmail('');
+    setPhysAgreement('');
+    setPhysIban('');
+    setPhysInitialAmount('');
+    setCreditorDebtorsList([]);
+    setAttachedDocuments([]);
+    setCreditorFormErrors({});
+    setIsUploadingDoc(false);
+    setUploadDocError(null);
+  };
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return bytes + ' B';
@@ -292,9 +319,13 @@ export default function AnalystPage() {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
-  const handleDocFilesSelected = (files: FileList | File[]) => {
-    const newDocs: any[] = [];
-    Array.from(files).forEach((file) => {
+  const handleDocFilesSelected = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+    setIsUploadingDoc(true);
+    setUploadDocError(null);
+
+    for (const file of fileArray) {
       let defaultCategory = 'სასაქონლო ზედნადები (RS.GE)';
       const lowerName = file.name.toLowerCase();
       if (lowerName.includes('barat') || lowerName.includes('ბარათ') || lowerName.includes('უწყის') || lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
@@ -307,18 +338,44 @@ export default function AnalystPage() {
         defaultCategory = 'საბანკო ამონაწერი';
       }
 
-      newDocs.push({
-        id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-        name: file.name,
-        sizeFormatted: formatFileSize(file.size),
-        sizeBytes: file.size,
-        category: defaultCategory,
-        fileType: file.type || 'application/octet-stream',
-        uploadedAt: new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' }),
-      });
-    });
-
-    setAttachedDocuments((prev) => [...prev, ...newDocs]);
+      try {
+        const uploaded = await analystBackendService.uploadCreditorDocument(file, defaultCategory);
+        if (uploaded && (uploaded.id || uploaded.fileName || uploaded.fileUrl)) {
+          setAttachedDocuments((prev) => [
+            ...prev,
+            {
+              id: uploaded.id || 'doc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+              name: uploaded.name || file.name,
+              fileName: uploaded.fileName || file.name,
+              fileUrl: uploaded.fileUrl || '',
+              sizeFormatted: uploaded.sizeFormatted || formatFileSize(file.size),
+              sizeBytes: uploaded.sizeBytes || file.size,
+              category: uploaded.category || defaultCategory,
+              fileType: uploaded.fileType || file.type || 'application/octet-stream',
+              uploadedAt: uploaded.uploadedAt || new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' }),
+            },
+          ]);
+        } else {
+          throw new Error('Upload response missing metadata');
+        }
+      } catch (err: any) {
+        console.error('File upload error:', err);
+        // Fallback local document object so user can still proceed if offline
+        setAttachedDocuments((prev) => [
+          ...prev,
+          {
+            id: 'doc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+            name: file.name,
+            sizeFormatted: formatFileSize(file.size),
+            sizeBytes: file.size,
+            category: defaultCategory,
+            fileType: file.type || 'application/octet-stream',
+            uploadedAt: new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' }),
+          },
+        ]);
+      }
+    }
+    setIsUploadingDoc(false);
   };
 
   const handleRemoveDocument = (id: string) => {
@@ -509,63 +566,142 @@ export default function AnalystPage() {
 
   const handleRegisterCreditorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanTaxId = creditorTaxId.trim().replace(/\D/g, '');
     const errs: { [key: string]: string } = {};
 
-    if (!cleanTaxId) {
-      errs.taxId = 'საიდენტიფიკაციო კოდი (ს/კ) სავალდებულოა';
-    } else if (cleanTaxId.length !== 9) {
-      errs.taxId = 'საიდენტიფიკაციო კოდი (ს/კ) უნდა შედგებოდეს ზუსტად 9 ციფრისგან';
-    }
+    if (creditorEntityType === 'PHYSICAL') {
+      const cleanPhysPin = physPersonalId.trim().replace(/\D/g, '');
+      if (!cleanPhysPin) {
+        errs.physPersonalId = 'პირადი ნომერი (11 ნიშნა) სავალდებულოა';
+      } else if (cleanPhysPin.length !== 11) {
+        errs.physPersonalId = 'პირადი ნომერი უნდა შედგებოდეს ზუსტად 11 ციფრისგან';
+      }
 
-    if (!creditorCompanyName.trim()) {
-      errs.companyName = 'კომპანიის დასახელება სავალდებულოა';
-    }
+      if (!physFirstName.trim()) {
+        errs.physFirstName = 'სახელი სავალდებულოა';
+      }
 
-    if (!creditorAgreement.trim()) {
-      errs.agreement = 'ხელშეკრულების საფუძველი & № სავალდებულოა';
-    }
+      if (!physLastName.trim()) {
+        errs.physLastName = 'გვარი სავალდებულოა';
+      }
 
-    setCreditorFormErrors(errs);
-    if (Object.keys(errs).length > 0) return;
+      if (!physActualAddress.trim()) {
+        errs.physActualAddress = 'საცხოვრებელი ადგილი / ფაქტობრივი მისამართი სავალდებულოა';
+      }
 
-    setRegisteringCreditor(true);
-    try {
-      const res = await analystBackendService.registerCreditor({
-        taxId: cleanTaxId,
-        companyName: creditorCompanyName.trim(),
-        category: creditorCategory,
-        agreementNumber: creditorAgreement.trim(),
-        iban: creditorIban.trim(),
-        representativeName: creditorRepresentative.trim(),
-        phone: creditorPhone.trim(),
-        email: creditorEmail.trim(),
-        initialAmount: parseFloat(creditorInitialAmount) || 0,
-        debtors: creditorDebtorsList,
-        supportingDocuments: attachedDocuments,
-      });
+      if (!physPhone.trim()) {
+        errs.physPhone = 'საკონტაქტო ტელეფონი სავალდებულოა';
+      }
 
-      setIsRegistrationOpen(false);
-      setActionSuccessMessage(res?.message || 'კრედიტორი წარმატებით დარეგისტრირდა!');
-      setTimeout(() => setActionSuccessMessage(null), 4000);
+      setCreditorFormErrors(errs);
+      if (Object.keys(errs).length > 0) return;
 
-      // Reset form
-      setCreditorTaxId('');
-      setCreditorCompanyName('');
-      setCreditorAgreement('');
-      setCreditorIban('');
-      setCreditorRepresentative('');
-      setCreditorPhone('');
-      setCreditorEmail('');
-      setCreditorInitialAmount('');
-      setCreditorDebtorsList([]);
-      setAttachedDocuments([]);
+      setRegisteringCreditor(true);
+      try {
+        const res = await analystBackendService.registerCreditor({
+          entityType: 'PHYSICAL',
+          personalId: cleanPhysPin,
+          firstName: physFirstName.trim(),
+          lastName: physLastName.trim(),
+          actualAddress: physActualAddress.trim(),
+          phone: physPhone.trim(),
+          email: physEmail.trim(),
+          agreementNumber: physAgreement.trim() || `AGR-${cleanPhysPin.slice(-4)}`,
+          iban: physIban.trim(),
+          initialAmount: parseFloat(physInitialAmount) || 0,
+          debtors: creditorDebtorsList,
+          supportingDocuments: attachedDocuments,
+        });
 
-      await loadAnalystData();
-    } catch (err: any) {
-      console.error('Creditor registration error:', err);
-    } finally {
-      setRegisteringCreditor(false);
+        setIsRegistrationOpen(false);
+        setActionSuccessMessage(res?.message || 'ფიზიკური პირი კრედიტორი წარმატებით დარეგისტრირდა!');
+        setTimeout(() => setActionSuccessMessage(null), 4000);
+        resetCreditorRegistrationForm();
+        await loadAnalystData();
+      } catch (err: any) {
+        console.error('Physical creditor registration error:', err);
+        setCreditorFormErrors({ submit: err?.message || 'რეგისტრაცია ვერ მოხერხდა' });
+      } finally {
+        setRegisteringCreditor(false);
+      }
+    } else {
+      // LEGAL ENTITY
+      const cleanTaxId = creditorTaxId.trim().replace(/\D/g, '');
+      if (!cleanTaxId) {
+        errs.taxId = 'საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) სავალდებულოა';
+      } else if (cleanTaxId.length !== 9) {
+        errs.taxId = 'საიდენტიფიკაციო კოდი (ს/კ) უნდა შედგებოდეს ზუსტად 9 ციფრისგან';
+      }
+
+      if (!creditorCompanyName.trim()) {
+        errs.companyName = 'კრედიტორი კომპანიის დასახელება სავალდებულოა';
+      }
+
+      if (creditorCategory === 'ინდივიდუალური მეწარმე') {
+        const cleanIndPin = creditorIndividualPin.trim().replace(/\D/g, '');
+        if (!cleanIndPin) {
+          errs.individualPin = 'ინდ. მეწარმის პირადი ნომერი (11 ნიშნა) სავალდებულოა';
+        } else if (cleanIndPin.length !== 11) {
+          errs.individualPin = 'პირადი ნომერი უნდა შედგებოდეს ზუსტად 11 ციფრისგან';
+        }
+      }
+
+      if (!creditorAgreement.trim()) {
+        errs.agreement = 'ხელშეკრულების საფუძველი & № სავალდებულოა';
+      }
+
+      if (!repFirstName.trim()) {
+        errs.repFirstName = 'წარმომადგენლის სახელი სავალდებულოა';
+      }
+
+      if (!repLastName.trim()) {
+        errs.repLastName = 'წარმომადგენლის გვარი სავალდებულოა';
+      }
+
+      if (!repPhone.trim()) {
+        errs.repPhone = 'წარმომადგენლის ტელეფონი სავალდებულოა';
+      }
+
+      if (!repEmail.trim()) {
+        errs.repEmail = 'წარმომადგენლის ელ-ფოსტა სავალდებულოა';
+      }
+
+      setCreditorFormErrors(errs);
+      if (Object.keys(errs).length > 0) return;
+
+      setRegisteringCreditor(true);
+      try {
+        const res = await analystBackendService.registerCreditor({
+          entityType: 'LEGAL',
+          taxId: cleanTaxId,
+          companyName: creditorCompanyName.trim(),
+          category: creditorCategory,
+          individualPin: creditorCategory === 'ინდივიდუალური მეწარმე' ? creditorIndividualPin.trim() : undefined,
+          agreementNumber: creditorAgreement.trim(),
+          iban: creditorIban.trim(),
+          repFirstName: repFirstName.trim(),
+          repLastName: repLastName.trim(),
+          repPhone: repPhone.trim(),
+          repEmail: repEmail.trim(),
+          repRole: 'დირექტორი',
+          representativeName: `${repFirstName.trim()} ${repLastName.trim()}`,
+          phone: repPhone.trim(),
+          email: repEmail.trim(),
+          initialAmount: parseFloat(creditorInitialAmount) || 0,
+          debtors: creditorDebtorsList,
+          supportingDocuments: attachedDocuments,
+        });
+
+        setIsRegistrationOpen(false);
+        setActionSuccessMessage(res?.message || 'კრედიტორი წარმატებით დარეგისტრირდა!');
+        setTimeout(() => setActionSuccessMessage(null), 4000);
+        resetCreditorRegistrationForm();
+        await loadAnalystData();
+      } catch (err: any) {
+        console.error('Creditor registration error:', err);
+        setCreditorFormErrors({ submit: err?.message || 'რეგისტრაცია ვერ მოხერხდა' });
+      } finally {
+        setRegisteringCreditor(false);
+      }
     }
   };
 
@@ -2790,175 +2926,511 @@ export default function AnalystPage() {
               </p>
             </div>
           </div>
-          <button className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => setIsRegistrationOpen(false)} title="დახურვა">
+          <button className="rounded-lg p-1.5 text-text-muted hover:text-text-primary hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => { setIsRegistrationOpen(false); resetCreditorRegistrationForm(); }} title="დახურვა">
             <span className="material-symbols-outlined text-[22px]">close</span>
           </button>
         </div>
         {/* Modal Body Form Area */}
         <div className="p-6 max-h-[calc(85vh-200px)] overflow-y-auto space-y-5">
-          {/* Category */}
-          <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-            <div className="flex items-center gap-3 text-body-sm">
-              <span className="font-semibold text-text-primary text-xs uppercase tracking-wider text-slate-500">
-                კრედიტორის კატეგორია:
-              </span>
-              <select
-                value={creditorCategory}
-                onChange={(e) => setCreditorCategory(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-3 py-1 text-body-sm text-text-primary font-medium focus:outline-none focus:border-primary"
-              >
-                <option value="კომერციული ორგანიზაცია / B2B">კომერციული ორგანიზაცია / B2B</option>
-                <option value="საბანკო ინსტიტუტი">საბანკო ინსტიტუტი</option>
-                <option value="მიკროსაფინანსო ორგანიზაცია">მიკროსაფინანსო ორგანიზაცია</option>
-                <option value="კერძო საინვესტიციო ფონდი">კერძო საინვესტიციო ფონდი</option>
-              </select>
-            </div>
-            <span className="px-2.5 py-1 rounded bg-blue-50 text-primary text-[11px] font-semibold border border-blue-200 hidden md:inline">
-              მოთხოვნის მფლობელი ორგანიზაცია
-            </span>
+          {/* Entity Switcher (Legal vs Physical) */}
+          <div className="flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200 gap-1">
+            <button
+              type="button"
+              onClick={() => setCreditorEntityType('LEGAL')}
+              className={`flex-1 py-2 px-4 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                creditorEntityType === 'LEGAL'
+                  ? 'bg-white text-primary shadow-xs font-bold border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">domain</span>
+              <span>🏢 იურიდიული პირი</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreditorEntityType('PHYSICAL')}
+              className={`flex-1 py-2 px-4 rounded-lg font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                creditorEntityType === 'PHYSICAL'
+                  ? 'bg-white text-emerald-700 shadow-xs font-bold border border-slate-200/80'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[18px]">person</span>
+              <span>👤 ფიზიკური პირი</span>
+            </button>
           </div>
 
-          {/* Form Fields Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-body-sm font-medium text-text-primary">
-                  საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) <span className="text-rating-c">*</span>
-                </label>
-                <span className="text-[11px] font-mono text-slate-400">
-                  {creditorTaxId.length}/9
+          {creditorFormErrors.submit && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-xs text-rose-700">
+              <span className="material-symbols-outlined text-[18px]">error</span>
+              <span>{creditorFormErrors.submit}</span>
+            </div>
+          )}
+
+          {creditorEntityType === 'LEGAL' ? (
+            <>
+              {/* Category */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-border-subtle gap-2">
+                <div className="flex items-center gap-3 text-body-sm flex-wrap">
+                  <span className="font-semibold text-text-primary text-xs uppercase tracking-wider text-slate-500">
+                    კრედიტორის კატეგორია:
+                  </span>
+                  <select
+                    value={creditorCategory}
+                    onChange={(e) => setCreditorCategory(e.target.value)}
+                    className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-body-sm text-text-primary font-medium focus:outline-none focus:border-primary shadow-2xs"
+                  >
+                    <option value="შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)">შეზღუდული პასუხისმგებლობის საზოგადოება (შპს)</option>
+                    <option value="სააქციო საზოგადოება">სააქციო საზოგადოება</option>
+                    <option value="ამხანაგობა">ამხანაგობა</option>
+                    <option value="ა(ა)იპ">ა(ა)იპ</option>
+                    <option value="ინდივიდუალური მეწარმე">ინდივიდუალური მეწარმე</option>
+                  </select>
+                </div>
+                <span className="px-2.5 py-1 rounded bg-blue-50 text-primary text-[11px] font-semibold border border-blue-200 hidden md:inline">
+                  მოთხოვნის მფლობელი ორგანიზაცია
                 </span>
               </div>
-              <input
-                className={`w-full bg-white border ${creditorFormErrors.taxId ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
-                placeholder="მაგ: 204876221"
-                type="text"
-                maxLength={9}
-                value={creditorTaxId}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, '').slice(0, 9);
-                  setCreditorTaxId(val);
-                  if (creditorFormErrors.taxId) {
-                    setCreditorFormErrors({ ...creditorFormErrors, taxId: '' });
-                  }
-                }}
-              />
-              {creditorFormErrors.taxId && (
-                <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.taxId}</p>
-              )}
-            </div>
 
-            <div>
-              <label className="block text-body-sm font-medium text-text-primary mb-1">
-                კრედიტორი კომპანიის დასახელება <span className="text-rating-c">*</span>
-              </label>
-              <input
-                className={`w-full bg-white border ${creditorFormErrors.companyName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
-                placeholder="მაგ: შპს „ალფა ფინანსი“"
-                type="text"
-                value={creditorCompanyName}
-                onChange={(e) => {
-                  setCreditorCompanyName(e.target.value);
-                  if (creditorFormErrors.companyName) {
-                    setCreditorFormErrors({ ...creditorFormErrors, companyName: '' });
-                  }
-                }}
-              />
-              {creditorFormErrors.companyName && (
-                <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.companyName}</p>
-              )}
-            </div>
+              {/* Form Fields Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-body-sm font-medium text-text-primary">
+                      საიდენტიფიკაციო კოდი (ს/კ 9 ნიშნა) <span className="text-rating-c">*</span>
+                    </label>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {creditorTaxId.length}/9
+                    </span>
+                  </div>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.taxId ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="მაგ: 204876221"
+                    type="text"
+                    maxLength={9}
+                    value={creditorTaxId}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 9);
+                      setCreditorTaxId(val);
+                      if (creditorFormErrors.taxId) {
+                        setCreditorFormErrors({ ...creditorFormErrors, taxId: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.taxId && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.taxId}</p>
+                  )}
+                </div>
 
-            <div>
-              <label className="block text-body-sm font-medium text-text-primary mb-1">
-                ხელშეკრულების საფუძველი &amp; № <span className="text-rating-c">*</span>
-              </label>
-              <input
-                className={`w-full bg-white border ${creditorFormErrors.agreement ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
-                placeholder="მაგ: ხელშ. #B2B-2024/09"
-                type="text"
-                value={creditorAgreement}
-                onChange={(e) => {
-                  setCreditorAgreement(e.target.value);
-                  if (creditorFormErrors.agreement) {
-                    setCreditorFormErrors({ ...creditorFormErrors, agreement: '' });
-                  }
-                }}
-              />
-              {creditorFormErrors.agreement && (
-                <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.agreement}</p>
-              )}
-            </div>
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    კრედიტორი კომპანიის დასახელება <span className="text-rating-c">*</span>
+                  </label>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.companyName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="მაგ: შპს „ალფა ფინანსი“"
+                    type="text"
+                    value={creditorCompanyName}
+                    onChange={(e) => {
+                      setCreditorCompanyName(e.target.value);
+                      if (creditorFormErrors.companyName) {
+                        setCreditorFormErrors({ ...creditorFormErrors, companyName: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.companyName && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.companyName}</p>
+                  )}
+                </div>
 
-            <div>
-              <label className="block text-body-sm font-medium text-text-primary mb-1">
-                უფლებამოსილი წარმომადგენელი
-              </label>
-              <input
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
-                placeholder="სახელი, გვარი, პოზიცია"
-                type="text"
-                value={creditorRepresentative}
-                onChange={(e) => setCreditorRepresentative(e.target.value)}
-              />
-            </div>
+                {/* Conditional Sole Proprietor Personal ID */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className={`text-body-sm font-medium flex items-center gap-1.5 ${creditorCategory === 'ინდივიდუალური მეწარმე' ? 'text-text-primary' : 'text-slate-400'}`}>
+                      <span>ინდ. მეწარმის პირადი ნომერი (11 ნიშნა)</span>
+                      {creditorCategory === 'ინდივიდუალური მეწარმე' ? (
+                        <span className="text-rating-c">*</span>
+                      ) : (
+                        <span className="material-symbols-outlined text-[14px] text-slate-400" title="დაბლოკილია - იხსნება მხოლოდ „ინდივიდუალური მეწარმე“-ს არჩევისას">lock</span>
+                      )}
+                    </label>
+                    {creditorCategory === 'ინდივიდუალური მეწარმე' && (
+                      <span className="text-[11px] font-mono text-slate-400">
+                        {creditorIndividualPin.length}/11
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    disabled={creditorCategory !== 'ინდივიდუალური მეწარმე'}
+                    className={`w-full rounded-lg px-3 py-2 text-body-md font-mono transition-all ${
+                      creditorCategory === 'ინდივიდუალური მეწარმე'
+                        ? `bg-white border ${creditorFormErrors.individualPin ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary`
+                        : 'bg-slate-100/80 border border-slate-200 text-slate-400 cursor-not-allowed select-none placeholder:text-slate-400'
+                    }`}
+                    placeholder={creditorCategory === 'ინდივიდუალური მეწარმე' ? 'მაგ: 01019012345' : 'ხელმისაწვდომია მხოლოდ „ინდ. მეწარმე“-სთვის'}
+                    type="text"
+                    maxLength={11}
+                    value={creditorCategory === 'ინდივიდუალური მეწარმე' ? creditorIndividualPin : ''}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 11);
+                      setCreditorIndividualPin(val);
+                      if (creditorFormErrors.individualPin) {
+                        setCreditorFormErrors({ ...creditorFormErrors, individualPin: '' });
+                      }
+                    }}
+                  />
+                  {creditorCategory === 'ინდივიდუალური მეწარმე' && creditorFormErrors.individualPin && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.individualPin}</p>
+                  )}
+                </div>
 
-            <div>
-              <label className="block text-body-sm font-medium text-text-primary mb-1">
-                საკონტაქტო ტელეფონი
-              </label>
-              <input
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
-                placeholder="+995 599 000000"
-                type="tel"
-                value={creditorPhone}
-                onChange={(e) => setCreditorPhone(e.target.value)}
-              />
-            </div>
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    ხელშეკრულების საფუძველი &amp; № <span className="text-rating-c">*</span>
+                  </label>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.agreement ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="მაგ: ხელშ. #B2B-2024/09"
+                    type="text"
+                    value={creditorAgreement}
+                    onChange={(e) => {
+                      setCreditorAgreement(e.target.value);
+                      if (creditorFormErrors.agreement) {
+                        setCreditorFormErrors({ ...creditorFormErrors, agreement: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.agreement && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.agreement}</p>
+                  )}
+                </div>
 
-            <div>
-              <label className="block text-body-sm font-medium text-text-primary mb-1">
-                ელ-ფოსტა
-              </label>
-              <input
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
-                placeholder="info@creditor.ge"
-                type="email"
-                value={creditorEmail}
-                onChange={(e) => setCreditorEmail(e.target.value)}
-              />
-            </div>
+                {/* Dedicated Authorized Representative Card */}
+                <div className="md:col-span-2 border border-blue-200/80 rounded-xl p-4 bg-gradient-to-br from-blue-50/40 via-white to-slate-50/40 shadow-2xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-blue-100 gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                        <span className="material-symbols-outlined text-[18px]">badge</span>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                          უფლებამოსილი წარმომადგენელი
+                        </span>
+                        <p className="text-[11px] text-slate-500">
+                          სავალდებულო მონაცემები კომპანიის ხელმძღვანელ პირზე
+                        </p>
+                      </div>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold border border-emerald-200 self-start sm:self-auto flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[13px] text-emerald-600">verified_user</span>
+                      ავტომატური სტატუსი: დირექტორი
+                    </span>
+                  </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-body-sm font-medium text-text-primary mb-1">
-                საბანკო რეკვიზიტები (IBAN ანგარიშსწორებისთვის)
-              </label>
-              <input
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
-                placeholder="GE00TB0000000000000000"
-                type="text"
-                value={creditorIban}
-                onChange={(e) => setCreditorIban(e.target.value.toUpperCase())}
-              />
-            </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-body-sm font-medium text-text-primary mb-1">
+                        სახელი <span className="text-rating-c">*</span>
+                      </label>
+                      <input
+                        className={`w-full bg-white border ${creditorFormErrors.repFirstName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                        placeholder="მაგ: გიორგი"
+                        type="text"
+                        value={repFirstName}
+                        onChange={(e) => {
+                          setRepFirstName(e.target.value);
+                          if (creditorFormErrors.repFirstName) {
+                            setCreditorFormErrors({ ...creditorFormErrors, repFirstName: '' });
+                          }
+                        }}
+                      />
+                      {creditorFormErrors.repFirstName && (
+                        <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.repFirstName}</p>
+                      )}
+                    </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-body-sm font-medium text-text-primary mb-1">
-                საწყისი მოთხოვნის დავალიანებული მოცულობა (GEL)
-              </label>
-              <div className="relative flex items-center">
-                <input
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
-                  placeholder="0.00"
-                  type="number"
-                  step="0.01"
-                  value={creditorInitialAmount}
-                  onChange={(e) => setCreditorInitialAmount(e.target.value)}
-                />
-                <span className="absolute right-3 font-mono text-text-muted text-body-sm font-semibold">₾</span>
+                    <div>
+                      <label className="block text-body-sm font-medium text-text-primary mb-1">
+                        გვარი <span className="text-rating-c">*</span>
+                      </label>
+                      <input
+                        className={`w-full bg-white border ${creditorFormErrors.repLastName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                        placeholder="მაგ: ბერიძე"
+                        type="text"
+                        value={repLastName}
+                        onChange={(e) => {
+                          setRepLastName(e.target.value);
+                          if (creditorFormErrors.repLastName) {
+                            setCreditorFormErrors({ ...creditorFormErrors, repLastName: '' });
+                          }
+                        }}
+                      />
+                      {creditorFormErrors.repLastName && (
+                        <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.repLastName}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-body-sm font-medium text-text-primary mb-1">
+                        ტელეფონის ნომერი <span className="text-rating-c">*</span>
+                      </label>
+                      <input
+                        className={`w-full bg-white border ${creditorFormErrors.repPhone ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                        placeholder="+995 599 000000"
+                        type="tel"
+                        value={repPhone}
+                        onChange={(e) => {
+                          setRepPhone(e.target.value);
+                          if (creditorFormErrors.repPhone) {
+                            setCreditorFormErrors({ ...creditorFormErrors, repPhone: '' });
+                          }
+                        }}
+                      />
+                      {creditorFormErrors.repPhone && (
+                        <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.repPhone}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-body-sm font-medium text-text-primary mb-1">
+                        ელფოსტა <span className="text-rating-c">*</span>
+                      </label>
+                      <input
+                        className={`w-full bg-white border ${creditorFormErrors.repEmail ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                        placeholder="director@mail.ge"
+                        type="email"
+                        value={repEmail}
+                        onChange={(e) => {
+                          setRepEmail(e.target.value);
+                          if (creditorFormErrors.repEmail) {
+                            setCreditorFormErrors({ ...creditorFormErrors, repEmail: '' });
+                          }
+                        }}
+                      />
+                      {creditorFormErrors.repEmail && (
+                        <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.repEmail}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    საბანკო რეკვიზიტები (IBAN ანგარიშსწორებისთვის)
+                  </label>
+                  <input
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
+                    placeholder="GE00TB0000000000000000"
+                    type="text"
+                    value={creditorIban}
+                    onChange={(e) => setCreditorIban(e.target.value.toUpperCase())}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    საწყისი მოთხოვნის დავალიანებული მოცულობა (GEL)
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
+                      placeholder="0.00"
+                      type="number"
+                      step="0.01"
+                      value={creditorInitialAmount}
+                      onChange={(e) => setCreditorInitialAmount(e.target.value)}
+                    />
+                    <span className="absolute right-3 font-mono text-text-muted text-body-sm font-semibold">₾</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* PHYSICAL PERSON CREDITOR */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="font-semibold text-text-primary text-xs uppercase tracking-wider text-slate-700">
+                    ფიზიკური პირის მონაცემები (საჯარო რეესტრის სტანდარტი)
+                  </span>
+                </div>
+                <span className="px-2.5 py-1 rounded bg-emerald-50 text-emerald-700 text-[11px] font-semibold border border-emerald-200">
+                  ფიზიკური პირი კრედიტორი
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-body-sm font-medium text-text-primary">
+                      პირადი ნომერი (11 ნიშნა) <span className="text-rating-c">*</span>
+                    </label>
+                    <span className="text-[11px] font-mono text-slate-400">
+                      {physPersonalId.length}/11
+                    </span>
+                  </div>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.physPersonalId ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="01019012345"
+                    type="text"
+                    maxLength={11}
+                    value={physPersonalId}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 11);
+                      setPhysPersonalId(val);
+                      if (creditorFormErrors.physPersonalId) {
+                        setCreditorFormErrors({ ...creditorFormErrors, physPersonalId: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.physPersonalId && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.physPersonalId}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    საცხოვრებელი ადგილი / ფაქტობრივი მისამართი <span className="text-rating-c">*</span>
+                  </label>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.physActualAddress ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="ქ. თბილისი, პეკინის გამზ. 15"
+                    type="text"
+                    value={physActualAddress}
+                    onChange={(e) => {
+                      setPhysActualAddress(e.target.value);
+                      if (creditorFormErrors.physActualAddress) {
+                        setCreditorFormErrors({ ...creditorFormErrors, physActualAddress: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.physActualAddress && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.physActualAddress}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    სახელი <span className="text-rating-c">*</span>
+                  </label>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.physFirstName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="გიორგი"
+                    type="text"
+                    value={physFirstName}
+                    onChange={(e) => {
+                      setPhysFirstName(e.target.value);
+                      if (creditorFormErrors.physFirstName) {
+                        setCreditorFormErrors({ ...creditorFormErrors, physFirstName: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.physFirstName && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.physFirstName}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    გვარი <span className="text-rating-c">*</span>
+                  </label>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.physLastName ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="ბერიძე"
+                    type="text"
+                    value={physLastName}
+                    onChange={(e) => {
+                      setPhysLastName(e.target.value);
+                      if (creditorFormErrors.physLastName) {
+                        setCreditorFormErrors({ ...creditorFormErrors, physLastName: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.physLastName && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.physLastName}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    საკონტაქტო ტელეფონი <span className="text-rating-c">*</span>
+                  </label>
+                  <input
+                    className={`w-full bg-white border ${creditorFormErrors.physPhone ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-300'} rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all`}
+                    placeholder="+995 599 000000"
+                    type="tel"
+                    value={physPhone}
+                    onChange={(e) => {
+                      setPhysPhone(e.target.value);
+                      if (creditorFormErrors.physPhone) {
+                        setCreditorFormErrors({ ...creditorFormErrors, physPhone: '' });
+                      }
+                    }}
+                  />
+                  {creditorFormErrors.physPhone && (
+                    <p className="text-xs text-rose-600 mt-1">{creditorFormErrors.physPhone}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    ელ-ფოსტა
+                  </label>
+                  <input
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
+                    placeholder="giorgi.beridze@mail.ge"
+                    type="email"
+                    value={physEmail}
+                    onChange={(e) => setPhysEmail(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    ხელშეკრულების საფუძველი &amp; №
+                  </label>
+                  <input
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
+                    placeholder="მაგ: ხელშ. #B2B-2024/09"
+                    type="text"
+                    value={physAgreement}
+                    onChange={(e) => setPhysAgreement(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    საბანკო რეკვიზიტები (IBAN ანგარიშსწორებისთვის)
+                  </label>
+                  <input
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
+                    placeholder="GE00TB0000000000000000"
+                    type="text"
+                    value={physIban}
+                    onChange={(e) => setPhysIban(e.target.value.toUpperCase())}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-body-sm font-medium text-text-primary mb-1">
+                    საწყისი მოთხოვნის დავალიანებული მოცულობა (GEL)
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-body-md font-mono text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary transition-all"
+                      placeholder="0.00"
+                      type="number"
+                      step="0.01"
+                      value={physInitialAmount}
+                      onChange={(e) => setPhysInitialAmount(e.target.value)}
+                    />
+                    <span className="absolute right-3 font-mono text-text-muted text-body-sm font-semibold">₾</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Attached Debtors Section */}
           <div className="border border-border-subtle rounded-xl overflow-hidden bg-slate-50/50">
@@ -3105,6 +3577,21 @@ export default function AnalystPage() {
               </label>
             </div>
 
+            {/* Document Uploading Progress Indicator */}
+            {isUploadingDoc && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2.5 text-xs text-blue-700 animate-pulse">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                <span>მიმდინარეობს დოკუმენტ(ებ)ის ატვირთვა და შენახვა სერვერზე...</span>
+              </div>
+            )}
+
+            {uploadDocError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-xs text-rose-700">
+                <span className="material-symbols-outlined text-[18px]">error</span>
+                <span>{uploadDocError}</span>
+              </div>
+            )}
+
             {/* List of Attached Documents */}
             {attachedDocuments.length > 0 ? (
               <div className="space-y-2 pt-1">
@@ -3129,11 +3616,11 @@ export default function AnalystPage() {
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
                         <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                          {doc.name.toLowerCase().endsWith('.pdf') ? (
+                          {doc.name?.toLowerCase().endsWith('.pdf') ? (
                             <span className="material-symbols-outlined text-rose-600 text-[20px]">picture_as_pdf</span>
-                          ) : doc.name.toLowerCase().endsWith('.xlsx') || doc.name.toLowerCase().endsWith('.xls') || doc.name.toLowerCase().endsWith('.csv') ? (
+                          ) : doc.name?.toLowerCase().endsWith('.xlsx') || doc.name?.toLowerCase().endsWith('.xls') || doc.name?.toLowerCase().endsWith('.csv') ? (
                             <span className="material-symbols-outlined text-emerald-600 text-[20px]">table_view</span>
-                          ) : doc.name.toLowerCase().endsWith('.docx') || doc.name.toLowerCase().endsWith('.doc') ? (
+                          ) : doc.name?.toLowerCase().endsWith('.docx') || doc.name?.toLowerCase().endsWith('.doc') ? (
                             <span className="material-symbols-outlined text-blue-600 text-[20px]">article</span>
                           ) : (
                             <span className="material-symbols-outlined text-indigo-600 text-[20px]">description</span>
@@ -3187,7 +3674,7 @@ export default function AnalystPage() {
               <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-lg flex items-center gap-2 text-xs text-amber-800">
                 <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">info</span>
                 <span>
-                  გთხოვთ მიაბათ მინიმუმ ერთი დამადასტურებელი დოკუმენტი (RS.GE ზედნადები ან ბრუნვითი ბარათი) მოთხოვნის ვალიდურობისთვის.
+                  ჯერ დოკუმენტები არ არის ატვირთული. გთხოვთ ატვირთოთ სასაქონლო ზედნადები (RS.GE), ბრუნვითი ბარათი ან ხელშეკრულება.
                 </span>
               </div>
             )}
@@ -3222,14 +3709,14 @@ export default function AnalystPage() {
           <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
             <button
               className="px-4 py-2 rounded-lg border border-border-subtle bg-white text-slate-700 hover:bg-slate-100 text-body-md font-medium transition-colors cursor-pointer"
-              onClick={() => setIsRegistrationOpen(false)}
+              onClick={() => { setIsRegistrationOpen(false); resetCreditorRegistrationForm(); }}
               type="button"
             >
               გაუქმება
             </button>
             <button
               className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-body-md shadow-sm shadow-emerald-600/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
-              disabled={registeringCreditor}
+              disabled={registeringCreditor || isUploadingDoc}
               onClick={handleRegisterCreditorSubmit}
               type="button"
             >

@@ -5,10 +5,19 @@ import { ConfigService } from '@nestjs/config';
 import fastifyCookie from '@fastify/cookie';
 import fastifyCors from '@fastify/cors';
 import fastifyHelmet from '@fastify/helmet';
+import fastifyMultipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import * as path from 'path';
+import * as fs from 'fs';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+
+  const uploadsDir = path.resolve(process.cwd(), 'backend', 'uploads', 'documents');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
 
   const fastifyAdapter = new FastifyAdapter({
     logger: false,
@@ -19,6 +28,20 @@ async function bootstrap() {
     AppModule,
     fastifyAdapter,
   );
+
+  // Register Multipart File Uploads
+  await app.register(fastifyMultipart as any, {
+    limits: {
+      fileSize: 50 * 1024 * 1024,
+    },
+  });
+
+  // Register Static serving for uploads
+  await app.register(fastifyStatic as any, {
+    root: path.resolve(process.cwd(), 'backend', 'uploads'),
+    prefix: '/uploads/',
+    decorateReply: false,
+  });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT', 4000);
