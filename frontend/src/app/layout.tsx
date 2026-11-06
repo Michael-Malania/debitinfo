@@ -27,7 +27,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-surface-bg text-text-primary antialiased" suppressHydrationWarning>
+      <body className="min-h-screen flex flex-col bg-surface-bg text-text-primary antialiased" suppressHydrationWarning>
         <ImpersonationBanner />
         <PortalSwitcher />
         <div className="flex-1 flex flex-col" suppressHydrationWarning>{children}</div>

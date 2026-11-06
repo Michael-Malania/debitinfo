@@ -487,7 +487,7 @@ export default function AboutPage() {
     </section>
   </main>
   {/* ================= FOOTER (SHARED COMPONENT) ================= */}
-  <footer className="bg-surface-card dark:bg-inverse-surface docked full-width bottom-0 border-t border-border-subtle dark:border-outline">
+  <footer className="bg-surface-card dark:bg-inverse-surface docked full-width bottom-0 border-t border-border-subtle dark:border-outline mt-auto">
     <div className="w-full max-w-7xl mx-auto px-4 lg:px-8 py-12 flex flex-col gap-8">
       {/* Top Row: Brand & Links */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-border-subtle dark:border-outline">

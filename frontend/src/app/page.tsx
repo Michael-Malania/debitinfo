@@ -3,13 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import OpsPage from './ops/page';
-import { authService, AuthUser, blogService } from '@/services';
+import { authService, AuthUser, blogService, INITIAL_BLOG_POSTS } from '@/services';
 import { BlogPost } from '@/types';
 
 export default function LandingPage() {
   const [isOps, setIsOps] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>(INITIAL_BLOG_POSTS);
   const [blogCategoryFilter, setBlogCategoryFilter] = useState<string>('ALL');
 
   useEffect(() => {
@@ -25,16 +25,23 @@ export default function LandingPage() {
       }
     }
 
+    const token = authService.getToken();
     const stored = authService.getCurrentUser();
     if (stored) {
       setCurrentUser(stored);
     }
-    authService.getMe().then((fresh) => {
-      if (fresh) setCurrentUser(fresh);
-    }).catch(() => {});
+    // Only check backend session if user actually has an access token stored.
+    // Unauthenticated visitors must NEVER be polled against /auth/me.
+    if (token) {
+      authService.getMe().then((fresh) => {
+        if (fresh) setCurrentUser(fresh);
+      }).catch(() => {
+        setCurrentUser(null);
+      });
+    }
 
     blogService.getPosts().then((posts) => {
-      if (Array.isArray(posts)) {
+      if (Array.isArray(posts) && posts.length > 0) {
         setBlogPosts(posts);
       }
     }).catch(() => {});

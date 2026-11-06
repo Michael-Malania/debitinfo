@@ -354,14 +354,49 @@ export const contactService = {
 // ==========================================
 // BLOG & NEWS CMS SERVICE (CRM PUBLISHING)
 // ==========================================
-export const INITIAL_BLOG_POSTS: import('@/types').BlogPost[] = [];
+export const INITIAL_BLOG_POSTS: import('@/types').BlogPost[] = [
+  {
+    id: 'post-1',
+    title: 'რა იცვლება ელექტრონულ დეკლარირებასა და დებიტორული დავალიანებების საგადასახადო აღრიცხვაში',
+    slug: 'tax-changes-debt-accounting-2024',
+    category: 'tax_updates',
+    categoryKa: 'საგადასახადო სიახლეები',
+    excerpt: 'შემოსავლების სამსახურის (RS.GE) ახალი რეგულაციები და ვადაგადაცილებული მოთხოვნების ჩამოწერის წესები.',
+    content: 'საქართველოს საგადასახადო კოდექსში შესული ცვლილებების მიხედვით, უიმედო ვალების აღიარებისა და ჩამოწერის პროცედურები მნიშვნელოვნად გამარტივდა...',
+    authorName: 'თეონა პეტრიაშვილი',
+    authorRole: 'CRM & მედიაციის სპეციალისტი',
+    published: true,
+    publishedAt: '2024-10-20',
+    viewsCount: 1420,
+    tags: ['RS.GE', 'საგადასახადო', 'დებიტორები']
+  },
+  {
+    id: 'post-2',
+    title: 'პრაქტიკული გზამკვლევი: დებიტორული დავალიანებების ეფექტური მართვა და პრევენცია',
+    slug: 'practical-guide-debt-management-prevention',
+    category: 'credit_risks',
+    categoryKa: 'საკრედიტო რისკები',
+    excerpt: 'როგორ შევამოწმოთ კონტრაგენტის სანდოობა ხელშეკრულების დადებამდე და რა პრევენციული ზომები მივიღოთ.',
+    content: 'ბიზნესის უწყვეტობისთვის გადამწყვეტია კონტრაგენტის რისკ-პროფილის გადამოწმება Debitinfo.GE-ის ერთიან ეროვნულ ბაზაში...',
+    authorName: 'გიორგი მაისურაძე',
+    authorRole: 'საკრედიტო ანალიტიკოსი',
+    published: true,
+    publishedAt: '2024-10-18',
+    viewsCount: 2890,
+    tags: ['რისკების მართვა', 'სკორინგი', 'მედიაცია']
+  }
+];
 
 export const blogService = {
   async getPosts(): Promise<import('@/types').BlogPost[]> {
     try {
-      return await apiFetch<import('@/types').BlogPost[]>('/api/v1/crm/blog');
+      const posts = await apiFetch<import('@/types').BlogPost[]>('/api/v1/crm/blog');
+      if (Array.isArray(posts) && posts.length > 0) {
+        return posts;
+      }
+      return INITIAL_BLOG_POSTS;
     } catch {
-      return [];
+      return INITIAL_BLOG_POSTS;
     }
   },
 

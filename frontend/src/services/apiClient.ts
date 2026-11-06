@@ -9,6 +9,24 @@ const BASE_URL =
     ? 'https://debitinfo-backend.onrender.com'
     : 'http://localhost:4000');
 
+export const PROTECTED_ROUTES = [
+  '/dashboard',
+  '/ops',
+  '/crm',
+  '/analyst',
+  '/legal',
+  '/field-officer',
+  '/accountant',
+  '/hr',
+  '/profile',
+];
+
+export function isProtectedRoute(pathname: string): boolean {
+  return PROTECTED_ROUTES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
 export async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
   
@@ -51,9 +69,12 @@ export async function apiFetch<T>(endpoint: string, options?: RequestInit): Prom
           localStorage.removeItem('debitinfo_user');
           document.cookie = 'access_token=; path=/; max-age=0; SameSite=Lax';
           document.cookie = 'user_role=; path=/; max-age=0; SameSite=Lax';
+
+          // Strictly redirect ONLY when session expires while inside a protected workspace.
+          // Public routes ('/', '/about', '/contact', etc.) must NEVER redirect to /login.
           const pathname = window.location.pathname;
-          if (!pathname.includes('/login') && !pathname.includes('/register')) {
-            window.location.href = '/login?expired=true';
+          if (isProtectedRoute(pathname)) {
+            window.location.href = `/login?expired=true&redirect=${encodeURIComponent(pathname)}`;
           }
         }
       }

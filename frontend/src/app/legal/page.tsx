@@ -1083,7 +1083,7 @@ export default function LegalPage() {
         )}
 
         {/* Global Footer */}
-        <footer className="bg-surface-card border-t border-border-subtle mt-10">
+        <footer className="bg-surface-card border-t border-border-subtle mt-auto">
           <div className="w-full max-w-[1720px] mx-auto px-4 lg:px-8 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <span className="text-headline-sm font-headline-sm font-bold text-primary">Debitinfo.GE</span>

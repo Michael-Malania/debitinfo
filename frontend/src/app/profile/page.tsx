@@ -562,7 +562,7 @@ export default function ProfilePage() {
     </div>
   </main>
   {/* FOOTER (SHARED COMPONENT BLUEPRINT EXECUTION) */}
-  <footer className="bg-surface-card border-t border-border-subtle mt-12">
+  <footer className="bg-surface-card border-t border-border-subtle mt-auto">
     <div className="w-full max-w-7xl mx-auto px-4 lg:px-8 py-12 flex flex-col gap-8">
       {/* Top Row: Logo, System Integration Note & Nav Links */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-6 border-b border-border-subtle">
