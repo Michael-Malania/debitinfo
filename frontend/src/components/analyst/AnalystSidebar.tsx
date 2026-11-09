@@ -208,7 +208,7 @@ export default function AnalystSidebar({
           <button
             type="button"
             onClick={() => handleNavClick('analytics')}
-            title="ღრმა ანალიტიკა (BI Hub)"
+            title="ანალიტიკის გვერდი"
             className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'analytics'
                 ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
@@ -394,7 +394,7 @@ export default function AnalystSidebar({
                 >
                   query_stats
                 </span>
-                <span>ღრმა ანალიტიკა (BI Hub)</span>
+                <span>ანალიტიკის გვერდი</span>
               </div>
               <span
                 className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${

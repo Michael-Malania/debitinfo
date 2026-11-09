@@ -1099,7 +1099,7 @@ export default function AnalystPage() {
             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all shadow-2xs"
           >
             <span className="material-symbols-outlined text-sm">query_stats</span>
-            <span>BI &amp; ღრმა ანალიტიკა</span>
+            <span>ანალიტიკის გვერდი</span>
           </Link>
           <span className="text-text-muted text-body-sm font-body-sm hidden md:inline">v2.4 Live</span>
         </div>

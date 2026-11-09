@@ -428,7 +428,7 @@ export default function AnalystAnalyticsHub() {
               <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-semibold uppercase tracking-wider">
                 BI &amp; Smart Analytics Hub
               </span>
-              <span className="text-xs text-slate-400">ღრმა ანალიტიკა &amp; შედარებები</span>
+              <span className="text-xs text-slate-400">ანალიტიკის გვერდი &amp; შედარებები</span>
             </div>
           </div>
 
