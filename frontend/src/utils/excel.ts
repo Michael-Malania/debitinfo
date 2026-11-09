@@ -1190,6 +1190,7 @@ export interface DebtorsRegistryExportParams {
   debtors: any[];
   totalAmount?: number;
   fileName?: string;
+  isPartialSelection?: boolean;
 }
 
 /**
@@ -1261,7 +1262,7 @@ export async function exportDebtorsRegistryXLSX(params: DebtorsRegistryExportPar
   // Row 2: Subtitle
   ws.mergeCells(`A2:${lastColLetter}2`);
   const subCell = ws.getCell('A2');
-  subCell.value = `სექცია: ${sheetTitle} • ექსპორტირებული ჩანაწერები: ${params.debtors.length} • გენერირების თარიღი: ${new Date().toLocaleDateString('ka-GE')} ${new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' })}`;
+  subCell.value = `სექცია: ${sheetTitle} • ექსპორტირებული ჩანაწერები: ${params.debtors.length}${params.isPartialSelection ? ' (მონიშნული / შერჩეული)' : ''} • გენერირების თარიღი: ${new Date().toLocaleDateString('ka-GE')} ${new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' })}`;
   subCell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FFE0E7FF' } };
   subCell.fill = {
     type: 'pattern',
@@ -1457,6 +1458,269 @@ export async function exportDebtorsRegistryXLSX(params: DebtorsRegistryExportPar
   const defName = isPhysical
     ? `debitinfo_debitorta_reestri_fizikuri_${dateTag}.xlsx`
     : `debitinfo_debitorta_reestri_iuridiuli_${dateTag}.xlsx`;
+  link.setAttribute('download', params.fileName || defName);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export interface CreditorsRegistryExportParams {
+  entityType: 'PHYSICAL' | 'LEGAL';
+  creditors: any[];
+  totalAmount?: number;
+  fileName?: string;
+  isPartialSelection?: boolean;
+}
+
+/**
+ * Generates and triggers download of a beautifully styled Microsoft Excel (.xlsx) Creditors Registry Export
+ */
+export async function exportCreditorsRegistryXLSX(params: CreditorsRegistryExportParams): Promise<void> {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Debitinfo.GE';
+  wb.created = new Date();
+
+  const isPhysical = params.entityType === 'PHYSICAL';
+  const sheetTitle = isPhysical ? 'ფიზიკური პირი კრედიტორები' : 'იურიდიული პირი კრედიტორები';
+  const ws = wb.addWorksheet(sheetTitle, {
+    views: [{ state: 'frozen', ySplit: 5, showGridLines: true }],
+  });
+
+  const columns = isPhysical
+    ? [
+        { header: '№', key: 'idx', width: 6 },
+        { header: 'პირადი ნომერი (პ/ნ)', key: 'personalId', width: 18 },
+        { header: 'სახელი', key: 'firstName', width: 16 },
+        { header: 'გვარი', key: 'lastName', width: 18 },
+        { header: 'ტელეფონის ნომერი', key: 'phone', width: 18 },
+        { header: 'ელ-ფოსტა', key: 'email', width: 24 },
+        { header: 'ფაქტობრივი მისამართი', key: 'actualAddress', width: 28 },
+        { header: 'ხელშეკრულების №', key: 'agreementNumber', width: 18 },
+        { header: 'პორტფელის მოცულობა (GEL)', key: 'amount', width: 24 },
+        { header: 'დებიტორების რაოდენობა', key: 'debtorCount', width: 22 },
+        { header: 'სტატუსი', key: 'status', width: 22 },
+      ]
+    : [
+        { header: '№', key: 'idx', width: 6 },
+        { header: 'ს/კ (9-ნიშნა)', key: 'taxId', width: 16 },
+        { header: 'კომპანიის დასახელება', key: 'name', width: 28 },
+        { header: 'სამართლებრივი ფორმა', key: 'category', width: 18 },
+        { header: 'ინდ. მეწარმის / დირექტორის პ/ნ', key: 'directorPersonalId', width: 24 },
+        { header: 'უფლებამოსილი წარმომადგენელი (დირექტორი)', key: 'directorFullName', width: 26 },
+        { header: 'წარმომადგენლის ტელეფონი', key: 'directorPhone', width: 20 },
+        { header: 'წარმომადგენლის ელ-ფოსტა', key: 'directorEmail', width: 24 },
+        { header: 'ხელშეკრულების №', key: 'agreementNumber', width: 18 },
+        { header: 'პორტფელის მოცულობა (GEL)', key: 'amount', width: 24 },
+        { header: 'დებიტორების რაოდენობა', key: 'debtorCount', width: 22 },
+        { header: 'სტატუსი', key: 'status', width: 22 },
+      ];
+
+  const colCount = columns.length;
+  const lastColLetter = String.fromCharCode(64 + colCount);
+
+  // Row 1: Main Title
+  ws.mergeCells(`A1:${lastColLetter}1`);
+  const titleCell = ws.getCell('A1');
+  titleCell.value = 'DEBITINFO.GE • კრედიტორთა ერთიანი ოფიციალური რეესტრი';
+  titleCell.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF065F46' },
+  };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(1).height = 36;
+
+  // Row 2: Subtitle
+  ws.mergeCells(`A2:${lastColLetter}2`);
+  const subCell = ws.getCell('A2');
+  subCell.value = `სექცია: ${sheetTitle} • ექსპორტირებული ჩანაწერები: ${params.creditors.length}${params.isPartialSelection ? ' (მონიშნული / შერჩეული)' : ''} • გენერირების თარიღი: ${new Date().toLocaleDateString('ka-GE')} ${new Date().toLocaleTimeString('ka-GE', { hour: '2-digit', minute: '2-digit' })}`;
+  subCell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FFD1FAE5' } };
+  subCell.fill = {
+    type: 'pattern',
+    pattern: 'solid',
+    fgColor: { argb: 'FF059669' },
+  };
+  subCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(2).height = 22;
+
+  // Row 3: Blank separator
+  ws.getRow(3).height = 8;
+
+  // Row 4: Summary Info
+  ws.getRow(4).height = 20;
+  ws.getCell('A4').value = 'სულ ჩანაწერი:';
+  ws.getCell('A4').font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF475569' } };
+  ws.getCell('B4').value = params.creditors.length;
+  ws.getCell('B4').font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+
+  // Row 5: Table Header
+  const headerRow = ws.getRow(5);
+  headerRow.height = 28;
+  columns.forEach((col, idx) => {
+    ws.getColumn(idx + 1).width = col.width;
+    const cell = headerRow.getCell(idx + 1);
+    cell.value = col.header;
+    cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0F172A' },
+    };
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF0F172A' } },
+      bottom: { style: 'medium', color: { argb: 'FF0F172A' } },
+      left: { style: 'thin', color: { argb: 'FF334155' } },
+      right: { style: 'thin', color: { argb: 'FF334155' } },
+    };
+  });
+
+  // Data Rows
+  let totalPortfolioAmount = 0;
+  params.creditors.forEach((c, idx) => {
+    const rowNum = 6 + idx;
+    const row = ws.getRow(rowNum);
+    row.height = 22;
+    const isEven = idx % 2 === 0;
+    const rowBg = isEven ? 'FFFFFFFF' : 'FFF8FAFC';
+
+    const amt = Number(c.amount || 0);
+    totalPortfolioAmount += amt;
+
+    const dCount = c.debtorCount ?? c.debtorsCount ?? (Array.isArray(c.debtors) ? c.debtors.length : 0);
+    const statusText = c.isRegisteredOnPlatform ? 'პლატფორმაზე რეგისტრირებული' : 'არააქტიური / გარე კრედიტორი';
+
+    let rowData: any[] = [];
+    if (isPhysical) {
+      const fName = c.firstName || (c.name ? c.name.trim().split(/\s+/)[0] : '—');
+      const lName = c.lastName || (c.name ? c.name.trim().split(/\s+/).slice(1).join(' ') : '—');
+      rowData = [
+        idx + 1,
+        c.personalId || '—',
+        fName,
+        lName,
+        c.phone || '—',
+        c.email || '—',
+        c.actualAddress || c.legalAddress || '—',
+        c.agreementNumber || '—',
+        amt,
+        dCount,
+        statusText,
+      ];
+    } else {
+      const dirFullName = `${c.directorFirstName || ''} ${c.directorLastName || ''}`.trim() || c.companyOrPerson || '—';
+      rowData = [
+        idx + 1,
+        c.taxId || c.personalId || '—',
+        c.name || '—',
+        c.category || 'შპს',
+        c.directorPersonalId || '—',
+        dirFullName,
+        c.directorPhone || c.phone || '—',
+        c.directorEmail || c.email || '—',
+        c.agreementNumber || '—',
+        amt,
+        dCount,
+        statusText,
+      ];
+    }
+
+    rowData.forEach((val, cIdx) => {
+      const cell = row.getCell(cIdx + 1);
+      cell.value = val;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      cell.font = { name: 'Segoe UI', size: 9.5, color: { argb: 'FF0F172A' } };
+
+      const colKey = columns[cIdx].key;
+      if (
+        colKey === 'idx' ||
+        colKey === 'personalId' ||
+        colKey === 'taxId' ||
+        colKey === 'directorPersonalId' ||
+        colKey === 'agreementNumber' ||
+        colKey === 'debtorCount'
+      ) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        if (
+          colKey === 'personalId' ||
+          colKey === 'taxId' ||
+          colKey === 'directorPersonalId' ||
+          colKey === 'agreementNumber'
+        ) {
+          cell.font = { name: 'Consolas', size: 9.5, bold: true };
+        }
+      } else if (colKey === 'amount') {
+        cell.alignment = { vertical: 'middle', horizontal: 'right' };
+        cell.numFmt = '#,##0.00';
+        cell.font = { name: 'Segoe UI', size: 9.5, bold: true, color: { argb: 'FF047857' } };
+      } else if (colKey === 'status') {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        if (c.isRegisteredOnPlatform) {
+          cell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: 'FF166534' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+        } else {
+          cell.font = { name: 'Segoe UI', size: 9, color: { argb: 'FF475569' } };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        }
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+      }
+    });
+  });
+
+  // Totals Row
+  const totalRowNum = 6 + params.creditors.length;
+  const totRow = ws.getRow(totalRowNum);
+  totRow.height = 26;
+
+  const amtColIdx = isPhysical ? 9 : 10;
+  ws.mergeCells(`A${totalRowNum}:${String.fromCharCode(64 + amtColIdx - 1)}${totalRowNum}`);
+  totRow.getCell(1).value = 'ჯამური პორტფელის მოცულობა:';
+  totRow.getCell(1).font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+  totRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'right' };
+  totRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+
+  const amtCell = totRow.getCell(amtColIdx);
+  amtCell.value = params.totalAmount !== undefined ? params.totalAmount : totalPortfolioAmount;
+  amtCell.numFmt = '#,##0.00';
+  amtCell.font = { name: 'Segoe UI', size: 10.5, bold: true, color: { argb: 'FF047857' } };
+  amtCell.alignment = { vertical: 'middle', horizontal: 'right' };
+  amtCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+
+  for (let c = amtColIdx + 1; c <= colCount; c++) {
+    const cell = totRow.getCell(c);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+  }
+
+  // Footer Row
+  const footerRowNum = totalRowNum + 2;
+  ws.mergeCells(`A${footerRowNum}:${lastColLetter}${footerRowNum}`);
+  const footCell = ws.getCell(`A${footerRowNum}`);
+  footCell.value =
+    'დოკუმენტი დაგენერირებულია Debitinfo.GE ფინანსური პლატფორმის ანალიტიკოსის კონსოლიდან • წარმოადგენს კრედიტორთა ოფიციალურ რეესტრს.';
+  footCell.font = { name: 'Segoe UI', size: 9, italic: true, color: { argb: 'FF64748B' } };
+  footCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+  // Write and trigger download
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const dateTag = new Date().toISOString().slice(0, 10);
+  const defName = isPhysical
+    ? `debitinfo_kreditorta_reestri_fizikuri_${dateTag}.xlsx`
+    : `debitinfo_kreditorta_reestri_iuridiuli_${dateTag}.xlsx`;
   link.setAttribute('download', params.fileName || defName);
   document.body.appendChild(link);
   link.click();

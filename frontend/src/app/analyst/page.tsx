@@ -6,7 +6,12 @@ import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
 import AddDebtorModal, { DebtorFormData } from '@/components/analyst/AddDebtorModal';
 import AnalystSidebar, { AnalystViewType } from '@/components/analyst/AnalystSidebar';
-import { downloadDebtorTemplateXLSX, parseDebtorExcelFile, exportDebtorsRegistryXLSX } from '@/utils/excel';
+import {
+  downloadDebtorTemplateXLSX,
+  parseDebtorExcelFile,
+  exportDebtorsRegistryXLSX,
+  exportCreditorsRegistryXLSX,
+} from '@/utils/excel';
 
 export default function AnalystPage() {
   const router = useRouter();
@@ -43,6 +48,9 @@ export default function AnalystPage() {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+  const [selectedDebtorIds, setSelectedDebtorIds] = useState<string[]>([]);
+  const [selectedCreditorIds, setSelectedCreditorIds] = useState<string[]>([]);
+  const [isExportingCreditors, setIsExportingCreditors] = useState(false);
 
   // Debtors Registry Switch & Filter States
   const [debtorsEntityType, setDebtorsEntityType] = useState<'PHYSICAL' | 'LEGAL'>('PHYSICAL');
@@ -93,6 +101,7 @@ export default function AnalystPage() {
     setDfDirectorPersonalId('');
     setDfDirectorPhone('');
     setDfDirectorEmail('');
+    setSelectedDebtorIds([]);
   };
 
   const activeDebtorsFiltersCount = useMemo(() => {
@@ -264,16 +273,50 @@ export default function AnalystPage() {
     );
   }, [filteredDebtors]);
 
+  const selectedDebtorsList = useMemo(() => {
+    if (selectedDebtorIds.length === 0) return [];
+    const set = new Set(selectedDebtorIds);
+    return filteredDebtors.filter((d) => set.has(d.id));
+  }, [selectedDebtorIds, filteredDebtors]);
+
+  const isAllDebtorsSelected =
+    filteredDebtors.length > 0 && selectedDebtorIds.length === filteredDebtors.length;
+
+  const toggleAllDebtors = () => {
+    if (isAllDebtorsSelected) {
+      setSelectedDebtorIds([]);
+    } else {
+      setSelectedDebtorIds(filteredDebtors.map((d) => d.id));
+    }
+  };
+
+  const toggleDebtorSelection = (id: string) => {
+    setSelectedDebtorIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
   const handleExportDebtorsExcel = async () => {
     setIsExportingDebtors(true);
     try {
+      const isPartial = selectedDebtorsList.length > 0;
+      const debtorsToExport = isPartial ? selectedDebtorsList : filteredDebtors;
+      const exportTotalAmount = debtorsToExport.reduce(
+        (sum, d) => sum + (Number(d.currentAmount ?? d.remainingAmount ?? d.amount) || 0),
+        0
+      );
+
       await exportDebtorsRegistryXLSX({
         entityType: debtorsEntityType,
-        debtors: filteredDebtors,
-        totalAmount: filteredDebtorsTotalAmount,
+        debtors: debtorsToExport,
+        totalAmount: exportTotalAmount,
+        isPartialSelection: isPartial,
       });
+
       setActionSuccessMessage(
-        `${debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური' : 'იურიდიული'} პირების რეესტრი (${filteredDebtors.length} ჩანაწერი) წარმატებით დაექსპორტირდა Excel (.xlsx) ფორმატში!`
+        `${debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური' : 'იურიდიული'} პირების ${
+          isPartial ? `მონიშნული (${debtorsToExport.length})` : `სრული (${debtorsToExport.length})`
+        } რეესტრი წარმატებით დაექსპორტირდა Excel (.xlsx) ფორმატში!`
       );
       setTimeout(() => setActionSuccessMessage(null), 5000);
     } catch (err: any) {
@@ -328,6 +371,7 @@ export default function AnalystPage() {
     setCfPhone('');
     setCfEmail('');
     setCfActualAddress('');
+    setSelectedCreditorIds([]);
   };
 
   const activeCreditorsFiltersCount = useMemo(() => {
@@ -461,6 +505,60 @@ export default function AnalystPage() {
   const filteredCreditorsTotalAmount = useMemo(() => {
     return filteredCreditors.reduce((sum, c) => sum + (Number(c.amount) || 0), 0);
   }, [filteredCreditors]);
+
+  const selectedCreditorsList = useMemo(() => {
+    if (selectedCreditorIds.length === 0) return [];
+    const set = new Set(selectedCreditorIds);
+    return filteredCreditors.filter((c) => set.has(c.id));
+  }, [selectedCreditorIds, filteredCreditors]);
+
+  const isAllCreditorsSelected =
+    filteredCreditors.length > 0 && selectedCreditorIds.length === filteredCreditors.length;
+
+  const toggleAllCreditors = () => {
+    if (isAllCreditorsSelected) {
+      setSelectedCreditorIds([]);
+    } else {
+      setSelectedCreditorIds(filteredCreditors.map((c) => c.id));
+    }
+  };
+
+  const toggleCreditorSelection = (id: string) => {
+    setSelectedCreditorIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleExportCreditorsExcel = async () => {
+    setIsExportingCreditors(true);
+    try {
+      const isPartial = selectedCreditorsList.length > 0;
+      const creditorsToExport = isPartial ? selectedCreditorsList : filteredCreditors;
+      const exportTotalAmount = creditorsToExport.reduce(
+        (sum, c) => sum + (Number(c.amount) || 0),
+        0
+      );
+
+      await exportCreditorsRegistryXLSX({
+        entityType: creditorsEntityType,
+        creditors: creditorsToExport,
+        totalAmount: exportTotalAmount,
+        isPartialSelection: isPartial,
+      });
+
+      setActionSuccessMessage(
+        `${creditorsEntityType === 'PHYSICAL' ? 'ფიზიკური' : 'იურიდიული'} პირი კრედიტორების ${
+          isPartial ? `მონიშნული (${creditorsToExport.length})` : `სრული (${creditorsToExport.length})`
+        } რეესტრი წარმატებით დაექსპორტირდა Excel (.xlsx) ფორმატში!`
+      );
+      setTimeout(() => setActionSuccessMessage(null), 5000);
+    } catch (err: any) {
+      console.error('Export creditors registry error:', err);
+      alert('Excel ექსპორტი ვერ მოხერხდა: ' + (err?.message || 'შეცდომა'));
+    } finally {
+      setIsExportingCreditors(false);
+    }
+  };
 
   // Creditor Registration Modal State
   const [creditorEntityType, setCreditorEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
@@ -2135,7 +2233,10 @@ export default function AnalystPage() {
           <div className="inline-flex items-center p-1 bg-white rounded-xl shadow-xs border border-slate-200/80 gap-1 self-start lg:self-auto">
             <button
               type="button"
-              onClick={() => setDebtorsEntityType('PHYSICAL')}
+              onClick={() => {
+                setDebtorsEntityType('PHYSICAL');
+                setSelectedDebtorIds([]);
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 debtorsEntityType === 'PHYSICAL'
                   ? 'bg-primary text-white shadow-sm'
@@ -2157,7 +2258,10 @@ export default function AnalystPage() {
 
             <button
               type="button"
-              onClick={() => setDebtorsEntityType('LEGAL')}
+              onClick={() => {
+                setDebtorsEntityType('LEGAL');
+                setSelectedDebtorIds([]);
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 debtorsEntityType === 'LEGAL'
                   ? 'bg-primary text-white shadow-sm'
@@ -2244,12 +2348,22 @@ export default function AnalystPage() {
               onClick={handleExportDebtorsExcel}
               disabled={isExportingDebtors || filteredDebtors.length === 0}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
-              title="გაფილტრული რეესტრის ექსპორტი Excel (.xlsx) ფორმატში"
+              title={
+                selectedDebtorIds.length > 0
+                  ? `მონიშნული ${selectedDebtorIds.length} დებიტორის ექსპორტი Excel (.xlsx) ფორმატში`
+                  : 'გაფილტრული რეესტრის ექსპორტი Excel (.xlsx) ფორმატში'
+              }
             >
               <span className={`material-symbols-outlined text-[16px] ${isExportingDebtors ? 'animate-spin' : ''}`}>
                 {isExportingDebtors ? 'progress_activity' : 'file_download'}
               </span>
-              <span>{isExportingDebtors ? 'ექსპორტირდება...' : 'Excel ექსპორტი (.xlsx)'}</span>
+              <span>
+                {isExportingDebtors
+                  ? 'ექსპორტირდება...'
+                  : selectedDebtorIds.length > 0
+                  ? `Excel ექსპორტი (მონიშნული: ${selectedDebtorIds.length})`
+                  : 'Excel ექსპორტი (.xlsx)'}
+              </span>
             </button>
           </div>
         </div>
@@ -2654,6 +2768,44 @@ export default function AnalystPage() {
           </div>
         )}
 
+        {/* Active Selection Action Banner for Debtors */}
+        {selectedDebtorIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-950 text-xs font-medium animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+              <span>
+                მონიშნულია <strong className="font-bold text-primary">{selectedDebtorIds.length}</strong> ჩანაწერი{' '}
+                ({debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური პირი' : 'იურიდიული პირი'}) — სულ {filteredDebtors.length}-დან
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDebtorIds(filteredDebtors.map((d) => d.id))}
+                className="px-2.5 py-1 rounded-lg bg-white hover:bg-blue-100 text-primary border border-blue-200 text-xs font-semibold transition cursor-pointer"
+              >
+                ყველას მონიშვნა ({filteredDebtors.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDebtorIds([])}
+                className="px-2.5 py-1 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-semibold transition cursor-pointer"
+              >
+                მონიშვნის მოხსნა
+              </button>
+              <button
+                type="button"
+                onClick={handleExportDebtorsExcel}
+                disabled={isExportingDebtors}
+                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[16px]">file_download</span>
+                <span>მონიშნულის ექსპორტი ({selectedDebtorIds.length})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Filter Summary & Result Count Row */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted px-1">
           <div className="flex items-center gap-2">
@@ -2683,6 +2835,15 @@ export default function AnalystPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={isAllDebtorsSelected}
+                      onChange={toggleAllDebtors}
+                      title="ყველას მონიშვნა / მოხსნა"
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
+                    />
+                  </th>
                   <th className="py-3 px-4">პირადი ნომერი (პ/ნ)</th>
                   <th className="py-3 px-4">სახელი</th>
                   <th className="py-3 px-4">გვარი</th>
@@ -2700,7 +2861,7 @@ export default function AnalystPage() {
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                 {filteredDebtors.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-text-muted">
+                    <td colSpan={13} className="py-12 text-center text-text-muted">
                       <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">person_off</span>
                       <span>ფიზიკური პირები მითითებული ფილტრებით ვერ მოიძებნა</span>
                       {activeDebtorsFiltersCount > 0 && (
@@ -2718,7 +2879,23 @@ export default function AnalystPage() {
                   </tr>
                 ) : (
                   filteredDebtors.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                    <tr
+                      key={d.id}
+                      onClick={() => toggleDebtorSelection(d.id)}
+                      className={`transition-colors whitespace-nowrap cursor-pointer ${
+                        selectedDebtorIds.includes(d.id)
+                          ? 'bg-blue-50/80 hover:bg-blue-100/70 font-medium'
+                          : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedDebtorIds.includes(d.id)}
+                          onChange={() => toggleDebtorSelection(d.id)}
+                          className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
+                        />
+                      </td>
                       <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
                         <div className="flex items-center gap-1.5">
                           <span>{d.personalId}</span>
@@ -2823,6 +3000,15 @@ export default function AnalystPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={isAllDebtorsSelected}
+                      onChange={toggleAllDebtors}
+                      title="ყველას მონიშვნა / მოხსნა"
+                      className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
+                    />
+                  </th>
                   <th className="py-3 px-4">ს/კ (9-ნიშნა)</th>
                   <th className="py-3 px-4">სრული დასახელება</th>
                   <th className="py-3 px-4">ტელეფონი</th>
@@ -2841,7 +3027,7 @@ export default function AnalystPage() {
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                 {filteredDebtors.length === 0 ? (
                   <tr>
-                    <td colSpan={13} className="py-12 text-center text-text-muted">
+                    <td colSpan={14} className="py-12 text-center text-text-muted">
                       <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">domain_disabled</span>
                       <span>იურიდიული პირები მითითებული ფილტრებით ვერ მოიძებნა</span>
                       {activeDebtorsFiltersCount > 0 && (
@@ -2859,7 +3045,23 @@ export default function AnalystPage() {
                   </tr>
                 ) : (
                   filteredDebtors.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                    <tr
+                      key={d.id}
+                      onClick={() => toggleDebtorSelection(d.id)}
+                      className={`transition-colors whitespace-nowrap cursor-pointer ${
+                        selectedDebtorIds.includes(d.id)
+                          ? 'bg-blue-50/80 hover:bg-blue-100/70 font-medium'
+                          : 'hover:bg-slate-50/70'
+                      }`}
+                    >
+                      <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedDebtorIds.includes(d.id)}
+                          onChange={() => toggleDebtorSelection(d.id)}
+                          className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer accent-primary"
+                        />
+                      </td>
                       <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
                         <div className="flex items-center gap-1.5">
                           <span>{d.taxId || d.personalId}</span>
@@ -3055,7 +3257,10 @@ export default function AnalystPage() {
           <div className="inline-flex items-center p-1 bg-white rounded-xl shadow-xs border border-slate-200/80 gap-1 self-start lg:self-auto">
             <button
               type="button"
-              onClick={() => setCreditorsEntityType('LEGAL')}
+              onClick={() => {
+                setCreditorsEntityType('LEGAL');
+                setSelectedCreditorIds([]);
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 creditorsEntityType === 'LEGAL'
                   ? 'bg-primary text-white shadow-sm'
@@ -3077,7 +3282,10 @@ export default function AnalystPage() {
 
             <button
               type="button"
-              onClick={() => setCreditorsEntityType('PHYSICAL')}
+              onClick={() => {
+                setCreditorsEntityType('PHYSICAL');
+                setSelectedCreditorIds([]);
+              }}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 creditorsEntityType === 'PHYSICAL'
                   ? 'bg-primary text-white shadow-sm'
@@ -3157,6 +3365,29 @@ export default function AnalystPage() {
                 refresh
               </span>
               <span>განახლება</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportCreditorsExcel}
+              disabled={isExportingCreditors || filteredCreditors.length === 0}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+              title={
+                selectedCreditorIds.length > 0
+                  ? `მონიშნული ${selectedCreditorIds.length} კრედიტორის ექსპორტი Excel (.xlsx) ფორმატში`
+                  : 'კრედიტორთა რეესტრის ექსპორტი Excel (.xlsx) ფორმატში'
+              }
+            >
+              <span className={`material-symbols-outlined text-[16px] ${isExportingCreditors ? 'animate-spin' : ''}`}>
+                {isExportingCreditors ? 'progress_activity' : 'file_download'}
+              </span>
+              <span>
+                {isExportingCreditors
+                  ? 'ექსპორტირდება...'
+                  : selectedCreditorIds.length > 0
+                  ? `Excel ექსპორტი (მონიშნული: ${selectedCreditorIds.length})`
+                  : 'Excel ექსპორტი (.xlsx)'}
+              </span>
             </button>
           </div>
         </div>
@@ -3450,6 +3681,44 @@ export default function AnalystPage() {
           </div>
         )}
 
+        {/* Active Selection Action Banner for Creditors */}
+        {selectedCreditorIds.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-emerald-50/90 border border-emerald-200 text-emerald-950 text-xs font-medium animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-emerald-700 text-[20px]">check_circle</span>
+              <span>
+                მონიშნულია <strong className="font-bold text-emerald-800">{selectedCreditorIds.length}</strong> კრედიტორი{' '}
+                ({creditorsEntityType === 'LEGAL' ? 'იურიდიული პირი' : 'ფიზიკური პირი'}) — სულ {filteredCreditors.length}-დან
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedCreditorIds(filteredCreditors.map((c) => c.id))}
+                className="px-2.5 py-1 rounded-lg bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold transition cursor-pointer"
+              >
+                ყველას მონიშვნა ({filteredCreditors.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedCreditorIds([])}
+                className="px-2.5 py-1 rounded-lg bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-semibold transition cursor-pointer"
+              >
+                მონიშვნის მოხსნა
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCreditorsExcel}
+                disabled={isExportingCreditors}
+                className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+              >
+                <span className="material-symbols-outlined text-[16px]">file_download</span>
+                <span>მონიშნულის ექსპორტი ({selectedCreditorIds.length})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Filter Summary & Result Count Row */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted px-1">
           <div className="flex items-center gap-2">
@@ -3479,6 +3748,15 @@ export default function AnalystPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={isAllCreditorsSelected}
+                      onChange={toggleAllCreditors}
+                      title="ყველას მონიშვნა / მოხსნა"
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                    />
+                  </th>
                   <th className="py-3 px-4">ს/კ (9-ნიშნა)</th>
                   <th className="py-3 px-4">კომპანიის დასახელება</th>
                   <th className="py-3 px-4">კატეგორია</th>
@@ -3496,7 +3774,7 @@ export default function AnalystPage() {
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                 {filteredCreditors.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-text-muted">
+                    <td colSpan={13} className="py-12 text-center text-text-muted">
                       <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">domain_disabled</span>
                       <span>იურიდიული პირი კრედიტორები მითითებული ფილტრებით ვერ მოიძებნა</span>
                       {activeCreditorsFiltersCount > 0 && (
@@ -3517,7 +3795,23 @@ export default function AnalystPage() {
                     const repName = `${c.directorFirstName || ''} ${c.directorLastName || ''}`.trim() || c.companyOrPerson || '—';
                     const docsCount = Array.isArray(c.supportingDocuments) ? c.supportingDocuments.length : 0;
                     return (
-                      <tr key={c.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                      <tr
+                        key={c.id}
+                        onClick={() => toggleCreditorSelection(c.id)}
+                        className={`transition-colors whitespace-nowrap cursor-pointer ${
+                          selectedCreditorIds.includes(c.id)
+                            ? 'bg-emerald-50/80 hover:bg-emerald-100/70 font-medium'
+                            : 'hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedCreditorIds.includes(c.id)}
+                            onChange={() => toggleCreditorSelection(c.id)}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                          />
+                        </td>
                         <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
                           <div className="flex items-center gap-1.5">
                             <span>{c.taxId || c.personalId}</span>
@@ -3631,6 +3925,15 @@ export default function AnalystPage() {
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                  <th className="py-3 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={isAllCreditorsSelected}
+                      onChange={toggleAllCreditors}
+                      title="ყველას მონიშვნა / მოხსნა"
+                      className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                    />
+                  </th>
                   <th className="py-3 px-4">პირადი ნომერი (პ/ნ 11-ნიშნა)</th>
                   <th className="py-3 px-4">სახელი</th>
                   <th className="py-3 px-4">გვარი</th>
@@ -3648,7 +3951,7 @@ export default function AnalystPage() {
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                 {filteredCreditors.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-12 text-center text-text-muted">
+                    <td colSpan={13} className="py-12 text-center text-text-muted">
                       <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">person_off</span>
                       <span>ფიზიკური პირი კრედიტორები მითითებული ფილტრებით ვერ მოიძებნა</span>
                       {activeCreditorsFiltersCount > 0 && (
@@ -3670,7 +3973,23 @@ export default function AnalystPage() {
                     const lName = c.lastName || (c.name ? c.name.split(' ').slice(1).join(' ') : '—');
                     const docsCount = Array.isArray(c.supportingDocuments) ? c.supportingDocuments.length : 0;
                     return (
-                      <tr key={c.id} className="hover:bg-slate-50/70 transition-colors whitespace-nowrap">
+                      <tr
+                        key={c.id}
+                        onClick={() => toggleCreditorSelection(c.id)}
+                        className={`transition-colors whitespace-nowrap cursor-pointer ${
+                          selectedCreditorIds.includes(c.id)
+                            ? 'bg-emerald-50/80 hover:bg-emerald-100/70 font-medium'
+                            : 'hover:bg-slate-50/70'
+                        }`}
+                      >
+                        <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedCreditorIds.includes(c.id)}
+                            onChange={() => toggleCreditorSelection(c.id)}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                          />
+                        </td>
                         <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
                           <div className="flex items-center gap-1.5">
                             <span>{c.personalId}</span>
