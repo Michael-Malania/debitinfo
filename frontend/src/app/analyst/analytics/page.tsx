@@ -165,6 +165,44 @@ export default function AnalystAnalyticsHub() {
   const [isDispatching, setIsDispatching] = useState(false);
   const [dispatchSuccess, setDispatchSuccess] = useState(false);
 
+  // In-App Notification Center
+  interface AnalyticsNotification {
+    id: string;
+    type: 'RISK_ZONE' | 'SYSTEM' | 'INFO';
+    title: string;
+    message: string;
+    time: string;
+    read: boolean;
+    urgent?: boolean;
+    actionTab?: AnalyticsTab;
+  }
+
+  const [notifications, setNotifications] = useState<AnalyticsNotification[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+    if (isNotificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isNotificationsOpen]);
+
+  const unreadNotifsCount = useMemo(() => {
+    return notifications.filter((n) => !n.read).length;
+  }, [notifications]);
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
+
   // --------------------------------------------------------------------------
   // CUSTOMER ANALYTICS: FILTERS & DEEP SEARCH
   // --------------------------------------------------------------------------
@@ -240,6 +278,46 @@ export default function AnalystAnalyticsHub() {
 
       // Chrome/Desktop Notification
       triggerRiskNotification(approaching.length);
+
+      // In-App Notification Center
+      const notifs: AnalyticsNotification[] = [];
+      approaching.forEach((c: any) => {
+        notifs.push({
+          id: `risk-${c.id}`,
+          type: 'RISK_ZONE',
+          title: `⚠️ რისკ ზონა: #${c.caseNumber} (${c.daysRemaining} დღე დარჩენილი)`,
+          message: `${c.debtorName} • ${Number(c.amount || 0).toLocaleString()} ₾. 3-წლიანი ხანდაზმულობის ვადა 6 თვეში იწურება!`,
+          time: 'სასწრაფო',
+          read: false,
+          urgent: true,
+          actionTab: 'risk_zone',
+        });
+      });
+
+      if (approaching.length > 0) {
+        notifs.push({
+          id: 'risk-summary-alert',
+          type: 'RISK_ZONE',
+          title: `🚨 სულ ${approaching.length} სესხია რისკ ზონაში`,
+          message: `საფრთხის ქვეშ მყოფი საერთო მოცულობა შეადგენს ${totalRiskGEL.toLocaleString()} ₾-ს.`,
+          time: 'აქტიური',
+          read: false,
+          urgent: true,
+          actionTab: 'risk_zone',
+        });
+      }
+
+      notifs.push({
+        id: 'system-sync',
+        type: 'SYSTEM',
+        title: 'ანალიტიკური მონაცემები სინქრონიზებულია',
+        message: 'დებიტორებისა და კრედიტორების რეესტრები განახლებულია ცენტრალური სერვერიდან.',
+        time: 'აქტიური',
+        read: true,
+        urgent: false,
+      });
+
+      setNotifications(notifs);
 
       setLegalPerformance(legalRes);
       setVisitorsPerformance(visitorsRes);
@@ -726,8 +804,131 @@ export default function AnalystAnalyticsHub() {
             </p>
           </div>
 
-          {/* Action Tools: PDF Export & Live Refresh */}
+          {/* Action Tools: Notifications, PDF Export & Live Refresh */}
           <div className="flex items-center gap-2 print:hidden">
+            {/* Real Notification Bell with Popover Dropdown */}
+            <div className="relative" ref={notificationsRef}>
+              <button
+                onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                className="relative p-2 rounded-lg text-slate-600 hover:text-slate-900 bg-white border border-slate-300 hover:bg-slate-50 transition shadow-xs cursor-pointer flex items-center justify-center"
+                title="შეტყობინებები"
+              >
+                <Bell className="w-4 h-4 text-slate-600" />
+                {unreadNotifsCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white animate-pulse shadow-xs">
+                    {unreadNotifsCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Popover Dropdown */}
+              {isNotificationsOpen && (
+                <div className="absolute right-0 mt-2 w-96 max-w-[90vw] bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                  {/* Header */}
+                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-900">შეტყობინებები</span>
+                      {unreadNotifsCount > 0 ? (
+                        <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-800 rounded-full">
+                          {unreadNotifsCount} ახალი
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded-full">
+                          ყველა წაკითხულია
+                        </span>
+                      )}
+                    </div>
+                    {unreadNotifsCount > 0 && (
+                      <button
+                        onClick={markAllNotificationsAsRead}
+                        className="text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline transition"
+                      >
+                        ყველას წაკითხვა
+                      </button>
+                    )}
+                  </div>
+
+                  {/* List */}
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 text-xs">
+                    {notifications.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400">შეტყობინებები არ არის</div>
+                    ) : (
+                      notifications.map((item) => (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            setNotifications((prev) =>
+                              prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
+                            );
+                            if (item.actionTab) {
+                              setActiveTab(item.actionTab);
+                              setIsNotificationsOpen(false);
+                            }
+                          }}
+                          className={`p-3.5 hover:bg-slate-50 transition cursor-pointer flex gap-3 ${
+                            !item.read
+                              ? item.type === 'RISK_ZONE'
+                                ? 'bg-rose-50/50'
+                                : 'bg-blue-50/40'
+                              : ''
+                          }`}
+                        >
+                          <div className="shrink-0 pt-0.5">
+                            {item.type === 'RISK_ZONE' ? (
+                              <span className="p-1.5 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+                                <AlertTriangle className="w-4 h-4 text-rose-600" />
+                              </span>
+                            ) : (
+                              <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4
+                                className={`font-semibold truncate ${
+                                  item.type === 'RISK_ZONE' ? 'text-rose-950 font-bold' : 'text-slate-900'
+                                }`}
+                              >
+                                {item.title}
+                              </h4>
+                              <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                {item.time}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-600 mt-1 line-clamp-2 leading-snug">
+                              {item.message}
+                            </p>
+                            {item.actionTab && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveTab(item.actionTab!);
+                                  setIsNotificationsOpen(false);
+                                }}
+                                className="mt-2 text-[10px] font-bold text-rose-700 hover:text-rose-900 flex items-center gap-1"
+                              >
+                                <span>რისკ ზონაში გადასვლა</span>
+                                <ChevronRight className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+
+                          {!item.read && (
+                            <div className="shrink-0 self-center">
+                              <span className="w-2 h-2 rounded-full bg-rose-600 block" />
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={handleExportPDF}
               className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition shadow-sm"

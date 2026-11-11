@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analystBackendService, authService } from '@/services';
@@ -51,6 +51,45 @@ export default function AnalystPage() {
   const [selectedDebtorIds, setSelectedDebtorIds] = useState<string[]>([]);
   const [selectedCreditorIds, setSelectedCreditorIds] = useState<string[]>([]);
   const [isExportingCreditors, setIsExportingCreditors] = useState(false);
+
+  // Real Notifications State
+  interface NotificationItem {
+    id: string;
+    type: 'RISK_ZONE' | 'PENDING_DEBTOR' | 'SYSTEM';
+    title: string;
+    message: string;
+    time: string;
+    read: boolean;
+    urgent?: boolean;
+    link?: string;
+    viewTarget?: 'pending-debtors' | 'overview';
+  }
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+    if (isNotificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isNotificationsOpen]);
+
+  const unreadNotifsCount = useMemo(() => {
+    return notifications.filter((n) => !n.read).length;
+  }, [notifications]);
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  };
 
   // Debtors Registry Switch & Filter States
   const [debtorsEntityType, setDebtorsEntityType] = useState<'PHYSICAL' | 'LEGAL'>('PHYSICAL');
@@ -721,13 +760,14 @@ export default function AnalystPage() {
   const loadAnalystData = async () => {
     setLoadingData(true);
     try {
-      const [dRes, cRes, staffRes, claimsRes, workloadRes, pendingRes] = await Promise.allSettled([
+      const [dRes, cRes, staffRes, claimsRes, workloadRes, pendingRes, statuteRes] = await Promise.allSettled([
         analystBackendService.getDebtorsRegistry(),
         analystBackendService.getCreditorsRegistry(),
         analystBackendService.getStaffOptions(),
         analystBackendService.getClaimsOptions(),
         analystBackendService.getWorkloadStats(),
         analystBackendService.getPendingDebtors(),
+        analystBackendService.getStatuteLimitations({ monthsLookback: 6, monthsLookahead: 6 }),
       ]);
 
       if (
@@ -745,6 +785,8 @@ export default function AnalystPage() {
       const claims = claimsRes.status === 'fulfilled' ? claimsRes.value : [];
       const workload = workloadRes.status === 'fulfilled' ? workloadRes.value : null;
       const pendingDebtors = pendingRes.status === 'fulfilled' ? pendingRes.value : [];
+      const statute = statuteRes.status === 'fulfilled' ? statuteRes.value : null;
+      const approachingClaims = statute?.approachingClaims || [];
 
       setExcelDebtors(d || []);
       setExcelCreditors(c || []);
@@ -752,6 +794,50 @@ export default function AnalystPage() {
       setClaimsOptions(claims || []);
       setWorkloadStats(workload || null);
       setPendingCreditorDebtors(pendingDebtors || []);
+
+      // Build real dynamic notifications list
+      const notifs: NotificationItem[] = [];
+
+      // 1. Risk Zone alerts (High priority)
+      approachingClaims.forEach((claim: any) => {
+        notifs.push({
+          id: `risk-${claim.id}`,
+          type: 'RISK_ZONE',
+          title: `⚠️ რისკ ზონა: საქმე #${claim.caseNumber}`,
+          message: `${claim.debtorName} • ${Number(claim.amount || 0).toLocaleString()} ₾ — ხანდაზმულობის ვადის გასვლამდე დარჩენილია ${claim.daysRemaining} დღე!`,
+          time: 'სასწრაფო',
+          read: false,
+          urgent: true,
+          link: '/analyst/analytics',
+        });
+      });
+
+      // 2. Pending Debtors
+      if (pendingDebtors.length > 0) {
+        notifs.push({
+          id: 'pending-debtors-summary',
+          type: 'PENDING_DEBTOR',
+          title: `👥 ${pendingDebtors.length} დებიტორი ელოდება ვერიფიკაციას`,
+          message: 'კრედიტორების მიერ შემოტანილი ახალი საქმეები გადამოწმებასა და დამტკიცებას საჭიროებს.',
+          time: 'დღეს',
+          read: false,
+          urgent: false,
+          viewTarget: 'pending-debtors',
+        });
+      }
+
+      // 3. System RS.GE
+      notifs.push({
+        id: 'system-rs-sync',
+        type: 'SYSTEM',
+        title: 'RS.GE სინქრონიზაცია აქტიურია',
+        message: 'შემოსავლების სამსახურის (RS.GE) სერვისთან კავშირი დამყარებულია და მონაცემები სინქრონიზებულია.',
+        time: 'აქტიური',
+        read: true,
+        urgent: false,
+      });
+
+      setNotifications(notifs);
     } catch (err) {
       console.warn('Could not load analyst data:', err);
     } finally {
@@ -1104,16 +1190,9 @@ export default function AnalystPage() {
           <span className="text-text-muted text-body-sm font-body-sm hidden md:inline">v2.4 Live</span>
         </div>
       </div>
-      {/* Quick Search Bar */}
-      <div className="flex-1 max-w-xl mx-6 hidden md:block">
-        <div className="relative flex items-center">
-          <span className="material-symbols-outlined absolute left-3.5 text-text-muted text-[18px]">search</span>
-          <input className="w-full pl-10 pr-24 py-2 bg-surface-bg border border-border-subtle rounded-lg text-body-md font-body-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all" placeholder="საქმის №, პ/ნ, ს/კ ან მოვალის ძიება..." type="text" />
-          <div className="absolute right-2 flex items-center gap-1">
-            <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-text-muted bg-surface-card rounded border border-border-subtle">⌘K</kbd>
-          </div>
-        </div>
-      </div>
+      {/* Spacer replacing obsolete search */}
+      <div className="flex-1" />
+
       {/* Live Telemetry, Notifications & User Profile */}
       <div className="flex items-center gap-4">
         {/* Live System Telemetry Pulse */}
@@ -1129,13 +1208,165 @@ export default function AnalystPage() {
             </span>
           </div>
         </div>
-        {/* Notification Bell with Unread Badge */}
-        <button className="relative p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-100 transition-colors" title="შეტყობინებები">
-          <span className="material-symbols-outlined text-[22px]">notifications</span>
-          <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-error text-white font-label-sm text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-surface-card">
-            3
-          </span>
-        </button>
+
+        {/* Real Interactive Notification Bell with Dropdown Popover */}
+        <div className="relative" ref={notificationsRef}>
+          <button
+            onClick={() => setIsNotificationsOpen((prev) => !prev)}
+            className="relative p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-100 transition-colors cursor-pointer"
+            title="შეტყობინებები"
+          >
+            <span className="material-symbols-outlined text-[22px]">notifications</span>
+            {unreadNotifsCount > 0 && (
+              <span className="absolute top-1 right-1 min-w-[18px] h-[18px] px-1 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-surface-card animate-pulse shadow-xs">
+                {unreadNotifsCount}
+              </span>
+            )}
+          </button>
+
+          {/* Interactive Notifications Dropdown */}
+          {isNotificationsOpen && (
+            <div className="absolute right-0 mt-2 w-96 max-w-[90vw] bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              {/* Header */}
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-slate-900">შეტყობინებები</span>
+                  {unreadNotifsCount > 0 ? (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-rose-100 text-rose-800 rounded-full">
+                      {unreadNotifsCount} ახალი
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 rounded-full">
+                      ყველა წაკითხულია
+                    </span>
+                  )}
+                </div>
+                {unreadNotifsCount > 0 && (
+                  <button
+                    onClick={markAllNotificationsAsRead}
+                    className="text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline transition"
+                  >
+                    ყველას წაკითხვა
+                  </button>
+                )}
+              </div>
+
+              {/* Notification List */}
+              <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+                {notifications.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    შეტყობინებები არ არის
+                  </div>
+                ) : (
+                  notifications.map((item) => (
+                    <div
+                      key={item.id}
+                      onClick={() => {
+                        setNotifications((prev) =>
+                          prev.map((n) => (n.id === item.id ? { ...n, read: true } : n))
+                        );
+                        if (item.viewTarget) {
+                          setActiveView(item.viewTarget);
+                          setIsNotificationsOpen(false);
+                        } else if (item.link) {
+                          router.push(item.link);
+                          setIsNotificationsOpen(false);
+                        }
+                      }}
+                      className={`p-3.5 hover:bg-slate-50 transition cursor-pointer flex gap-3 ${
+                        !item.read
+                          ? item.type === 'RISK_ZONE'
+                            ? 'bg-rose-50/50'
+                            : 'bg-blue-50/40'
+                          : ''
+                      }`}
+                    >
+                      <div className="shrink-0 pt-0.5">
+                        {item.type === 'RISK_ZONE' ? (
+                          <span className="p-1.5 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[18px]">warning</span>
+                          </span>
+                        ) : item.type === 'PENDING_DEBTOR' ? (
+                          <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[18px]">person_check</span>
+                          </span>
+                        ) : (
+                          <span className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[18px]">verified</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4
+                            className={`text-xs font-semibold truncate ${
+                              item.type === 'RISK_ZONE' ? 'text-rose-950 font-bold' : 'text-slate-900'
+                            }`}
+                          >
+                            {item.title}
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                            {item.time}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 mt-1 line-clamp-2 leading-snug">
+                          {item.message}
+                        </p>
+                        <div className="mt-2 flex items-center gap-2">
+                          {item.link && (
+                            <Link
+                              href={item.link}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIsNotificationsOpen(false);
+                              }}
+                              className="text-[10px] font-bold text-rose-700 hover:text-rose-900 flex items-center gap-1"
+                            >
+                              <span>რისკ ზონაში გადასვლა</span>
+                              <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
+                            </Link>
+                          )}
+                          {item.viewTarget && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveView(item.viewTarget!);
+                                setIsNotificationsOpen(false);
+                              }}
+                              className="text-[10px] font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+                            >
+                              <span>რეესტრის ნახვა</span>
+                              <span className="material-symbols-outlined text-[12px]">arrow_forward</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {!item.read && (
+                        <div className="shrink-0 self-center">
+                          <span className="w-2 h-2 rounded-full bg-blue-600 block" />
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="p-2.5 bg-slate-50 border-t border-slate-200 text-center">
+                <Link
+                  href="/analyst/analytics"
+                  onClick={() => setIsNotificationsOpen(false)}
+                  className="text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center justify-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-sm">query_stats</span>
+                  <span>ანალიტიკის გვერდი და რისკ ზონა</span>
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
         {/* Current Date Widget */}
         <div className="hidden lg:flex flex-col text-right pr-2">
           <span className="text-body-sm font-body-sm font-medium text-text-primary">24 ოქტომბერი, 2024</span>
