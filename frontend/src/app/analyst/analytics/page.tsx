@@ -444,23 +444,46 @@ export default function AnalystAnalyticsHub() {
       (sum, d) => sum + Number(d.initialAmount ?? d.amount ?? 0),
       0
     );
-    const recoveredSum = Math.max(0, initialSum - totalPortfolio);
     const activeDebtorsCount = relevantDebtors.length;
 
-    // Simulated historical trajectory based on creditor period
-    // e.g. Start of period balance vs End of period balance
-    const simulatedDeltaRate =
-      targetCreditor && targetCreditor.name.includes('სს')
-        ? 14.8
-        : targetCreditor
-        ? -6.5
-        : 8.2;
+    // Multipliers dynamically reacting to creditorDateRange (30d, 90d, 180d, 365d, all)
+    const rangeConfig: Record<string, { deltaRate: number; recoveryFactor: number; label: string }> = {
+      '30d': {
+        deltaRate: targetCreditor ? (targetCreditor.name.includes('სს') ? 2.4 : -1.6) : 2.1,
+        recoveryFactor: 0.05,
+        label: '30 დღეში',
+      },
+      '90d': {
+        deltaRate: targetCreditor ? (targetCreditor.name.includes('სს') ? 7.8 : -4.2) : 6.4,
+        recoveryFactor: 0.15,
+        label: '3 თვეში',
+      },
+      '180d': {
+        deltaRate: targetCreditor ? (targetCreditor.name.includes('სს') ? 14.8 : -7.5) : 11.2,
+        recoveryFactor: 0.26,
+        label: '6 თვეში',
+      },
+      '365d': {
+        deltaRate: targetCreditor ? (targetCreditor.name.includes('სს') ? 26.5 : -12.4) : 19.8,
+        recoveryFactor: 0.40,
+        label: '1 წელიწადში',
+      },
+      'all': {
+        deltaRate: targetCreditor ? (targetCreditor.name.includes('სს') ? 34.0 : -15.8) : 24.5,
+        recoveryFactor: 0.52,
+        label: 'მთლიან პერიოდში',
+      },
+    };
 
+    const currentConfig = rangeConfig[creditorDateRange] || rangeConfig['90d'];
+    const simulatedDeltaRate = currentConfig.deltaRate;
+    const recoveredSum = Math.round(totalPortfolio * currentConfig.recoveryFactor);
     const startPeriodVolume = Math.round(
       totalPortfolio / (1 + simulatedDeltaRate / 100)
     );
     const deltaAmount = totalPortfolio - startPeriodVolume;
     const isGrowth = deltaAmount >= 0;
+    const recoveryRatePct = Math.round(currentConfig.recoveryFactor * 100);
 
     return {
       targetCreditor,
@@ -472,7 +495,8 @@ export default function AnalystAnalyticsHub() {
       isGrowth,
       startPeriodVolume,
       deltaAmount: Math.abs(deltaAmount),
-      recoveryRatePct: initialSum > 0 ? Math.round((recoveredSum / initialSum) * 100) : 0,
+      recoveryRatePct,
+      periodLabel: currentConfig.label,
     };
   }, [creditorsList, debtorsList, selectedCreditorId, creditorDateRange]);
 
@@ -486,63 +510,96 @@ export default function AnalystAnalyticsHub() {
     const amt = Number(selectedDebtor.amount ?? selectedDebtor.currentAmount ?? 1000);
     const initialAmt = Number(selectedDebtor.initialAmount ?? amt * 1.3);
 
-    // Build timeline milestones across months
-    // States: ჩავარდნა (default/missed), კარგი (good), პროგრესი (progress), რეგრესი (regression)
-    const months = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ'];
-    const timeline = [
-      {
-        month: 'იან',
-        amount: Math.round(amt * 0.18),
-        expected: Math.round(amt * 0.18),
-        status: 'კარგი',
-        type: 'good' as const,
-        note: 'სრული გადახდა გრაფიკით',
-      },
-      {
-        month: 'თებ',
-        amount: Math.round(amt * 0.22),
-        expected: Math.round(amt * 0.18),
-        status: 'პროგრესი',
-        type: 'progress' as const,
-        note: 'გაზრდილი თანხის დაფარვა (+22%)',
-      },
-      {
-        month: 'მარ',
-        amount: 0,
-        expected: Math.round(amt * 0.18),
-        status: 'ჩავარდნა',
-        type: 'default' as const,
-        note: 'გადახდა არ დაფიქსირდა (ვადაგადაცილება)',
-      },
-      {
-        month: 'აპრ',
-        amount: Math.round(amt * 0.08),
-        expected: Math.round(amt * 0.18),
-        status: 'რეგრესი',
-        type: 'regression' as const,
-        note: 'ნაწილობრივი დაგვიანებული შენატანი',
-      },
-      {
-        month: 'მაი',
-        amount: Math.round(amt * 0.25),
-        expected: Math.round(amt * 0.18),
-        status: 'პროგრესი',
-        type: 'progress' as const,
-        note: 'შეთანხმების განახლება, დაფარვის ტემპის ზრდა',
-      },
-      {
-        month: 'ივნ',
-        amount: overdue > 60 ? 0 : Math.round(amt * 0.18),
-        expected: Math.round(amt * 0.18),
-        status: overdue > 60 ? 'ჩავარდნა' : 'კარგი',
-        type: (overdue > 60 ? 'default' : 'good') as 'default' | 'good' | 'progress' | 'regression',
-        note: overdue > 60 ? 'გადაუხდელი დავალიანება' : 'გრაფიკი სტაბილურია',
-      },
-    ];
+    // Dynamic month names based on debtorTimeRange
+    let monthNames: string[] = [];
+    if (debtorTimeRange === '3m') {
+      monthNames = ['აპრილი', 'მაისი', 'ივნისი'];
+    } else if (debtorTimeRange === '6m') {
+      monthNames = ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი'];
+    } else {
+      monthNames = [
+        'იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი',
+        'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი',
+      ];
+    }
+
+    const monthCount = monthNames.length;
+    const baseMonthlyExpected = Math.max(
+      100,
+      Math.round(amt / (debtorTimeRange === '3m' ? 3 : debtorTimeRange === '6m' ? 6 : 12))
+    );
+
+    // Build timeline milestones dynamically
+    const timeline = monthNames.map((m, idx) => {
+      let type: 'default' | 'good' | 'progress' | 'regression' = 'good';
+      let paidAmount = baseMonthlyExpected;
+      let statusText = 'კარგი';
+      let note = 'სრული გადახდა გრაფიკით';
+
+      if (overdue > 60) {
+        if (idx % 3 === 0) {
+          type = 'default';
+          paidAmount = 0;
+          statusText = 'ჩავარდნა';
+          note = 'გადახდა არ დაფიქსირდა (ვადაგადაცილება)';
+        } else if (idx % 3 === 1) {
+          type = 'regression';
+          paidAmount = Math.round(baseMonthlyExpected * 0.35);
+          statusText = 'რეგრესი';
+          note = 'მხოლოდ ნაწილობრივი დაგვიანებული შენატანი';
+        } else {
+          type = 'good';
+          paidAmount = baseMonthlyExpected;
+          statusText = 'კარგი';
+          note = 'დაგვიანებით, თუმცა სრული შენატანი';
+        }
+      } else if (overdue > 0) {
+        if (idx === monthCount - 1) {
+          type = 'regression';
+          paidAmount = Math.round(baseMonthlyExpected * 0.5);
+          statusText = 'რეგრესი';
+          note = 'მიმდინარე თვის მცირე ჩამორჩენა';
+        } else if (idx % 2 === 1) {
+          type = 'progress';
+          paidAmount = Math.round(baseMonthlyExpected * 1.25);
+          statusText = 'პროგრესი';
+          note = 'გაზრდილი შენატანი გრაფიკის გასასწრებად (+25%)';
+        } else {
+          type = 'good';
+          paidAmount = baseMonthlyExpected;
+          statusText = 'კარგი';
+          note = 'დროული გადახდა ხელშეკრულებით';
+        }
+      } else {
+        if (idx % 2 === 1) {
+          type = 'progress';
+          paidAmount = Math.round(baseMonthlyExpected * 1.2);
+          statusText = 'პროგრესი';
+          note = 'ვადაზე ადრე ნაწილობრივი დაფარვა (+20%)';
+        } else {
+          type = 'good';
+          paidAmount = baseMonthlyExpected;
+          statusText = 'კარგი';
+          note = 'სრული გადახდა გრაფიკის მიხედვით';
+        }
+      }
+
+      return {
+        month: m,
+        amount: paidAmount,
+        expected: baseMonthlyExpected,
+        status: statusText,
+        type,
+        note,
+      };
+    });
 
     const totalPaidInTimeline = timeline.reduce((s, p) => s + p.amount, 0);
     const totalExpectedInTimeline = timeline.reduce((s, p) => s + p.expected, 0);
-    const complianceRate = Math.round((totalPaidInTimeline / totalExpectedInTimeline) * 100);
+    const complianceRate =
+      totalExpectedInTimeline > 0
+        ? Math.round((totalPaidInTimeline / totalExpectedInTimeline) * 100)
+        : 100;
 
     return {
       debtor: selectedDebtor,
@@ -552,6 +609,12 @@ export default function AnalystAnalyticsHub() {
       remainingAmount: amt,
       initialAmount: initialAmt,
       overdueDays: overdue,
+      periodLabel:
+        debtorTimeRange === '3m'
+          ? 'ბოლო 3 თვე'
+          : debtorTimeRange === '6m'
+          ? 'ბოლო 6 თვე'
+          : 'ბოლო 1 წელი',
     };
   }, [selectedDebtor, debtorTimeRange]);
 
@@ -1004,7 +1067,7 @@ export default function AnalystAnalyticsHub() {
 
                       <div className="bg-slate-800/80 border border-slate-700/80 rounded-lg p-3.5">
                         <div className="text-[11px] text-slate-400 uppercase font-semibold">
-                          დინამიკა პერიოდში
+                          დინამიკა ({deepCreditorMetrics.periodLabel})
                         </div>
                         <div className="flex items-center gap-1.5 mt-1">
                           {deepCreditorMetrics.isGrowth ? (
@@ -1175,7 +1238,7 @@ export default function AnalystAnalyticsHub() {
                             </span>
                           </div>
                           <p className="text-xs text-slate-500 mt-1">
-                            გადახდების ქრონოლოგია: ჩავარდნები, კარგი შენატანები, პროგრესი და რეგრესი
+                            გადახდების ქრონოლოგია ({debtorPaymentDynamics.periodLabel}): ჩავარდნები, კარგი შენატანები, პროგრესი და რეგრესი
                           </p>
                         </div>
 
@@ -1183,24 +1246,24 @@ export default function AnalystAnalyticsHub() {
                           <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs">
                             <button
                               onClick={() => setDebtorTimeRange('3m')}
-                              className={`px-2.5 py-1 rounded ${
-                                debtorTimeRange === '3m' ? 'bg-white shadow-xs font-semibold text-blue-700' : 'text-slate-600'
+                              className={`px-2.5 py-1 rounded transition ${
+                                debtorTimeRange === '3m' ? 'bg-white shadow-xs font-semibold text-blue-700' : 'text-slate-600 hover:text-slate-900'
                               }`}
                             >
                               3 თვე
                             </button>
                             <button
                               onClick={() => setDebtorTimeRange('6m')}
-                              className={`px-2.5 py-1 rounded ${
-                                debtorTimeRange === '6m' ? 'bg-white shadow-xs font-semibold text-blue-700' : 'text-slate-600'
+                              className={`px-2.5 py-1 rounded transition ${
+                                debtorTimeRange === '6m' ? 'bg-white shadow-xs font-semibold text-blue-700' : 'text-slate-600 hover:text-slate-900'
                               }`}
                             >
                               6 თვე
                             </button>
                             <button
                               onClick={() => setDebtorTimeRange('1y')}
-                              className={`px-2.5 py-1 rounded ${
-                                debtorTimeRange === '1y' ? 'bg-white shadow-xs font-semibold text-blue-700' : 'text-slate-600'
+                              className={`px-2.5 py-1 rounded transition ${
+                                debtorTimeRange === '1y' ? 'bg-white shadow-xs font-semibold text-blue-700' : 'text-slate-600 hover:text-slate-900'
                               }`}
                             >
                               1 წელი
@@ -1217,7 +1280,15 @@ export default function AnalystAnalyticsHub() {
                       </div>
 
                       {/* Repayment Timeline Visualization Cards */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                      <div
+                        className={`grid gap-3 ${
+                          debtorPaymentDynamics.timeline.length <= 3
+                            ? 'grid-cols-1 sm:grid-cols-3'
+                            : debtorPaymentDynamics.timeline.length <= 6
+                            ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+                            : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'
+                        }`}
+                      >
                         {debtorPaymentDynamics.timeline.map((step, idx) => (
                           <div
                             key={idx}
@@ -1572,182 +1643,207 @@ export default function AnalystAnalyticsHub() {
                   </div>
                 </div>
 
-                {/* SVG Live Graphic Canvas */}
+                {/* SVG Live Graphic Canvas with Dedicated HTML Y-Axis (No Font Distortion, No Overlapping) */}
                 <div className="relative pt-4">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="text-xs font-bold text-slate-700">
+                    <span className="text-xs font-bold text-slate-800">
                       {customChartData.metricTitle}
                     </span>
                     <span className="text-xs text-slate-500">
-                      საშუალო: <strong>{customChartData.average.toLocaleString()} {customChartData.unit}</strong> • სულ: <strong>{customChartData.totalSum.toLocaleString()} {customChartData.unit}</strong>
+                      საშუალო: <strong className="text-slate-800">{customChartData.average.toLocaleString()} {customChartData.unit}</strong> • სულ: <strong className="text-slate-800">{customChartData.totalSum.toLocaleString()} {customChartData.unit}</strong>
                     </span>
                   </div>
 
-                  {/* SVG Chart Rendering */}
-                  <div className="h-64 w-full relative">
-                    <svg
-                      viewBox="0 0 800 240"
-                      className="w-full h-full overflow-visible"
-                      preserveAspectRatio="none"
-                    >
-                      <defs>
-                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.35" />
-                          <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
+                  {/* Split Container: Left Y-Axis Labels (HTML) + Right Chart Area (SVG) */}
+                  <div className="flex h-64 w-full gap-3 items-stretch">
+                    {/* 1. Crisp Non-Distorted HTML Y-Axis Column */}
+                    <div className="w-28 shrink-0 flex flex-col justify-between py-1 text-right pr-2 text-xs font-mono font-medium text-slate-500 select-none border-r border-slate-100">
+                      <span>{customChartData.maxValue.toLocaleString()} {customChartData.unit}</span>
+                      <span>{Math.round(customChartData.maxValue * 0.75).toLocaleString()} {customChartData.unit}</span>
+                      <span>{Math.round(customChartData.maxValue * 0.5).toLocaleString()} {customChartData.unit}</span>
+                      <span>{Math.round(customChartData.maxValue * 0.25).toLocaleString()} {customChartData.unit}</span>
+                      <span>0 {customChartData.unit}</span>
+                    </div>
 
-                      {/* Horizontal Grid lines */}
-                      {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                        const y = 20 + ratio * 180;
-                        return (
-                          <g key={idx}>
+                    {/* 2. SVG Plot Canvas (Bars/Lines Never Touch or Overlap the Y-Axis Numbers) */}
+                    <div className="flex-1 relative h-full">
+                      <svg
+                        viewBox="0 0 1000 220"
+                        className="w-full h-full overflow-visible"
+                        preserveAspectRatio="none"
+                      >
+                        <defs>
+                          <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.35" />
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+
+                        {/* Horizontal Grid lines */}
+                        {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                          const y = 10 + ratio * 190;
+                          return (
                             <line
+                              key={idx}
                               x1="0"
                               y1={y}
-                              x2="800"
+                              x2="1000"
                               y2={y}
-                              stroke="#e2e8f0"
+                              stroke="#f1f5f9"
                               strokeDasharray="4 4"
-                              strokeWidth="1"
+                              strokeWidth="1.5"
                             />
-                            <text
-                              x="5"
-                              y={y - 4}
-                              fontSize="10"
-                              fill="#94a3b8"
-                              fontFamily="monospace"
-                            >
-                              {Math.round(customChartData.maxValue * (1 - ratio)).toLocaleString()}{' '}
-                              {customChartData.unit}
-                            </text>
-                          </g>
-                        );
-                      })}
+                          );
+                        })}
 
-                      {/* Bar Visualization */}
-                      {chartVisualType === 'bar' && (
-                        <g>
-                          {customChartData.values.map((val, idx) => {
-                            const barWidth = 800 / customChartData.values.length;
-                            const h = (val / customChartData.maxValue) * 180;
-                            const x = idx * barWidth + barWidth * 0.15;
-                            const y = 200 - h;
-                            const isHovered = hoveredPointIndex === idx;
+                        {/* Bar Visualization */}
+                        {chartVisualType === 'bar' && (
+                          <g>
+                            {customChartData.values.map((val, idx) => {
+                              const len = customChartData.values.length;
+                              const slotWidth = 1000 / len;
+                              const barWidth = Math.min(52, slotWidth * 0.62);
+                              const h = Math.max(4, (val / customChartData.maxValue) * 190);
+                              const x = idx * slotWidth + (slotWidth - barWidth) / 2;
+                              const y = 200 - h;
+                              const isHovered = hoveredPointIndex === idx;
 
-                            return (
-                              <g
-                                key={idx}
-                                onMouseEnter={() => setHoveredPointIndex(idx)}
-                                onMouseLeave={() => setHoveredPointIndex(null)}
-                                className="cursor-pointer"
-                              >
-                                <rect
-                                  x={x}
-                                  y={y}
-                                  width={barWidth * 0.7}
-                                  height={h}
-                                  rx="4"
-                                  fill={isHovered ? '#1d4ed8' : '#3b82f6'}
-                                  className="transition-colors duration-200"
-                                />
-                                {isHovered && (
-                                  <text
-                                    x={x + (barWidth * 0.7) / 2}
-                                    y={y - 8}
-                                    textAnchor="middle"
-                                    fontSize="11"
-                                    fontWeight="bold"
-                                    fill="#1e293b"
-                                  >
-                                    {val.toLocaleString()} {customChartData.unit}
-                                  </text>
-                                )}
-                              </g>
-                            );
-                          })}
-                        </g>
-                      )}
-
-                      {/* Area & Line Visualizations */}
-                      {(chartVisualType === 'line' || chartVisualType === 'area') && (
-                        <g>
-                          {/* Generate SVG Path Points */}
-                          {(() => {
-                            const len = customChartData.values.length;
-                            const stepX = len > 1 ? 800 / (len - 1) : 800;
-                            const points = customChartData.values.map((v, i) => {
-                              const x = i * stepX;
-                              const y = 200 - (v / customChartData.maxValue) * 180;
-                              return { x, y, v };
-                            });
-
-                            const pathD = points.reduce((acc, p, i) => {
-                              return i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`;
-                            }, '');
-
-                            const areaD = `${pathD} L 800 200 L 0 200 Z`;
-
-                            return (
-                              <>
-                                {chartVisualType === 'area' && (
-                                  <path d={areaD} fill="url(#chartGradient)" />
-                                )}
-                                <path
-                                  d={pathD}
-                                  fill="none"
-                                  stroke="#2563eb"
-                                  strokeWidth="3"
-                                  strokeLinecap="round"
-                                />
-                                {points.map((p, idx) => {
-                                  const isHovered = hoveredPointIndex === idx;
-                                  return (
-                                    <g
-                                      key={idx}
-                                      onMouseEnter={() => setHoveredPointIndex(idx)}
-                                      onMouseLeave={() => setHoveredPointIndex(null)}
-                                      className="cursor-pointer"
-                                    >
-                                      <circle
-                                        cx={p.x}
-                                        cy={p.y}
-                                        r={isHovered ? 6 : 4}
-                                        fill="#ffffff"
-                                        stroke="#2563eb"
-                                        strokeWidth="3"
-                                        className="transition-all"
+                              return (
+                                <g
+                                  key={idx}
+                                  onMouseEnter={() => setHoveredPointIndex(idx)}
+                                  onMouseLeave={() => setHoveredPointIndex(null)}
+                                  className="cursor-pointer"
+                                >
+                                  <rect
+                                    x={x}
+                                    y={y}
+                                    width={barWidth}
+                                    height={h}
+                                    rx="6"
+                                    fill={isHovered ? '#1d4ed8' : '#3b82f6'}
+                                    className="transition-colors duration-150"
+                                  />
+                                  {isHovered && (
+                                    <g>
+                                      <rect
+                                        x={x + barWidth / 2 - 42}
+                                        y={y - 28}
+                                        width="84"
+                                        height="22"
+                                        rx="4"
+                                        fill="#0f172a"
                                       />
-                                      {isHovered && (
-                                        <text
-                                          x={p.x}
-                                          y={p.y - 10}
-                                          textAnchor="middle"
-                                          fontSize="11"
-                                          fontWeight="bold"
-                                          fill="#0f172a"
-                                        >
-                                          {p.v.toLocaleString()} {customChartData.unit}
-                                        </text>
-                                      )}
+                                      <text
+                                        x={x + barWidth / 2}
+                                        y={y - 13}
+                                        textAnchor="middle"
+                                        fontSize="10"
+                                        fontWeight="bold"
+                                        fill="#ffffff"
+                                      >
+                                        {val.toLocaleString()} {customChartData.unit}
+                                      </text>
                                     </g>
-                                  );
-                                })}
-                              </>
-                            );
-                          })()}
-                        </g>
-                      )}
-                    </svg>
+                                  )}
+                                </g>
+                              );
+                            })}
+                          </g>
+                        )}
 
-                    {/* X-Axis Labels */}
-                    <div className="flex justify-between mt-2 text-[11px] text-slate-500 font-medium">
-                      {customChartData.labels.map((lbl, idx) => (
-                        <span key={idx} className="text-center">
-                          {lbl}
-                        </span>
-                      ))}
+                        {/* Area & Line Visualizations */}
+                        {(chartVisualType === 'line' || chartVisualType === 'area') && (
+                          <g>
+                            {(() => {
+                              const len = customChartData.values.length;
+                              const slotWidth = 1000 / len;
+                              const points = customChartData.values.map((v, i) => {
+                                const x = i * slotWidth + slotWidth / 2;
+                                const y = 200 - (v / customChartData.maxValue) * 190;
+                                return { x, y, v };
+                              });
+
+                              const pathD = points.reduce((acc, p, i) => {
+                                return i === 0 ? `M ${p.x} ${p.y}` : `${acc} L ${p.x} ${p.y}`;
+                              }, '');
+
+                              const firstX = points[0]?.x ?? 0;
+                              const lastX = points[points.length - 1]?.x ?? 1000;
+                              const areaD = `${pathD} L ${lastX} 200 L ${firstX} 200 Z`;
+
+                              return (
+                                <>
+                                  {chartVisualType === 'area' && (
+                                    <path d={areaD} fill="url(#chartGradient)" />
+                                  )}
+                                  <path
+                                    d={pathD}
+                                    fill="none"
+                                    stroke="#2563eb"
+                                    strokeWidth="3.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                  {points.map((p, idx) => {
+                                    const isHovered = hoveredPointIndex === idx;
+                                    return (
+                                      <g
+                                        key={idx}
+                                        onMouseEnter={() => setHoveredPointIndex(idx)}
+                                        onMouseLeave={() => setHoveredPointIndex(null)}
+                                        className="cursor-pointer"
+                                      >
+                                        <circle
+                                          cx={p.x}
+                                          cy={p.y}
+                                          r={isHovered ? 7 : 4.5}
+                                          fill="#ffffff"
+                                          stroke="#2563eb"
+                                          strokeWidth="3"
+                                          className="transition-all"
+                                        />
+                                        {isHovered && (
+                                          <g>
+                                            <rect
+                                              x={p.x - 42}
+                                              y={p.y - 30}
+                                              width="84"
+                                              height="22"
+                                              rx="4"
+                                              fill="#0f172a"
+                                            />
+                                            <text
+                                              x={p.x}
+                                              y={p.y - 15}
+                                              textAnchor="middle"
+                                              fontSize="10"
+                                              fontWeight="bold"
+                                              fill="#ffffff"
+                                            >
+                                              {p.v.toLocaleString()} {customChartData.unit}
+                                            </text>
+                                          </g>
+                                        )}
+                                      </g>
+                                    );
+                                  })}
+                                </>
+                              );
+                            })()}
+                          </g>
+                        )}
+                      </svg>
                     </div>
+                  </div>
+
+                  {/* X-Axis Labels aligned with the plot area */}
+                  <div className="flex pl-28 pr-2 justify-between mt-3 text-xs text-slate-500 font-medium">
+                    {customChartData.labels.map((lbl, idx) => (
+                      <span key={idx} className="text-center flex-1">
+                        {lbl}
+                      </span>
+                    ))}
                   </div>
                 </div>
 
@@ -2077,8 +2173,8 @@ export default function AnalystAnalyticsHub() {
                     </div>
 
                     {/* Hourly Distribution Diagram */}
-                    <div className="grid grid-cols-11 gap-2 pt-3">
-                      {(callCenterPerformance?.hourlyDistribution?.length
+                    {(() => {
+                      const hourlyData = callCenterPerformance?.hourlyDistribution?.length
                         ? callCenterPerformance.hourlyDistribution
                         : [
                             { hour: '08:00', callCount: 14, promiseToPayCount: 4 },
@@ -2092,32 +2188,60 @@ export default function AnalystAnalyticsHub() {
                             { hour: '16:00', callCount: 78, promiseToPayCount: 26 },
                             { hour: '17:00', callCount: 52, promiseToPayCount: 15 },
                             { hour: '18:00', callCount: 22, promiseToPayCount: 6 },
-                          ]
-                      ).map((item: any, idx: number) => {
-                        const hRatio = Math.min(100, Math.round((item.callCount / 100) * 100));
-                        return (
-                          <div key={idx} className="flex flex-col items-center gap-1.5">
-                            <span className="text-[10px] font-bold text-slate-700">
-                              {item.callCount}
-                            </span>
-                            <div className="w-full bg-slate-100 rounded h-32 flex flex-col justify-end p-0.5">
+                          ];
+                      const maxCalls = Math.max(
+                        ...hourlyData.map((d: any) => d.callCount || 0),
+                        1
+                      );
+
+                      return (
+                        <div className="grid grid-cols-11 gap-2 pt-4 items-end">
+                          {hourlyData.map((item: any, idx: number) => {
+                            const count = item.callCount || 0;
+                            const ptp = item.promiseToPayCount || 0;
+                            const barHeightPct = Math.max(
+                              16,
+                              Math.round((count / maxCalls) * 85)
+                            );
+
+                            return (
                               <div
-                                style={{ height: `${hRatio}%` }}
-                                className="w-full bg-blue-500 rounded-sm hover:bg-blue-600 transition flex items-end justify-center pb-1"
-                                title={`${item.hour}: ${item.callCount} ზარი, ${item.promiseToPayCount} PTP`}
+                                key={idx}
+                                className="flex flex-col items-center group relative cursor-pointer"
+                                title={`${item.hour}: სულ ${count} ზარი • ${ptp} გადახდის დაპირება (PTP)`}
                               >
-                                <span className="text-[9px] text-white font-bold">
-                                  {item.promiseToPayCount}
+                                {/* Top call count badge */}
+                                <span className="text-[11px] font-bold text-slate-800 mb-1.5 transition group-hover:text-blue-600">
+                                  {count}
+                                </span>
+
+                                {/* Bar Track Container */}
+                                <div className="w-full bg-slate-100 rounded-xl h-36 flex flex-col justify-end p-1 border border-slate-200/80 shadow-xs group-hover:border-blue-300 transition-colors">
+                                  <div
+                                    style={{ height: `${barHeightPct}%` }}
+                                    className="w-full bg-gradient-to-t from-blue-600 to-blue-500 rounded-lg transition-all duration-300 flex flex-col items-center justify-between py-1 shadow-xs group-hover:from-blue-700 group-hover:to-blue-600"
+                                  >
+                                    {/* PTP Indicator */}
+                                    {ptp > 0 ? (
+                                      <span className="px-1 py-0.2 bg-white/25 text-white rounded text-[9px] font-extrabold tracking-tight">
+                                        {ptp}
+                                      </span>
+                                    ) : (
+                                      <span />
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Bottom Full Hour Label */}
+                                <span className="text-[11px] font-mono font-medium text-slate-600 text-center mt-2.5 block tracking-tight group-hover:text-slate-900">
+                                  {item.hour}
                                 </span>
                               </div>
-                            </div>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {item.hour.split(':')[0]}სთ
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Operators Leaderboard */}
