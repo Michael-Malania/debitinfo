@@ -28,6 +28,15 @@ export interface RespondScheduleDto {
   comment?: string;
 }
 
+export interface AddDebtorContactDto {
+  firstName: string;
+  lastName?: string;
+  phone: string;
+  relationType?: string; // თანამდებობა / როლი: დირექტორი, მთავარი ბუღალტერი, იურისტი, ოჯახის წევრი და ა.შ.
+  email?: string;
+  notes?: string;
+}
+
 @Injectable()
 export class CrmService implements OnModuleInit {
   private readonly logger = new Logger(CrmService.name);
@@ -111,6 +120,9 @@ export class CrmService implements OnModuleInit {
           include: {
             individualProfile: true,
             companyProfile: true,
+            contactPersons: {
+              orderBy: { createdAt: 'desc' },
+            },
           },
         },
         creditor: {
@@ -174,6 +186,9 @@ export class CrmService implements OnModuleInit {
           include: {
             individualProfile: true,
             companyProfile: true,
+            contactPersons: {
+              orderBy: { createdAt: 'desc' },
+            },
           },
         },
         creditor: {
@@ -225,6 +240,9 @@ export class CrmService implements OnModuleInit {
           include: {
             individualProfile: true,
             companyProfile: true,
+            contactPersons: {
+              orderBy: { createdAt: 'desc' },
+            },
           },
         },
       },
@@ -413,7 +431,105 @@ export class CrmService implements OnModuleInit {
       supportingDocuments: Array.isArray(c.supportingDocuments) ? c.supportingDocuments : [],
       paymentReceipts: c.paymentReceipts || [],
       schedules: c.schedules || [],
+      contactPersons: (c.debtor?.contactPersons || []).map((cp: any) => ({
+        id: cp.id,
+        firstName: cp.firstName,
+        lastName: cp.lastName,
+        phone: cp.phone,
+        email: cp.email || null,
+        notes: cp.address || null,
+        relationType: cp.relationType || 'საკონტაქტო პირი',
+        createdAt: cp.createdAt,
+      })),
     };
+  }
+
+  /**
+   * Add new contact phone / discovered person for debtor (Internal only)
+   */
+  async addDebtorContact(claimId: string, dto: AddDebtorContactDto, user: any) {
+    if (!dto.phone?.trim() || !dto.firstName?.trim()) {
+      throw new BadRequestException('ტელეფონის ნომერი და სახელი სავალდებულოა');
+    }
+
+    const claim = await this.prisma.debtClaim.findUnique({
+      where: { id: claimId },
+      include: { debtor: true },
+    });
+
+    if (!claim) {
+      throw new NotFoundException(`საქმე ${claimId} ვერ მოიძებნა`);
+    }
+
+    const contact = await this.prisma.contactPerson.create({
+      data: {
+        userId: claim.debtorId,
+        firstName: dto.firstName.trim(),
+        lastName: (dto.lastName || '').trim(),
+        phone: dto.phone.trim(),
+        email: dto.email?.trim() || null,
+        address: dto.notes?.trim() || null,
+        relationType: dto.relationType?.trim() || 'დამატებითი კონტაქტი',
+      },
+    });
+
+    const operatorName = user?.staffProfile?.fullName || user?.email || 'კრედიტ მენეჯერი';
+    await this.prisma.caseTimelineEvent.create({
+      data: {
+        claimId: claim.id,
+        authorId: user.id,
+        department: 'CALL_CENTER',
+        authorRoleTitle: `კრედიტ მენეჯერი - ${operatorName}`,
+        actionType: 'NOTE_ADDED',
+        description: `მოძიებული და დამატებულია ახალი საკონტაქტო ნომერი: ${dto.phone} (${dto.firstName} ${dto.lastName || ''} — ${dto.relationType || 'საკონტაქტო პირი'}). შიდა ჩანაწერი.`,
+      },
+    });
+
+    return {
+      success: true,
+      contact: {
+        id: contact.id,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        phone: contact.phone,
+        email: contact.email,
+        notes: contact.address,
+        relationType: contact.relationType,
+        createdAt: contact.createdAt,
+      },
+      message: 'ახალი საკონტაქტო ნომერი წარმატებით დაემატა!',
+    };
+  }
+
+  /**
+   * Delete contact phone for debtor (Internal only)
+   */
+  async deleteDebtorContact(claimId: string, contactId: string, user: any) {
+    const contact = await this.prisma.contactPerson.findUnique({
+      where: { id: contactId },
+    });
+
+    if (!contact) {
+      throw new NotFoundException(`საკონტაქტო პირი ვერ მოიძებნა`);
+    }
+
+    await this.prisma.contactPerson.delete({
+      where: { id: contactId },
+    });
+
+    const operatorName = user?.staffProfile?.fullName || user?.email || 'კრედიტ მენეჯერი';
+    await this.prisma.caseTimelineEvent.create({
+      data: {
+        claimId,
+        authorId: user.id,
+        department: 'CALL_CENTER',
+        authorRoleTitle: `კრედიტ მენეჯერი - ${operatorName}`,
+        actionType: 'NOTE_ADDED',
+        description: `წაიშალა საკონტაქტო ნომერი: ${contact.phone} (${contact.firstName} ${contact.lastName}).`,
+      },
+    });
+
+    return { success: true, message: 'საკონტაქტო ნომერი წაიშალა' };
   }
 
   /**

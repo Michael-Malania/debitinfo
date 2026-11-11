@@ -39,6 +39,21 @@ export default function CrmPage() {
   const [submittingLog, setSubmittingLog] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
+  // Splitter & Resizing State
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(55);
+  const [isResizing, setIsResizing] = useState(false);
+  const splitContainerRef = React.useRef<HTMLElement | null>(null);
+
+  // Debtor Contact Management State (INTERNAL ONLY)
+  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
+  const [newContactPhone, setNewContactPhone] = useState('+995 ');
+  const [newContactFirstName, setNewContactFirstName] = useState('');
+  const [newContactLastName, setNewContactLastName] = useState('');
+  const [newContactPosition, setNewContactPosition] = useState('მთავარი ბუღალტერი');
+  const [newContactNotes, setNewContactNotes] = useState('');
+  const [isSavingContact, setIsSavingContact] = useState(false);
+  const [copiedContactId, setCopiedContactId] = useState<string | null>(null);
+
   // Repayment Schedule Management State
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleModalMode, setScheduleModalMode] = useState<'create' | 'edit'>('create');
@@ -255,6 +270,88 @@ export default function CrmPage() {
       loadClaimDetail(selectedClaimId);
     }
   }, [selectedClaimId]);
+
+  // Handle Debtor Selection with Auto-Shrink
+  const handleSelectDebtor = (id: string) => {
+    setSelectedClaimId(id);
+    if (leftPanelWidth > 35) {
+      setLeftPanelWidth(28); // Automatically shrink registry to give room to debtor details
+    }
+  };
+
+  const toggleRegistryWidth = () => {
+    if (leftPanelWidth <= 35) {
+      setLeftPanelWidth(58);
+    } else {
+      setLeftPanelWidth(28);
+    }
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!splitContainerRef.current) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const newWidth = ((e.clientX - rect.left) / rect.width) * 100;
+      setLeftPanelWidth(Math.max(20, Math.min(80, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleAddDebtorContact = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeClaim?.id) return;
+    if (!newContactPhone.trim() || !newContactFirstName.trim()) {
+      alert('გთხოვთ მიუთითოთ ტელეფონის ნომერი და სახელი');
+      return;
+    }
+
+    setIsSavingContact(true);
+    try {
+      await crmBackendService.addDebtorContact(activeClaim.id, {
+        firstName: newContactFirstName.trim(),
+        lastName: newContactLastName.trim(),
+        phone: newContactPhone.trim(),
+        relationType: newContactPosition.trim(),
+        notes: newContactNotes.trim(),
+      });
+      setActionSuccessMessage('ახალი საკონტაქტო ნომერი წარმატებით დაემატა!');
+      setIsAddContactModalOpen(false);
+      setNewContactPhone('+995 ');
+      setNewContactFirstName('');
+      setNewContactLastName('');
+      setNewContactNotes('');
+      setTimeout(() => setActionSuccessMessage(null), 4000);
+      await loadClaimDetail(activeClaim.id);
+    } catch (err: any) {
+      alert(err?.message || 'საკონტაქტო პირის დამატება ვერ მოხერხდა');
+    } finally {
+      setIsSavingContact(false);
+    }
+  };
+
+  const handleDeleteDebtorContact = async (contactId: string) => {
+    if (!activeClaim?.id) return;
+    try {
+      await crmBackendService.deleteDebtorContact(activeClaim.id, contactId);
+      setActionSuccessMessage('საკონტაქტო ნომერი წაიშალა');
+      setTimeout(() => setActionSuccessMessage(null), 3000);
+      await loadClaimDetail(activeClaim.id);
+    } catch (err: any) {
+      alert(err?.message || 'საკონტაქტო პირის წაშლა ვერ მოხერხდა');
+    }
+  };
 
   useEffect(() => {
     if (currentTab === 'blog' && currentUser?.role !== 'ADMIN') {
@@ -771,9 +868,12 @@ export default function CrmPage() {
         </main>
       ) : (
         /* Main Split Layout: Telephony Active Call Console */
-        <main className="flex-1 flex overflow-hidden">
+        <main ref={splitContainerRef} className="flex-1 flex overflow-hidden relative">
           {/* LEFT SECTION: Queue Registry & Filters */}
-          <section className="w-7/12 border-r border-border-subtle flex flex-col bg-surface-card overflow-hidden">
+          <section
+            style={{ width: `${leftPanelWidth}%` }}
+            className="border-r border-border-subtle flex flex-col bg-surface-card overflow-hidden shrink-0 transition-[width] duration-100"
+          >
             {/* Section Header & Filter Cluster */}
             <div className="p-space-md border-b border-border-subtle bg-surface-card shrink-0 space-y-3">
               <div className="flex items-center justify-between">
@@ -784,13 +884,28 @@ export default function CrmPage() {
                     {queue.length} საქმე
                   </span>
                 </div>
-                <button
-                  onClick={loadQueueAndStats}
-                  className="px-2.5 py-1 text-label-md font-label-md text-primary bg-primary/10 hover:bg-primary/15 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm">refresh</span>
-                  <span>განახლება</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={toggleRegistryWidth}
+                    className="px-2.5 py-1 text-label-md font-label-md text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                    title={leftPanelWidth <= 35 ? 'რეესტრის გაფართოება (58%)' : 'რეესტრის შეკუმშვა (28%)'}
+                  >
+                    <span className="material-symbols-outlined text-sm">
+                      {leftPanelWidth <= 35 ? 'dock_to_right' : 'vertical_split'}
+                    </span>
+                    <span className="hidden sm:inline">
+                      {leftPanelWidth <= 35 ? 'გაფართოება' : 'შეკუმშვა'}
+                    </span>
+                  </button>
+                  <button
+                    onClick={loadQueueAndStats}
+                    className="px-2.5 py-1 text-label-md font-label-md text-primary bg-primary/10 hover:bg-primary/15 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                    <span>განახლება</span>
+                  </button>
+                </div>
               </div>
 
               {/* Segmented Filters */}
@@ -888,7 +1003,7 @@ export default function CrmPage() {
                     return (
                       <tr
                         key={item.id}
-                        onClick={() => setSelectedClaimId(item.id)}
+                        onClick={() => handleSelectDebtor(item.id)}
                         className={`cursor-pointer transition-colors ${
                           isSelected
                             ? 'bg-surface-container/60 border-l-4 border-l-primary'
@@ -945,7 +1060,7 @@ export default function CrmPage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedClaimId(item.id);
+                              handleSelectDebtor(item.id);
                             }}
                             className={`px-3 py-1.5 rounded-lg text-body-sm font-medium transition-colors flex items-center gap-1 ml-auto shadow-sm cursor-pointer ${
                               isSelected
@@ -974,8 +1089,42 @@ export default function CrmPage() {
             </div>
           </section>
 
+          {/* Vertical Resizable Splitter Divider */}
+          <div
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizing(true);
+            }}
+            onDoubleClick={() => setLeftPanelWidth(50)}
+            className={`relative w-2.5 -mx-1 z-30 cursor-col-resize select-none flex items-center justify-center transition-colors group shrink-0 ${
+              isResizing ? 'bg-primary/20' : 'hover:bg-primary/10'
+            }`}
+            title="გაწიეთ მარცხნივ/მარჯვნივ რეესტრის ზომის შესაცვლელად (ორმაგი კლიკი: 50/50)"
+          >
+            {/* Divider central line */}
+            <div
+              className={`w-[2px] h-full transition-colors ${
+                isResizing ? 'bg-primary' : 'bg-slate-300 group-hover:bg-primary'
+              }`}
+            />
+
+            {/* Grab handle indicator */}
+            <div
+              className={`absolute top-1/2 -translate-y-1/2 w-4 h-12 rounded-full border bg-white shadow-xs flex items-center justify-center transition-all ${
+                isResizing
+                  ? 'border-primary text-primary scale-110 shadow-md ring-2 ring-primary/20'
+                  : 'border-slate-300 text-slate-400 group-hover:border-primary group-hover:text-primary'
+              }`}
+            >
+              <span className="material-symbols-outlined text-[13px]">drag_indicator</span>
+            </div>
+          </div>
+
           {/* RIGHT SECTION: Active Debtor Case & Call Logging */}
-          <section className="w-5/12 flex flex-col bg-surface-bg overflow-hidden">
+          <section
+            style={{ width: `${100 - leftPanelWidth}%` }}
+            className="flex flex-col bg-surface-bg overflow-hidden shrink-0 transition-[width] duration-100"
+          >
             {activeClaim ? (
               <>
                 {/* Debtor Case Header */}
@@ -1064,6 +1213,152 @@ export default function CrmPage() {
                         <span className="material-symbols-outlined text-sm">phone_forwarded</span>
                         <span>დაკავშირება</span>
                       </a>
+                    </div>
+                  </div>
+
+                  {/* Discovered / Additional Contacts & Phone Numbers (INTERNAL ONLY) */}
+                  <div className="mt-3 bg-white border border-border-subtle rounded-xl p-3 shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary text-[18px]">phone_in_talk</span>
+                        <h4 className="font-bold text-xs text-text-primary">
+                          დამატებითი საკონტაქტო ნომრები & მოძიებული პირები
+                        </h4>
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200"
+                          title="ეს მონაცემები დებიტორისთვის დამალულია და მხოლოდ თანამშრომლებს (კრედიტ მენეჯერსა და ანალიტიკოსს) უჩანთ"
+                        >
+                          <span className="material-symbols-outlined text-[11px]">lock</span>
+                          შიდა მონაცემი (კრედიტ მენეჯერი / ანალიტიკოსი)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsAddContactModalOpen(true)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary-container text-white hover:bg-primary transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">add_call</span>
+                        <span>+ ახალი ნომრის დამატება</span>
+                      </button>
+                    </div>
+
+                    {/* Contact items list */}
+                    <div className="space-y-1.5 pt-1">
+                      {/* 1. Primary Default Debtor Phone */}
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-6 h-6 rounded-md bg-blue-100 text-blue-800 flex items-center justify-center font-bold text-[10px] shrink-0">
+                            №1
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-slate-900 text-xs tracking-wider">
+                                {activeClaim.debtorPhone}
+                              </span>
+                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                ძირითადი / მოვალე
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-500 block">
+                              {activeClaim.debtorName}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(activeClaim.debtorPhone);
+                              setCopiedPhone(true);
+                              setTimeout(() => setCopiedPhone(false), 2000);
+                            }}
+                            className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 cursor-pointer"
+                            title="კოპირება"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">{copiedPhone ? 'check' : 'content_copy'}</span>
+                          </button>
+                          <a
+                            href={`tel:${activeClaim.debtorPhone}`}
+                            className="px-2.5 py-1 rounded bg-primary text-white text-[11px] font-semibold hover:bg-[#0A37CA] transition flex items-center gap-1 shadow-2xs"
+                            title="დაკავშირება"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">call</span>
+                            <span>დაკავშირება</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      {/* 2. Discovered / Additional Contacts */}
+                      {activeClaim.contactPersons && activeClaim.contactPersons.length > 0 ? (
+                        activeClaim.contactPersons.map((contact: any, idx: number) => {
+                          const isCopied = copiedContactId === contact.id;
+                          return (
+                            <div
+                              key={contact.id}
+                              className="flex items-center justify-between p-2 rounded-lg bg-blue-50/40 hover:bg-blue-50/70 border border-blue-200/80 transition text-xs"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px] shrink-0">
+                                  №{idx + 2}
+                                </span>
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono font-bold text-slate-900 text-xs tracking-wider">
+                                      {contact.phone}
+                                    </span>
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                                      {contact.relationType || 'საკონტაქტო პირი'}
+                                    </span>
+                                    <span className="text-slate-800 font-semibold text-xs">
+                                      {contact.firstName} {contact.lastName}
+                                    </span>
+                                  </div>
+                                  {contact.notes && (
+                                    <p className="text-[11px] text-slate-600 mt-0.5">
+                                      {contact.notes}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(contact.phone);
+                                    setCopiedContactId(contact.id);
+                                    setTimeout(() => setCopiedContactId(null), 2000);
+                                  }}
+                                  className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-white cursor-pointer"
+                                  title="კოპირება"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">{isCopied ? 'check' : 'content_copy'}</span>
+                                </button>
+                                <a
+                                  href={`tel:${contact.phone}`}
+                                  className="px-2.5 py-1 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 transition flex items-center gap-1 shadow-2xs"
+                                  title={`${contact.firstName} ${contact.lastName}-თან დაკავშირება`}
+                                >
+                                  <span className="material-symbols-outlined text-[14px]">call</span>
+                                  <span>დაკავშირება</span>
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDebtorContact(contact.id)}
+                                  className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                                  title="საკონტაქტოს წაშლა"
+                                >
+                                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic py-1 px-1">
+                          დამატებითი მოძიებული ნომრები ჯერ არ არის შეყვანილი. ახალი ნომრის გამოვლენისას დააჭირეთ „+ ახალი ნომრის დამატება“-ს.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1723,6 +2018,132 @@ export default function CrmPage() {
                 >
                   <span className="material-symbols-outlined text-base">send</span>
                   <span>{savingSchedule ? 'ინახება...' : 'გრაფიკის შენახვა & დებიტორისთვის გაგზავნა'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD DEBTOR CONTACT MODAL (INTERNAL ONLY) */}
+      {isAddContactModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-border-subtle space-y-4 animate-scaleUp">
+            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
+                  <span className="material-symbols-outlined text-[18px]">add_call</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    ახალი საკონტაქტო ნომრის დამატება
+                  </h3>
+                  <span className="text-[11px] text-amber-700 font-medium flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[12px]">lock</span>
+                    შიდა ჩანაწერი — დებიტორს არ გამოუჩნდება
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddContactModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddDebtorContact} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  ტელეფონის ნომერი <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={newContactPhone}
+                  onChange={(e) => setNewContactPhone(e.target.value)}
+                  placeholder="+995 599 00 00 00"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    სახელი <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newContactFirstName}
+                    onChange={(e) => setNewContactFirstName(e.target.value)}
+                    placeholder="მაგ: ნინო"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    გვარი
+                  </label>
+                  <input
+                    type="text"
+                    value={newContactLastName}
+                    onChange={(e) => setNewContactLastName(e.target.value)}
+                    placeholder="მაგ: გელაშვილი"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  თანამდებობა / როლი <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={newContactPosition}
+                  onChange={(e) => setNewContactPosition(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
+                >
+                  <option value="მთავარი ბუღალტერი">მთავარი ბუღალტერი</option>
+                  <option value="დირექტორი">დირექტორი / ხელმძღვანელი</option>
+                  <option value="დამფუძნებელი">დამფუძნებელი / მეწილე</option>
+                  <option value="ფინანსური მენეჯერი">ფინანსური მენეჯერი</option>
+                  <option value="იურისტი / ადვოკატი">იურისტი / ადვოკატი</option>
+                  <option value="ოჯახის წევრი">ოჯახის წევრი (თავდები / ახლობელი)</option>
+                  <option value="მენეჯერი / თანამშრომელი">მენეჯერი / თანამშრომელი</option>
+                  <option value="სხვა საკონტაქტო პირი">სხვა საკონტაქტო პირი</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  შიდა შენიშვნა / კომენტარი
+                </label>
+                <textarea
+                  rows={2}
+                  value={newContactNotes}
+                  onChange={(e) => setNewContactNotes(e.target.value)}
+                  placeholder="მაგ: მოძიებულია საჯარო რეესტრიდან / თანახმაა ინვოისის გადამოწმებაზე..."
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsAddContactModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  გაუქმება
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingContact}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-[#0A37CA] transition flex items-center gap-1 shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[16px]">save</span>
+                  <span>{isSavingContact ? 'ინახება...' : 'შენახვა'}</span>
                 </button>
               </div>
             </form>

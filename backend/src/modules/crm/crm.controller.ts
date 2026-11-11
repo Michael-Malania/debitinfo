@@ -8,7 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { CrmService, LogCallDto, SaveScheduleDto, RespondScheduleDto } from './crm.service';
+import { CrmService, LogCallDto, SaveScheduleDto, RespondScheduleDto, AddDebtorContactDto } from './crm.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -45,6 +45,26 @@ export class CrmController {
     @CurrentUser() user: any,
   ) {
     return await this.crmService.logCall(dto, user);
+  }
+
+  @Post('claims/:id/contacts')
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN, UserRole.ANALYST)
+  async addDebtorContact(
+    @Param('id') claimId: string,
+    @Body() dto: AddDebtorContactDto,
+    @CurrentUser() user: any,
+  ) {
+    return await this.crmService.addDebtorContact(claimId, dto, user);
+  }
+
+  @Delete('claims/:id/contacts/:contactId')
+  @Roles(UserRole.OPERATOR, UserRole.ADMIN, UserRole.ANALYST)
+  async deleteDebtorContact(
+    @Param('id') claimId: string,
+    @Param('contactId') contactId: string,
+    @CurrentUser() user: any,
+  ) {
+    return await this.crmService.deleteDebtorContact(claimId, contactId, user);
   }
 
   @Post('claims/:id/schedule')

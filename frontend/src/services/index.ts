@@ -1155,6 +1155,26 @@ export const crmBackendService = {
       body: JSON.stringify(data),
     });
   },
+
+  async addDebtorContact(claimId: string, data: {
+    firstName: string;
+    lastName?: string;
+    phone: string;
+    relationType?: string;
+    email?: string;
+    notes?: string;
+  }): Promise<any> {
+    return await apiFetch(`/api/v1/crm/claims/${claimId}/contacts`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteDebtorContact(claimId: string, contactId: string): Promise<any> {
+    return await apiFetch(`/api/v1/crm/claims/${claimId}/contacts/${contactId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 export const debtorScheduleService = {

@@ -6574,6 +6574,32 @@ export default function AnalystPage() {
                         </a>
                       </div>
                     </div>
+
+                    {/* Discovered Contacts (Internal only) */}
+                    {d.contactPersons && d.contactPersons.length > 0 && (
+                      <div className="pt-2.5 mt-2.5 border-t border-slate-200 space-y-1.5">
+                        <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                          <span className="material-symbols-outlined text-amber-600 text-sm">lock</span>
+                          <span>მოძიებული საკონტაქტო ნომრები (შიდა):</span>
+                        </div>
+                        <div className="space-y-1">
+                          {d.contactPersons.map((cp: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between p-1.5 rounded bg-white border border-slate-200 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-800">{cp.phone}</span>
+                                <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
+                                  {cp.relationType || 'საკონტაქტო'}
+                                </span>
+                                <span className="text-slate-600 text-[11px]">{cp.firstName} {cp.lastName}</span>
+                              </div>
+                              <a href={`tel:${cp.phone}`} className="text-blue-600 hover:text-blue-800 font-semibold text-[11px]">
+                                დარეკვა
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Curator Box */}
