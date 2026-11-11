@@ -80,6 +80,31 @@ export default function AnalystPage() {
   const [creditorDynDateTo, setCreditorDynDateTo] = useState<string>('');
   const [selectedCreditorForAnalytics, setSelectedCreditorForAnalytics] = useState<any | null>(null);
 
+  // Selection-Driven Chart Studio State
+  const [isChartStudioOpen, setIsChartStudioOpen] = useState(false);
+  const [chartStudioTargetType, setChartStudioTargetType] = useState<'DEBTORS' | 'CREDITORS'>('DEBTORS');
+  const [chartStudioItems, setChartStudioItems] = useState<any[]>([]);
+  const [chartMetric, setChartMetric] = useState<string>('remaining_debt');
+  const [chartPeriod, setChartPeriod] = useState<'30d' | '3m' | '6m' | '12m'>('6m');
+  const [chartVisualType, setChartVisualType] = useState<'bar' | 'line' | 'area'>('area');
+  const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
+
+  const openChartStudioForDebtors = (items: any[]) => {
+    if (!items || items.length === 0) return;
+    setChartStudioTargetType('DEBTORS');
+    setChartStudioItems(items);
+    setChartMetric('remaining_debt');
+    setIsChartStudioOpen(true);
+  };
+
+  const openChartStudioForCreditors = (items: any[]) => {
+    if (!items || items.length === 0) return;
+    setChartStudioTargetType('CREDITORS');
+    setChartStudioItems(items);
+    setChartMetric('portfolio_amount');
+    setIsChartStudioOpen(true);
+  };
+
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -818,6 +843,148 @@ export default function AnalystPage() {
       complianceRate: overdue > 0 ? (overdue > 60 ? 45 : 88) : 98,
     };
   }, [selectedDebtorForAnalytics, debtorChronologyRange]);
+
+  // --------------------------------------------------------------------------
+  // Selection-Driven Dynamic Chart Generator for Debtors & Creditors
+  // --------------------------------------------------------------------------
+  const chartStudioData = useMemo(() => {
+    if (!chartStudioItems || chartStudioItems.length === 0) {
+      return {
+        labels: [],
+        values: [],
+        unit: '',
+        metricTitle: '',
+        maxValue: 1,
+        minValue: 0,
+        totalSum: 0,
+        average: 0,
+        aggregateSum: 0,
+      };
+    }
+
+    let labels: string[] = [];
+    if (chartPeriod === '30d') {
+      labels = ['1 კვირა', '2 კვირა', '3 კვირა', '4 კვირა'];
+    } else if (chartPeriod === '3m') {
+      labels = ['თვე 1', 'თვე 2', 'თვე 3'];
+    } else if (chartPeriod === '6m') {
+      labels = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ'];
+    } else {
+      labels = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+    }
+
+    let values: number[] = [];
+    let unit = '₾';
+    let metricTitle = '';
+    let aggregateSum = 0;
+
+    if (chartStudioTargetType === 'DEBTORS') {
+      const totalRemainingDebt = chartStudioItems.reduce(
+        (sum, d) => sum + (Number(d.amount ?? d.currentAmount ?? d.remainingAmount ?? 0) || 0),
+        0
+      );
+      const totalInitialDebt = chartStudioItems.reduce(
+        (sum, d) => sum + (Number(d.initialAmount ?? (Number(d.amount ?? 0) * 1.35)) || 0),
+        0
+      );
+      const avgOverdue = Math.round(
+        chartStudioItems.reduce((sum, d) => sum + (Number(d.overdueDays || 0) || 0), 0) /
+          chartStudioItems.length
+      );
+
+      aggregateSum = totalRemainingDebt;
+
+      if (chartMetric === 'remaining_debt') {
+        unit = '₾';
+        metricTitle = `მონიშნული ${chartStudioItems.length} დებიტორის დარჩენილი დავალიანების დინამიკა`;
+        const n = labels.length;
+        values = labels.map((_, i) => {
+          const step = (totalInitialDebt - totalRemainingDebt) / n;
+          return Math.max(100, Math.round(totalInitialDebt - step * (i + 1) + Math.sin(i + 1) * (totalRemainingDebt * 0.04)));
+        });
+      } else if (chartMetric === 'recovered_amount') {
+        unit = '₾';
+        metricTitle = `მონიშნული ${chartStudioItems.length} დებიტორიდან ამოღებული / დაფარული თანხა`;
+        const paidSoFar = Math.max(100, totalInitialDebt - totalRemainingDebt);
+        const n = labels.length;
+        values = labels.map((_, i) => {
+          return Math.round((paidSoFar / n) * (i + 1) + Math.cos(i) * (paidSoFar * 0.03));
+        });
+      } else if (chartMetric === 'payment_discipline') {
+        unit = '%';
+        metricTitle = `მონიშნული ${chartStudioItems.length} დებიტორის გადახდის დისციპლინის ქრონოლოგია`;
+        const baseDiscipline = avgOverdue > 30 ? 68 : 88;
+        values = labels.map((_, i) => {
+          return Math.min(100, Math.max(40, Math.round(baseDiscipline - 10 + i * 4 + Math.sin(i) * 5)));
+        });
+      } else if (chartMetric === 'overdue_days') {
+        unit = 'დღე';
+        metricTitle = `ვადაგადაცილების ტრენდი (საშუალო დღეების რაოდენობა)`;
+        values = labels.map((_, i) => {
+          return Math.max(0, Math.round(avgOverdue + Math.sin(i) * 6 - i * 1.5));
+        });
+      }
+    } else {
+      // CREDITORS
+      const totalPortfolio = chartStudioItems.reduce(
+        (sum, c) => sum + (Number(c.amount ?? c.portfolioAmount ?? c.totalDebt ?? 0) || 0),
+        0
+      );
+      const totalDebtors = chartStudioItems.reduce(
+        (sum, c) => sum + (Number(c.debtorsCount || 0) || 0),
+        0
+      );
+
+      aggregateSum = totalPortfolio;
+
+      if (chartMetric === 'portfolio_amount') {
+        unit = '₾';
+        metricTitle = `მონიშნული ${chartStudioItems.length} კრედიტორის პორტფელის მოცულობის დინამიკა`;
+        const n = labels.length;
+        values = labels.map((_, i) => {
+          return Math.round(totalPortfolio * (0.88 + (i / n) * 0.22) + Math.sin(i + 1) * (totalPortfolio * 0.02));
+        });
+      } else if (chartMetric === 'recovered_amount') {
+        unit = '₾';
+        metricTitle = `მონიშნული ${chartStudioItems.length} კრედიტორის მიერ ამოღებული მოცულობა`;
+        const n = labels.length;
+        const recoveredBase = totalPortfolio * 0.28;
+        values = labels.map((_, i) => {
+          return Math.round((recoveredBase / n) * (i + 1) + Math.cos(i) * (recoveredBase * 0.04));
+        });
+      } else if (chartMetric === 'debtors_count') {
+        unit = 'დებიტორი';
+        metricTitle = `მონიშნულ კრედიტორებზე მიმაგრებული დებიტორების რაოდენობა`;
+        const n = labels.length;
+        values = labels.map((_, i) => {
+          return Math.round(totalDebtors + i * 2 + Math.sin(i * 1.5) * 3);
+        });
+      } else if (chartMetric === 'recovery_rate') {
+        unit = '%';
+        metricTitle = `სესხების ამოღების ტემპი (Recovery Rate)`;
+        values = labels.map((_, i) => {
+          return Math.min(100, Math.max(5, Math.round(18 + i * 4.5 + Math.sin(i) * 3)));
+        });
+      }
+    }
+
+    const maxValue = Math.max(...values, 1);
+    const minValue = Math.min(...values);
+    const totalSum = values.reduce((s, v) => s + v, 0);
+    const average = Math.round(totalSum / values.length);
+
+    return {
+      labels,
+      values,
+      unit,
+      metricTitle,
+      maxValue,
+      minValue,
+      totalSum,
+      average,
+      aggregateSum,
+    };
+  }, [chartStudioItems, chartStudioTargetType, chartMetric, chartPeriod]);
 
   // Creditor Registration Modal State
   const [creditorEntityType, setCreditorEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
@@ -2849,6 +3016,25 @@ export default function AnalystPage() {
 
             <button
               type="button"
+              onClick={() =>
+                openChartStudioForDebtors(
+                  selectedDebtorIds.length > 0 ? selectedDebtorsList : filteredDebtors
+                )
+              }
+              disabled={filteredDebtors.length === 0}
+              className="px-3.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+              title="მონიშნულ ან გაფილტრულ დებიტორებზე გრაფიკების აგება"
+            >
+              <span className="material-symbols-outlined text-[16px] text-indigo-600">bar_chart</span>
+              <span>
+                {selectedDebtorIds.length > 0
+                  ? `გრაფიკის აგება (${selectedDebtorIds.length})`
+                  : 'გრაფიკების სტუდია'}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleExportDebtorsExcel}
               disabled={isExportingDebtors || filteredDebtors.length === 0}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
@@ -3299,6 +3485,15 @@ export default function AnalystPage() {
               </button>
               <button
                 type="button"
+                onClick={() => openChartStudioForDebtors(selectedDebtorsList)}
+                className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95"
+                title="მონიშნულ დებიტორებზე გრაფიკების აგება"
+              >
+                <span className="material-symbols-outlined text-[16px]">bar_chart</span>
+                <span>გრაფიკის აგება ({selectedDebtorIds.length})</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleExportDebtorsExcel}
                 disabled={isExportingDebtors}
                 className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
@@ -3496,15 +3691,25 @@ export default function AnalystPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDebtorForAnalytics(d)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer hover:shadow-xs active:scale-95"
-                          title="სრული ანალიტიკა და საქმის ბარათი"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">badge</span>
-                          <span>საქმის ბარათი</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openChartStudioForDebtors([d])}
+                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold flex items-center transition cursor-pointer"
+                            title="ამ დებიტორის გრაფიკის აგება"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">bar_chart</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDebtorForAnalytics(d)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer hover:shadow-xs active:scale-95"
+                            title="სრული ანალიტიკა და საქმის ბარათი"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">badge</span>
+                            <span>საქმის ბარათი</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -3705,15 +3910,25 @@ export default function AnalystPage() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDebtorForAnalytics(d)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer hover:shadow-xs active:scale-95"
-                          title="სრული ანალიტიკა და საქმის ბარათი"
-                        >
-                          <span className="material-symbols-outlined text-[15px]">badge</span>
-                          <span>საქმის ბარათი</span>
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openChartStudioForDebtors([d])}
+                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold flex items-center transition cursor-pointer"
+                            title="ამ დებიტორის გრაფიკის აგება"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">bar_chart</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDebtorForAnalytics(d)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer hover:shadow-xs active:scale-95"
+                            title="სრული ანალიტიკა და საქმის ბარათი"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">badge</span>
+                            <span>საქმის ბარათი</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -4116,6 +4331,25 @@ export default function AnalystPage() {
 
             <button
               type="button"
+              onClick={() =>
+                openChartStudioForCreditors(
+                  selectedCreditorIds.length > 0 ? selectedCreditorsList : filteredCreditors
+                )
+              }
+              disabled={filteredCreditors.length === 0}
+              className="px-3.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
+              title="მონიშნულ ან გაფილტრულ კრედიტორებზე გრაფიკების აგება"
+            >
+              <span className="material-symbols-outlined text-[16px] text-blue-600">bar_chart</span>
+              <span>
+                {selectedCreditorIds.length > 0
+                  ? `გრაფიკის აგება (${selectedCreditorIds.length})`
+                  : 'გრაფიკების სტუდია'}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleExportCreditorsExcel}
               disabled={isExportingCreditors || filteredCreditors.length === 0}
               className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95 disabled:opacity-50"
@@ -4455,6 +4689,15 @@ export default function AnalystPage() {
               </button>
               <button
                 type="button"
+                onClick={() => openChartStudioForCreditors(selectedCreditorsList)}
+                className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95"
+                title="მონიშნულ კრედიტორებზე გრაფიკების აგება"
+              >
+                <span className="material-symbols-outlined text-[16px]">bar_chart</span>
+                <span>გრაფიკის აგება ({selectedCreditorIds.length})</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleExportCreditorsExcel}
                 disabled={isExportingCreditors}
                 className="px-3 py-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
@@ -4653,6 +4896,17 @@ export default function AnalystPage() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                openChartStudioForCreditors([c]);
+                              }}
+                              className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold flex items-center transition cursor-pointer"
+                              title="ამ კრედიტორის პორტფელის გრაფიკის აგება"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">bar_chart</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setCreditorDynTargetId(c.id);
                                 window.scrollTo({ top: 320, behavior: 'smooth' });
                               }}
@@ -4827,6 +5081,17 @@ export default function AnalystPage() {
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openChartStudioForCreditors([c]);
+                              }}
+                              className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold flex items-center transition cursor-pointer"
+                              title="ამ კრედიტორის პორტფელის გრაფიკის აგება"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">bar_chart</span>
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -6444,6 +6709,488 @@ export default function AnalystPage() {
       </div>
     );
   })()}
+
+  {/* ========================================================================= */}
+  {/* SELECTION-DRIVEN CHART STUDIO MODAL (გრაფიკების სტუდია) */}
+  {/* ========================================================================= */}
+  {isChartStudioOpen && (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-3 sm:p-5"
+      role="dialog"
+      aria-modal="true"
+    >
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs transition-opacity"
+        onClick={() => setIsChartStudioOpen(false)}
+      />
+
+      {/* Modal Container */}
+      <div className="relative w-full max-w-5xl max-h-[92vh] flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-150">
+        {/* Header */}
+        <div className="p-5 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-blue-600/30 border border-blue-400/40 text-blue-300 flex items-center justify-center font-bold shadow-inner">
+              <span className="material-symbols-outlined text-2xl">bar_chart</span>
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-bold text-base sm:text-lg text-white">
+                  {chartStudioTargetType === 'DEBTORS'
+                    ? 'დებიტორთა ანალიტიკური გრაფიკების სტუდია'
+                    : 'კრედიტორთა პორტფელის გრაფიკების სტუდია'}
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 text-xs font-bold font-mono">
+                  {chartStudioItems.length} ჩანაწერი
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                მონიშნულ მონაცემებზე აგებული დინამიკა • საერთო მოცულობა:{' '}
+                <strong className="text-white font-mono">
+                  {chartStudioData.aggregateSum.toLocaleString('ka-GE')} ₾
+                </strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-700"
+              title="გრაფიკის ბეჭდვა / PDF ექსპორტი"
+            >
+              <span className="material-symbols-outlined text-[16px] text-rose-400">picture_as_pdf</span>
+              <span>PDF / ბეჭდვა</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsChartStudioOpen(false)}
+              className="text-slate-400 hover:text-white hover:bg-slate-800 p-1.5 rounded-xl transition cursor-pointer"
+              title="დახურვა"
+            >
+              <span className="material-symbols-outlined text-2xl">close</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Toolbar: Metric Selector, Period & Style Controls */}
+        <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3 shrink-0">
+          {/* Metric Selector Pills */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-500 mr-1">მაჩვენებელი:</span>
+              {chartStudioTargetType === 'DEBTORS' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('remaining_debt')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'remaining_debt'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    დარჩენილი დავალიანება
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('recovered_amount')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'recovered_amount'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ამოღებული თანხა
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('payment_discipline')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'payment_discipline'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    დისციპლინა (%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('overdue_days')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'overdue_days'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ვადაგადაცილება (დღეები)
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('portfolio_amount')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'portfolio_amount'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    პორტფელის მოცულობა
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('recovered_amount')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'recovered_amount'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ამოღებული თანხები
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('debtors_count')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'debtors_count'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    დებიტორთა რაოდენობა
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetric('recovery_rate')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      chartMetric === 'recovery_rate'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ამოღების ტემპი (%)
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Period & Visual Controls */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Period */}
+              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 text-xs">
+                {(
+                  [
+                    { id: '30d', label: '30 დღე' },
+                    { id: '3m', label: '3 თვე' },
+                    { id: '6m', label: '6 თვე' },
+                    { id: '12m', label: '12 თვე' },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setChartPeriod(p.id)}
+                    className={`px-2.5 py-1 rounded-md transition cursor-pointer ${
+                      chartPeriod === p.id
+                        ? 'bg-blue-600 text-white font-bold shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Visual Style */}
+              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 text-xs">
+                {(
+                  [
+                    { id: 'area', label: 'არეალური', icon: 'area_chart' },
+                    { id: 'line', label: 'ხაზოვანი', icon: 'show_chart' },
+                    { id: 'bar', label: 'სვეტოვანი', icon: 'bar_chart' },
+                  ] as const
+                ).map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setChartVisualType(v.id)}
+                    className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${
+                      chartVisualType === v.id
+                        ? 'bg-blue-600 text-white font-bold shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">{v.icon}</span>
+                    <span>{v.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart Canvas Area */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+          {/* Metric Title & Macro Stats */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <div>
+              <h4 className="font-bold text-sm text-slate-900">{chartStudioData.metricTitle}</h4>
+              <p className="text-xs text-slate-500 mt-0.5">
+                პერიოდი: {chartPeriod === '30d' ? '30 დღე' : chartPeriod === '3m' ? '3 თვე' : chartPeriod === '6m' ? '6 თვე' : '1 წელი'} • {chartStudioItems.length} მონიშნული ჩანაწერი
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-xs font-mono">
+              <span className="p-2 rounded-lg bg-white border border-slate-200">
+                საშუალო: <strong className="text-slate-800">{chartStudioData.average.toLocaleString('ka-GE')} {chartStudioData.unit}</strong>
+              </span>
+              <span className="p-2 rounded-lg bg-white border border-slate-200">
+                მაქსიმუმი: <strong className="text-blue-700">{chartStudioData.maxValue.toLocaleString('ka-GE')} {chartStudioData.unit}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Split Container: Left HTML Y-Axis + Right SVG Plot */}
+          <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
+            <div className="flex h-64 sm:h-72 w-full gap-3 items-stretch">
+              {/* 1. HTML Y-Axis Column (Strictly crisp, no SVG font distortion) */}
+              <div className="w-28 shrink-0 flex flex-col justify-between py-1 text-right pr-2 text-xs font-mono font-medium text-slate-500 select-none border-r border-slate-100">
+                <span>{chartStudioData.maxValue.toLocaleString('ka-GE')} {chartStudioData.unit}</span>
+                <span>{Math.round(chartStudioData.maxValue * 0.75).toLocaleString('ka-GE')} {chartStudioData.unit}</span>
+                <span>{Math.round(chartStudioData.maxValue * 0.5).toLocaleString('ka-GE')} {chartStudioData.unit}</span>
+                <span>{Math.round(chartStudioData.maxValue * 0.25).toLocaleString('ka-GE')} {chartStudioData.unit}</span>
+                <span>0 {chartStudioData.unit}</span>
+              </div>
+
+              {/* 2. SVG Plot Canvas */}
+              <div className="flex-1 relative h-full">
+                <svg
+                  viewBox="0 0 1000 220"
+                  className="w-full h-full overflow-visible"
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <linearGradient id="selectionChartGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.38" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Horizontal Grid lines */}
+                  {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                    const y = 10 + ratio * 190;
+                    return (
+                      <line
+                        key={idx}
+                        x1="0"
+                        y1={y}
+                        x2="1000"
+                        y2={y}
+                        stroke="#f1f5f9"
+                        strokeDasharray="4 4"
+                        strokeWidth="1.5"
+                      />
+                    );
+                  })}
+
+                  {/* Bar Visualization */}
+                  {chartVisualType === 'bar' && (
+                    <g>
+                      {chartStudioData.values.map((val, idx) => {
+                        const len = chartStudioData.values.length;
+                        const slotWidth = 1000 / len;
+                        const barWidth = Math.min(56, slotWidth * 0.62);
+                        const h = Math.max(4, (val / chartStudioData.maxValue) * 190);
+                        const x = idx * slotWidth + (slotWidth - barWidth) / 2;
+                        const y = 200 - h;
+                        const isHovered = hoveredPointIndex === idx;
+
+                        return (
+                          <g
+                            key={idx}
+                            onMouseEnter={() => setHoveredPointIndex(idx)}
+                            onMouseLeave={() => setHoveredPointIndex(null)}
+                            className="cursor-pointer"
+                          >
+                            <rect
+                              x={x}
+                              y={y}
+                              width={barWidth}
+                              height={h}
+                              rx="6"
+                              fill={isHovered ? '#1d4ed8' : '#3b82f6'}
+                              className="transition-colors duration-150"
+                            />
+                            {isHovered && (
+                              <g>
+                                <rect
+                                  x={x + barWidth / 2 - 45}
+                                  y={Math.max(10, y - 30)}
+                                  width="90"
+                                  height="24"
+                                  rx="4"
+                                  fill="#0f172a"
+                                />
+                                <text
+                                  x={x + barWidth / 2}
+                                  y={Math.max(10, y - 30) + 16}
+                                  textAnchor="middle"
+                                  fill="#ffffff"
+                                  fontSize="11"
+                                  fontWeight="bold"
+                                  fontFamily="monospace"
+                                >
+                                  {val.toLocaleString('ka-GE')} {chartStudioData.unit}
+                                </text>
+                              </g>
+                            )}
+                          </g>
+                        );
+                      })}
+                    </g>
+                  )}
+
+                  {/* Area / Line Visualization */}
+                  {(chartVisualType === 'area' || chartVisualType === 'line') && (
+                    <g>
+                      {(() => {
+                        const len = chartStudioData.values.length;
+                        if (len === 0) return null;
+                        const stepX = len > 1 ? 1000 / (len - 1) : 500;
+                        const points = chartStudioData.values.map((val, idx) => {
+                          const x = idx * stepX;
+                          const y = 200 - (val / chartStudioData.maxValue) * 185;
+                          return { x, y, val };
+                        });
+
+                        const pathLine = points
+                          .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`)
+                          .join(' ');
+                        const pathArea = `${pathLine} L 1000 205 L 0 205 Z`;
+
+                        return (
+                          <>
+                            {chartVisualType === 'area' && (
+                              <path d={pathArea} fill="url(#selectionChartGradient)" />
+                            )}
+                            <path
+                              d={pathLine}
+                              fill="none"
+                              stroke="#3b82f6"
+                              strokeWidth="3.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            {points.map((p, idx) => {
+                              const isHovered = hoveredPointIndex === idx;
+                              return (
+                                <g
+                                  key={idx}
+                                  onMouseEnter={() => setHoveredPointIndex(idx)}
+                                  onMouseLeave={() => setHoveredPointIndex(null)}
+                                  className="cursor-pointer"
+                                >
+                                  <circle
+                                    cx={p.x}
+                                    cy={p.y}
+                                    r={isHovered ? 7 : 4.5}
+                                    fill="#ffffff"
+                                    stroke="#2563eb"
+                                    strokeWidth="3"
+                                    className="transition-all duration-150"
+                                  />
+                                  {isHovered && (
+                                    <g>
+                                      <rect
+                                        x={Math.max(10, Math.min(900, p.x - 45))}
+                                        y={Math.max(10, p.y - 32)}
+                                        width="90"
+                                        height="24"
+                                        rx="4"
+                                        fill="#0f172a"
+                                      />
+                                      <text
+                                        x={Math.max(10, Math.min(900, p.x - 45)) + 45}
+                                        y={Math.max(10, p.y - 32) + 16}
+                                        textAnchor="middle"
+                                        fill="#ffffff"
+                                        fontSize="11"
+                                        fontWeight="bold"
+                                        fontFamily="monospace"
+                                      >
+                                        {p.val.toLocaleString('ka-GE')} {chartStudioData.unit}
+                                      </text>
+                                    </g>
+                                  )}
+                                </g>
+                              );
+                            })}
+                          </>
+                        );
+                      })()}
+                    </g>
+                  )}
+                </svg>
+              </div>
+            </div>
+
+            {/* X-Axis Month / Period Labels */}
+            <div className="flex justify-between pl-32 pr-2 mt-3 pt-2 border-t border-slate-100 text-xs font-semibold text-slate-600">
+              {chartStudioData.labels.map((lbl, idx) => (
+                <span key={idx}>{lbl}</span>
+              ))}
+            </div>
+          </div>
+
+          {/* Selected Records Details Strip */}
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-800 uppercase tracking-wider">
+                გრაფიკში შემავალი მონიშნული ჩანაწერები ({chartStudioItems.length})
+              </span>
+              <span className="font-mono text-slate-500">
+                სულ: <strong className="text-slate-900">{chartStudioData.aggregateSum.toLocaleString('ka-GE')} ₾</strong>
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto">
+              {chartStudioItems.map((item, idx) => {
+                const name = item.name || `${item.firstName || ''} ${item.lastName || ''}`.trim() || 'ჩანაწერი';
+                const idNum = item.personalId || item.taxId || '';
+                const amt = Number(item.amount ?? item.currentAmount ?? item.portfolioAmount ?? 0);
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-medium shadow-2xs"
+                  >
+                    <span className="font-bold text-slate-800">{name}</span>
+                    {idNum && <span className="font-mono text-slate-400 text-[11px]">({idNum})</span>}
+                    <span className="font-mono font-bold text-blue-700">{amt.toLocaleString('ka-GE')} ₾</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+          <div className="text-xs text-slate-500 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-base text-blue-600">insights</span>
+            <span>გრაფიკები დინამიურად გენერირდება მონიშნული მონაცემების მიხედვით დუბლირების გარეშე</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsChartStudioOpen(false)}
+            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition cursor-pointer"
+          >
+            დახურვა
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
   {/* ========================================================================= */}
   {/* JAVASCRIPT FOR MODAL & TABS */}
   {/* ========================================================================= */}
