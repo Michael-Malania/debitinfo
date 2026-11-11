@@ -72,6 +72,14 @@ export class OpsService {
           },
         },
         individualProfile: true,
+        staffRecommendations: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            author: {
+              include: { staffProfile: true, individualProfile: true },
+            },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -81,6 +89,20 @@ export class OpsService {
       const ln = u.staffProfile?.lastName || u.individualProfile?.lastName || '';
       const fullName = u.staffProfile?.fullName || (fn && ln ? `${fn} ${ln}` : u.email.split('@')[0]);
       const cp = u.staffProfile?.contactPersons?.[0] || null;
+
+      const recommendations = ((u as any).staffRecommendations || []).map((r: any) => {
+        const a = r.author?.staffProfile || r.author?.individualProfile;
+        const authorName = a ? `${a.firstName || ''} ${a.lastName || ''}`.trim() : r.author?.email;
+        return {
+          id: r.id,
+          rating: r.rating,
+          title: r.title,
+          comment: r.comment,
+          createdAt: r.createdAt,
+          authorName: authorName || 'ანალიტიკოსი',
+          authorEmail: r.author?.email,
+        };
+      });
 
       return {
         id: u.id,
@@ -99,6 +121,7 @@ export class OpsService {
         department: u.staffProfile?.department || this.getDefaultDepartment(u.role),
         internalExt: u.staffProfile?.internalExt || '—',
         joinedDate: u.staffProfile?.joinedDate || u.createdAt,
+        recommendations,
         contactPerson: cp
           ? {
               id: cp.id,

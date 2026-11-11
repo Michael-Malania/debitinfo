@@ -218,14 +218,14 @@ export default function AnalystSidebar({
           <button
             type="button"
             onClick={() => handleNavClick('risk-zone')}
-            title={`⚠️ რისკ ზონა — ხანდაზმულობის მონიტორინგი (${riskZoneCount})`}
+            title={`რისკ ზონა — ხანდაზმულობის მონიტორინგი (${riskZoneCount})`}
             className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'risk-zone'
                 ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25 ring-2 ring-rose-600/20'
                 : 'text-rose-600 hover:bg-rose-50'
             }`}
           >
-            <span className="material-symbols-outlined text-[20px]">shield_alert</span>
+            <span className="material-symbols-outlined text-[20px]">warning</span>
             {riskZoneCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-mono font-bold flex items-center justify-center shadow-xs border border-white">
                 {riskZoneCount}
@@ -408,9 +408,9 @@ export default function AnalystSidebar({
                     activeView === 'risk-zone' ? 'text-white' : 'text-rose-600'
                   }`}
                 >
-                  shield_alert
+                  warning
                 </span>
-                <span>⚠️ რისკ ზონა (&lt;180 დღე)</span>
+                <span>რისკ ზონა (&lt;180 დღე)</span>
               </div>
               <span
                 className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${

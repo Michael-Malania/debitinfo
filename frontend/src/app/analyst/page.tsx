@@ -86,7 +86,8 @@ export default function AnalystPage() {
   const [chartStudioTargetType, setChartStudioTargetType] = useState<'DEBTORS' | 'CREDITORS'>('DEBTORS');
   const [chartStudioItems, setChartStudioItems] = useState<any[]>([]);
   const [chartMetric, setChartMetric] = useState<string>('remaining_debt');
-  const [chartPeriod, setChartPeriod] = useState<'30d' | '3m' | '6m' | '12m'>('6m');
+  const [chartPeriod, setChartPeriod] = useState<'30d' | '3m' | '6m' | '12m' | 'custom'>('6m');
+  const [customChartDays, setCustomChartDays] = useState<number>(45);
   const [chartVisualType, setChartVisualType] = useState<'bar' | 'line' | 'area'>('area');
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
 
@@ -870,8 +871,29 @@ export default function AnalystPage() {
       labels = ['თვე 1', 'თვე 2', 'თვე 3'];
     } else if (chartPeriod === '6m') {
       labels = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ'];
-    } else {
+    } else if (chartPeriod === '12m') {
       labels = ['იან', 'თებ', 'მარ', 'აპრ', 'მაი', 'ივნ', 'ივლ', 'აგვ', 'სექ', 'ოქტ', 'ნოე', 'დეკ'];
+    } else {
+      const days = Math.max(1, Math.min(1825, customChartDays || 45));
+      if (days <= 7) {
+        labels = Array.from({ length: days }, (_, i) => `დღე ${i + 1}`);
+      } else if (days <= 14) {
+        const step = 2;
+        const count = Math.ceil(days / step);
+        labels = Array.from({ length: count }, (_, i) => `${Math.min(days, (i + 1) * step)} დღე`);
+      } else if (days <= 60) {
+        const count = Math.min(6, Math.max(4, Math.round(days / 7)));
+        labels = Array.from({ length: count }, (_, i) => {
+          const d = Math.round(((i + 1) / count) * days);
+          return `${d} დღე`;
+        });
+      } else {
+        const count = 6;
+        labels = Array.from({ length: count }, (_, i) => {
+          const d = Math.round(((i + 1) / count) * days);
+          return `${d} დღე`;
+        });
+      }
     }
 
     let values: number[] = [];
@@ -985,7 +1007,7 @@ export default function AnalystPage() {
       average,
       aggregateSum,
     };
-  }, [chartStudioItems, chartStudioTargetType, chartMetric, chartPeriod]);
+  }, [chartStudioItems, chartStudioTargetType, chartMetric, chartPeriod, customChartDays]);
 
   // Creditor Registration Modal State
   const [creditorEntityType, setCreditorEntityType] = useState<'LEGAL' | 'PHYSICAL'>('LEGAL');
@@ -1727,8 +1749,8 @@ export default function AnalystPage() {
                 : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200'
             }`}
           >
-            <span className="material-symbols-outlined text-sm">shield_alert</span>
-            <span>⚠️ რისკ ზონა (${riskZoneClaims.length})</span>
+            <span className="material-symbols-outlined text-sm">warning</span>
+            <span>რისკ ზონა ({riskZoneClaims.length})</span>
           </button>
           <span className="text-text-muted text-body-sm font-body-sm hidden md:inline">v2.4 Live</span>
         </div>
@@ -5303,7 +5325,7 @@ export default function AnalystPage() {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
               <div className="space-y-2 max-w-3xl">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-bold">
-                  <span className="material-symbols-outlined text-[16px]">shield_alert</span>
+                  <span className="material-symbols-outlined text-[16px]">gavel</span>
                   <span>სამოქალაქო კოდექსის 128-140 მუხლები — 3-წლიანი ხანდაზმულობა</span>
                 </div>
                 <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
@@ -7409,6 +7431,33 @@ export default function AnalystPage() {
                     {p.label}
                   </button>
                 ))}
+
+                {/* Custom Days Input */}
+                <div
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md border transition cursor-pointer ${
+                    chartPeriod === 'custom'
+                      ? 'border-blue-600 bg-blue-50/80 text-blue-700 font-bold'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                  onClick={() => setChartPeriod('custom')}
+                >
+                  <input
+                    type="number"
+                    min={1}
+                    max={1825}
+                    value={customChartDays}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      setCustomChartDays(isNaN(v) ? 1 : Math.max(1, Math.min(1825, v)));
+                      setChartPeriod('custom');
+                    }}
+                    onFocus={() => setChartPeriod('custom')}
+                    className="w-12 text-center py-0.5 px-1 bg-white border border-slate-300 rounded font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                    placeholder="45"
+                    title="დღეების მორგებული რაოდენობა"
+                  />
+                  <span className="text-[11px] pr-0.5 select-none font-medium">დღე</span>
+                </div>
               </div>
 
               {/* Visual Style */}
@@ -7446,7 +7495,7 @@ export default function AnalystPage() {
             <div>
               <h4 className="font-bold text-sm text-slate-900">{chartStudioData.metricTitle}</h4>
               <p className="text-xs text-slate-500 mt-0.5">
-                პერიოდი: {chartPeriod === '30d' ? '30 დღე' : chartPeriod === '3m' ? '3 თვე' : chartPeriod === '6m' ? '6 თვე' : '1 წელი'} • {chartStudioItems.length} მონიშნული ჩანაწერი
+                პერიოდი: {chartPeriod === '30d' ? '30 დღე' : chartPeriod === '3m' ? '3 თვე' : chartPeriod === '6m' ? '6 თვე' : chartPeriod === '12m' ? '12 თვე' : `${customChartDays} დღე (მორგებული)`} • {chartStudioItems.length} მონიშნული ჩანაწერი
               </p>
             </div>
             <div className="flex items-center gap-3 text-xs font-mono">

@@ -1,9 +1,171 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authService, opsBackendService } from '@/services';
+
+export interface QuotaAlert {
+  id: string;
+  level: 'CRITICAL' | 'WARNING' | 'NEUTRAL' | 'POSITIVE';
+  badge: string;
+  title: string;
+  description: string;
+  action: string;
+  bgClass: string;
+  borderClass: string;
+  textClass: string;
+  icon: string;
+}
+
+export interface StaffQuotas {
+  critical: number;
+  warning: number;
+  neutral: number;
+  positive: number;
+  total: number;
+  criticalLimit: number;
+  warningLimit: number;
+  neutralLimit: number;
+  positiveLimit: number;
+  criticalTriggered: boolean;
+  warningTriggered: boolean;
+  neutralTriggered: boolean;
+  positiveTriggered: boolean;
+  activeAlerts: QuotaAlert[];
+}
+
+export function getStaffQuotas(recommendations: any[] = []): StaffQuotas {
+  const critical = recommendations.filter((r) => r.rating === 'CRITICAL').length;
+  const warning = recommendations.filter((r) => r.rating === 'WARNING').length;
+  const neutral = recommendations.filter((r) => r.rating === 'NEUTRAL').length;
+  const positive = recommendations.filter((r) => r.rating === 'POSITIVE').length;
+  const total = recommendations.length;
+
+  const criticalLimit = 3;
+  const warningLimit = 5;
+  const neutralLimit = 10;
+  const positiveLimit = 10;
+
+  const criticalTriggered = critical >= criticalLimit;
+  const warningTriggered = warning >= warningLimit;
+  const neutralTriggered = neutral >= neutralLimit;
+  const positiveTriggered = positive >= positiveLimit;
+
+  const activeAlerts: QuotaAlert[] = [];
+
+  if (criticalTriggered) {
+    activeAlerts.push({
+      id: 'critical',
+      level: 'CRITICAL',
+      badge: `🚨 ${critical} კრიტიკული შეფასება`,
+      title: `კრიტიკული კვოტა გადაჭარბებულია (${critical}/${criticalLimit})`,
+      description: 'თანამშრომელს დაუფიქსირდა 3 ან მეტი კრიტიკული შეფასება ანალიტიკოსისგან.',
+      action: 'საჭიროა დაუყოვნებლივი დისციპლინური რეაგირება და შიდა გასაუბრების ოქმის წარმოება!',
+      bgClass: 'bg-rose-50',
+      borderClass: 'border-rose-200',
+      textClass: 'text-rose-900',
+      icon: 'dangerous',
+    });
+  }
+
+  if (warningTriggered) {
+    activeAlerts.push({
+      id: 'warning',
+      level: 'WARNING',
+      badge: `⚠️ ${warning} შენიშვნა`,
+      title: `შენიშვნების კვოტა გადაჭარბებულია (${warning}/${warningLimit})`,
+      description: 'თანამშრომელმა მიიღო 5 ან მეტი გაფრთხილება / შენიშვნა.',
+      action: 'საჭიროა გადამზადების კურსის გავლა ან ოფიციალური გაფრთხილება / საყვედური.',
+      bgClass: 'bg-amber-50',
+      borderClass: 'border-amber-200',
+      textClass: 'text-amber-900',
+      icon: 'warning',
+    });
+  }
+
+  if (neutralTriggered) {
+    activeAlerts.push({
+      id: 'neutral',
+      level: 'NEUTRAL',
+      badge: `🟡 ${neutral} საშუალო შეფასება`,
+      title: `საშუალო შეფასებების ლიმიტი მიღწეულია (${neutral}/${neutralLimit})`,
+      description: 'თანამშრომელს დაუგროვდა 10 საშუალო / ნეიტრალური შეფასება.',
+      action: 'საჭიროა მოტივაციური ჩართულობა, მენტორობა და კვალიფიკაციის ამაღლება.',
+      bgClass: 'bg-blue-50',
+      borderClass: 'border-blue-200',
+      textClass: 'text-blue-900',
+      icon: 'trending_flat',
+    });
+  }
+
+  if (positiveTriggered) {
+    activeAlerts.push({
+      id: 'positive',
+      level: 'POSITIVE',
+      badge: `🌟 ${positive} დადებითი (ბონუსი)`,
+      title: `წახალისების კვოტა შესრულებულია! (${positive}/${positiveLimit})`,
+      description: 'თანამშრომელმა დააგროვა 10 ან მეტი მაღალი / დადებითი შეფასება!',
+      action: 'თანამშრომელი წარდგენილია კვარტალურ ფულად ბონუსზე, მადლობის სიგელზე ან დაწინაურებაზე.',
+      bgClass: 'bg-emerald-50',
+      borderClass: 'border-emerald-200',
+      textClass: 'text-emerald-900',
+      icon: 'military_tech',
+    });
+  }
+
+  return {
+    critical,
+    warning,
+    neutral,
+    positive,
+    total,
+    criticalLimit,
+    warningLimit,
+    neutralLimit,
+    positiveLimit,
+    criticalTriggered,
+    warningTriggered,
+    neutralTriggered,
+    positiveTriggered,
+    activeAlerts,
+  };
+}
+
+export function getRecommendationBadge(rating: string) {
+  switch (rating) {
+    case 'POSITIVE':
+      return {
+        label: 'დადებითი შეფასება',
+        bg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        icon: 'thumb_up',
+      };
+    case 'NEUTRAL':
+      return {
+        label: 'საშუალო / ნორმა',
+        bg: 'bg-blue-50 text-blue-800 border-blue-200',
+        icon: 'remove',
+      };
+    case 'WARNING':
+      return {
+        label: 'შენიშვნა / გაფრთხილება',
+        bg: 'bg-amber-50 text-amber-900 border-amber-200',
+        icon: 'warning',
+      };
+    case 'CRITICAL':
+      return {
+        label: 'კრიტიკული შეფასება',
+        bg: 'bg-rose-50 text-rose-900 border-rose-200',
+        icon: 'dangerous',
+      };
+    default:
+      return {
+        label: rating,
+        bg: 'bg-slate-50 text-slate-800 border-slate-200',
+        icon: 'info',
+      };
+  }
+}
 
 export default function HrPage() {
   const router = useRouter();
@@ -119,6 +281,35 @@ export default function HrPage() {
     const dept = s.staffProfile?.department?.toLowerCase() || '';
     return name.includes(q) || email.includes(q) || pin.includes(q) || dept.includes(q);
   });
+
+  const overallQuotaStats = useMemo(() => {
+    let criticalQuotaCount = 0;
+    let warningQuotaCount = 0;
+    let bonusQuotaCount = 0;
+    let neutralQuotaCount = 0;
+    let totalRecommendationsCount = 0;
+
+    staffList.forEach((s) => {
+      const q = getStaffQuotas(s.recommendations || []);
+      if (q.criticalTriggered) criticalQuotaCount++;
+      if (q.warningTriggered) warningQuotaCount++;
+      if (q.positiveTriggered) bonusQuotaCount++;
+      if (q.neutralTriggered) neutralQuotaCount++;
+      totalRecommendationsCount += q.total;
+    });
+
+    return {
+      criticalQuotaCount,
+      warningQuotaCount,
+      bonusQuotaCount,
+      neutralQuotaCount,
+      totalRecommendationsCount,
+    };
+  }, [staffList]);
+
+  const selectedQuotas = useMemo(() => {
+    return getStaffQuotas(selectedStaff?.recommendations || []);
+  }, [selectedStaff]);
 
   if (!authorized) {
     return (
@@ -267,6 +458,40 @@ export default function HrPage() {
               </div>
             </div>
 
+            {/* HR Quota Alert Summary Bar */}
+            {(overallQuotaStats.criticalQuotaCount > 0 ||
+              overallQuotaStats.warningQuotaCount > 0 ||
+              overallQuotaStats.bonusQuotaCount > 0) && (
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-rose-50 via-amber-50 to-emerald-50 border border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-rose-600 text-xl">admin_panel_settings</span>
+                  <span className="font-bold text-xs text-slate-900">
+                    HR კვოტის შეტყობინებები გუნდზე:
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {overallQuotaStats.criticalQuotaCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-600 text-white text-xs font-bold shadow-2xs">
+                      <span className="material-symbols-outlined text-[14px]">dangerous</span>
+                      {overallQuotaStats.criticalQuotaCount} თანამშრომელი კრიტიკულ ზღვარზე (≥3)
+                    </span>
+                  )}
+                  {overallQuotaStats.warningQuotaCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500 text-white text-xs font-bold shadow-2xs">
+                      <span className="material-symbols-outlined text-[14px]">warning</span>
+                      {overallQuotaStats.warningQuotaCount} თანამშრომელი შენიშვნის ზღვარზე (≥5)
+                    </span>
+                  )}
+                  {overallQuotaStats.bonusQuotaCount > 0 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 text-white text-xs font-bold shadow-2xs">
+                      <span className="material-symbols-outlined text-[14px]">military_tech</span>
+                      {overallQuotaStats.bonusQuotaCount} თანამშრომელი წარდგენილია ბონუსზე (≥10)
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* MAIN SPLIT WORKSPACE: Employee Registry (Left) + Dossier Preview (Right) */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
               {/* LEFT/CENTER: Employee Registry */}
@@ -326,6 +551,7 @@ export default function HrPage() {
                         {filteredStaff.map((staff) => {
                           const isSelected = selectedStaff?.id === staff.id;
                           const name = staff.staffProfile?.fullName || staff.email;
+                          const quotas = getStaffQuotas(staff.recommendations || []);
 
                           return (
                             <tr
@@ -339,14 +565,46 @@ export default function HrPage() {
                             >
                               <td className="py-3 px-3">
                                 <div className="flex items-center gap-2.5">
-                                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                                  <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
                                     {name.substring(0, 2)}
                                   </div>
                                   <div className="flex flex-col">
-                                    <span className="font-semibold text-text-primary">{name}</span>
-                                    <span className="font-label-sm text-label-sm text-text-muted font-mono">
-                                      {staff.personalId}
-                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-semibold text-text-primary">{name}</span>
+                                      {quotas.criticalTriggered && (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                          <span className="material-symbols-outlined text-[11px]">dangerous</span>
+                                          {quotas.critical} კრიტიკული
+                                        </span>
+                                      )}
+                                      {quotas.warningTriggered && (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                          <span className="material-symbols-outlined text-[11px]">warning</span>
+                                          {quotas.warning} შენიშვნა
+                                        </span>
+                                      )}
+                                      {quotas.positiveTriggered && (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                          <span className="material-symbols-outlined text-[11px]">military_tech</span>
+                                          ბონუსი ({quotas.positive})
+                                        </span>
+                                      )}
+                                      {quotas.neutralTriggered && (
+                                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                          10 საშუალო
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      <span className="font-label-sm text-label-sm text-text-muted font-mono">
+                                        {staff.personalId}
+                                      </span>
+                                      {quotas.total > 0 && !quotas.criticalTriggered && !quotas.warningTriggered && !quotas.positiveTriggered && !quotas.neutralTriggered && (
+                                        <span className="text-[10px] text-slate-500 font-medium">
+                                          • {quotas.total} შეფასება
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </td>
@@ -391,7 +649,8 @@ export default function HrPage() {
               {/* RIGHT: Selected Staff Dossier */}
               <div className="xl:col-span-5 flex flex-col gap-4">
                 {selectedStaff ? (
-                  <div className="bg-surface-card border border-border-subtle rounded-xl shadow-sm overflow-hidden flex flex-col">
+                  <>
+                    <div className="bg-surface-card border border-border-subtle rounded-xl shadow-sm overflow-hidden flex flex-col">
                     <div className="p-4 bg-gradient-to-r from-[#F8FAFC] to-[#EFF6FF] border-b border-border-subtle">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
@@ -464,7 +723,274 @@ export default function HrPage() {
                       )}
                     </div>
                   </div>
-                ) : (
+
+                  {/* RECOMMENDATIONS & HR QUOTA MONITORING CARD */}
+                  <div className="bg-surface-card border border-border-subtle rounded-xl shadow-sm overflow-hidden flex flex-col">
+                    {/* Header */}
+                    <div className="p-4 bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-border-subtle flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
+                          <span className="material-symbols-outlined text-[20px]">rate_review</span>
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sm text-text-primary">
+                            ანალიტიკოსის შეფასებები & HR კვოტა
+                          </h3>
+                          <p className="text-[11px] text-text-muted">
+                            კვოტები: 3 კრიტიკული • 5 შენიშვნა • 10 საშუალო • 10 დადებითი
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
+                        {selectedQuotas.total} შეფასება
+                      </span>
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                      {/* 4 Quota Threshold Cards */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        {/* 1. Critical Quota (Limit: 3) */}
+                        <div
+                          className={`p-3 rounded-lg border transition ${
+                            selectedQuotas.criticalTriggered
+                              ? 'bg-rose-50/90 border-rose-300 ring-2 ring-rose-400/30'
+                              : 'bg-slate-50 border-border-subtle'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-rose-800 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[15px]">dangerous</span>
+                              კრიტიკული
+                            </span>
+                            <span
+                              className={`font-mono font-bold text-xs ${
+                                selectedQuotas.criticalTriggered ? 'text-rose-700' : 'text-slate-600'
+                              }`}
+                            >
+                              {selectedQuotas.critical} / 3
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                selectedQuotas.criticalTriggered ? 'bg-rose-600' : 'bg-rose-400'
+                              }`}
+                              style={{ width: `${Math.min(100, (selectedQuotas.critical / 3) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 mt-1 block font-medium">
+                            {selectedQuotas.criticalTriggered
+                              ? '🚨 დისციპლინური კვოტა გადაჭარბებულია!'
+                              : `დარჩენილია ${Math.max(0, 3 - selectedQuotas.critical)} კრიტიკული`}
+                          </span>
+                        </div>
+
+                        {/* 2. Warning Quota (Limit: 5) */}
+                        <div
+                          className={`p-3 rounded-lg border transition ${
+                            selectedQuotas.warningTriggered
+                              ? 'bg-amber-50/90 border-amber-300 ring-2 ring-amber-400/30'
+                              : 'bg-slate-50 border-border-subtle'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-amber-800 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[15px]">warning</span>
+                              შენიშვნა
+                            </span>
+                            <span
+                              className={`font-mono font-bold text-xs ${
+                                selectedQuotas.warningTriggered ? 'text-amber-700' : 'text-slate-600'
+                              }`}
+                            >
+                              {selectedQuotas.warning} / 5
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                selectedQuotas.warningTriggered ? 'bg-amber-600' : 'bg-amber-400'
+                              }`}
+                              style={{ width: `${Math.min(100, (selectedQuotas.warning / 5) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 mt-1 block font-medium">
+                            {selectedQuotas.warningTriggered
+                              ? '⚠️ გადამზადების კვოტა გადაჭარბებულია!'
+                              : `დარჩენილია ${Math.max(0, 5 - selectedQuotas.warning)} შენიშვნა`}
+                          </span>
+                        </div>
+
+                        {/* 3. Neutral Quota (Limit: 10) */}
+                        <div
+                          className={`p-3 rounded-lg border transition ${
+                            selectedQuotas.neutralTriggered
+                              ? 'bg-blue-50/90 border-blue-300 ring-2 ring-blue-400/30'
+                              : 'bg-slate-50 border-border-subtle'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-blue-800 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[15px]">trending_flat</span>
+                              საშუალო
+                            </span>
+                            <span
+                              className={`font-mono font-bold text-xs ${
+                                selectedQuotas.neutralTriggered ? 'text-blue-700' : 'text-slate-600'
+                              }`}
+                            >
+                              {selectedQuotas.neutral} / 10
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                selectedQuotas.neutralTriggered ? 'bg-blue-600' : 'bg-blue-400'
+                              }`}
+                              style={{ width: `${Math.min(100, (selectedQuotas.neutral / 10) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 mt-1 block font-medium">
+                            {selectedQuotas.neutralTriggered
+                              ? '🟡 მოტივაციის ლიმიტი მიღწეულია'
+                              : `დარჩენილია ${Math.max(0, 10 - selectedQuotas.neutral)} საშუალო`}
+                          </span>
+                        </div>
+
+                        {/* 4. Positive Quota (Limit: 10) */}
+                        <div
+                          className={`p-3 rounded-lg border transition ${
+                            selectedQuotas.positiveTriggered
+                              ? 'bg-emerald-50/90 border-emerald-300 ring-2 ring-emerald-400/30'
+                              : 'bg-slate-50 border-border-subtle'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-emerald-800 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[15px]">military_tech</span>
+                              დადებითი
+                            </span>
+                            <span
+                              className={`font-mono font-bold text-xs ${
+                                selectedQuotas.positiveTriggered ? 'text-emerald-700' : 'text-slate-600'
+                              }`}
+                            >
+                              {selectedQuotas.positive} / 10
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                selectedQuotas.positiveTriggered ? 'bg-emerald-600' : 'bg-emerald-400'
+                              }`}
+                              style={{ width: `${Math.min(100, (selectedQuotas.positive / 10) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 mt-1 block font-medium">
+                            {selectedQuotas.positiveTriggered
+                              ? '🌟 ეკუთვნის ბონუსი / დაწინაურება!'
+                              : `დარჩენილია ${Math.max(0, 10 - selectedQuotas.positive)} დადებითი`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Active Quota Action Alerts Banners */}
+                      {selectedQuotas.activeAlerts.map((alert) => (
+                        <div
+                          key={alert.id}
+                          className={`p-3.5 rounded-xl border flex items-start gap-3 shadow-2xs animate-fadeIn ${alert.bgClass} ${alert.borderClass}`}
+                        >
+                          <span className={`material-symbols-outlined text-[24px] shrink-0 ${alert.textClass}`}>
+                            {alert.icon}
+                          </span>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <h4 className={`text-xs font-bold ${alert.textClass}`}>{alert.title}</h4>
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-white/80 shadow-2xs">
+                                {alert.badge}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-700 leading-relaxed">{alert.description}</p>
+                            <div className="text-[11px] font-semibold text-slate-900 pt-1.5 border-t border-black/5 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs text-primary">task_alt</span>
+                              <span>{alert.action}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Chronological List of Recommendations */}
+                      <div className="space-y-2 pt-2 border-t border-border-subtle">
+                        <div className="flex items-center justify-between text-xs font-semibold text-text-primary">
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm text-primary">history</span>
+                            მიღებული შეფასებების რეესტრი
+                          </span>
+                          <span className="text-text-muted font-normal text-[11px]">
+                            {selectedStaff.recommendations?.length || 0} ჩანაწერი
+                          </span>
+                        </div>
+
+                        {(!selectedStaff.recommendations || selectedStaff.recommendations.length === 0) ? (
+                          <div className="p-6 rounded-lg border border-dashed border-border-subtle text-center text-xs text-text-muted">
+                            <span className="material-symbols-outlined text-2xl text-slate-300 block mb-1">chat</span>
+                            თანამშრომელზე ანალიტიკოსის შეფასება ჯერ არ დაფიქსირებულა
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                            {selectedStaff.recommendations.map((rec: any) => {
+                              const badge = getRecommendationBadge(rec.rating);
+                              const dateStr = new Date(rec.createdAt).toLocaleDateString('ka-GE', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              });
+
+                              return (
+                                <div
+                                  key={rec.id}
+                                  className="p-3 rounded-lg border border-border-subtle bg-slate-50/70 hover:bg-slate-50 transition space-y-1.5 text-xs"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span
+                                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.bg}`}
+                                    >
+                                      <span className="material-symbols-outlined text-[12px]">{badge.icon}</span>
+                                      {badge.label}
+                                    </span>
+                                    <span className="text-[10px] text-text-muted font-mono">{dateStr}</span>
+                                  </div>
+
+                                  {rec.title && (
+                                    <h5 className="font-bold text-slate-900 text-xs">{rec.title}</h5>
+                                  )}
+
+                                  <p className="text-slate-700 text-xs leading-relaxed whitespace-pre-wrap">
+                                    {rec.notes}
+                                  </p>
+
+                                  {(rec.actionRequired || rec.recommendedAction) && (
+                                    <div className="p-2 rounded bg-blue-50/80 border border-blue-200 text-blue-900 text-[11px] font-medium flex items-center gap-1.5">
+                                      <span className="material-symbols-outlined text-sm text-primary">bolt</span>
+                                      <span>რეკომენდებული ნაბიჯი: {rec.recommendedAction || 'აუცილებელი რეაგირება'}</span>
+                                    </div>
+                                  )}
+
+                                  <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-200/60 flex items-center justify-between">
+                                    <span>ავტორი: <strong className="text-slate-600">{rec.authorName}</strong></span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
                   <div className="p-12 bg-surface-card rounded-xl border border-border-subtle text-center text-text-muted">
                     აირჩიეთ თანამშრომელი დოსიეს სანახავად
                   </div>
