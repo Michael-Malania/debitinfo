@@ -420,7 +420,7 @@ export interface AuthUser {
   email: string;
   personalId: string;
   entityType: 'PHYSICAL' | 'LEGAL';
-  role: 'ADMIN' | 'CREDITOR' | 'DEBTOR' | 'ANALYST' | 'LEGAL' | 'OPERATOR' | 'FIELD_OFFICER' | 'ACCOUNTANT' | 'REGULAR';
+  role: 'ADMIN' | 'CREDITOR' | 'DEBTOR' | 'ANALYST' | 'LEGAL' | 'OPERATOR' | 'FIELD_OFFICER' | 'ACCOUNTANT' | 'HR' | 'REGULAR';
   status?: string;
   phone?: string;
   isRsVerified: boolean;
@@ -557,6 +557,8 @@ export const authService = {
         return '/field-officer';
       case 'ACCOUNTANT':
         return '/accountant';
+      case 'HR':
+        return '/hr';
       case 'CREDITOR':
       case 'DEBTOR':
       case 'REGULAR':

@@ -15,6 +15,8 @@ function getTargetRouteByRole(role?: string): string {
       return '/field-officer';
     case 'ACCOUNTANT':
       return '/accountant';
+    case 'HR':
+      return '/hr';
     case 'CREDITOR':
     case 'DEBTOR':
     case 'REGULAR':
@@ -33,8 +35,7 @@ export function middleware(request: NextRequest) {
   const isOpsDomain =
     allHosts.includes('ops.') ||
     allHosts.includes('-ops') ||
-    process.env.NEXT_PUBLIC_APP_TYPE === 'ops' ||
-    (process.env.NODE_ENV !== 'production' && (allHosts.includes('localhost') || allHosts.includes('127.0.0.1')));
+    process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
 
   const accessToken = request.cookies.get('access_token')?.value;
   const userRole = request.cookies.get('user_role')?.value;
@@ -55,13 +56,6 @@ export function middleware(request: NextRequest) {
 
   // 1. Operations & Admin Portal (/ops)
   if (pathname === '/ops' || pathname.startsWith('/ops/')) {
-    // If NOT on Ops domain, restrict access completely and return 404 Not Found (exact behavior as /fakeblah)
-    if (!isOpsDomain) {
-      return NextResponse.rewrite(new URL('/_not-found', request.url), {
-        status: 404,
-      });
-    }
-
     // Unauthenticated staff are allowed to see the /ops login form
     if (!accessToken) {
       return NextResponse.next();
@@ -78,13 +72,10 @@ export function middleware(request: NextRequest) {
 
   // Helper for staff login redirects
   const getStaffLoginUrl = (req: NextRequest, redirectPath: string) => {
-    if (isOpsDomain) {
-      const u = new URL('/', req.url);
-      u.searchParams.set('redirect', redirectPath);
-      return u;
-    }
-    const u = new URL('/login', req.url);
+    const isDedicatedOpsSubdomain = allHosts.includes('ops.') || allHosts.includes('-ops');
+    const u = new URL(isDedicatedOpsSubdomain ? '/' : '/ops', req.url);
     u.searchParams.set('redirect', redirectPath);
+    u.searchParams.set('expired', 'true');
     return u;
   };
 
@@ -162,7 +153,7 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
     // Staff members should not view customer debt claims cabinet; send them to staff portal
-    if (userRole && ['LEGAL', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'ACCOUNTANT'].includes(userRole)) {
+    if (userRole && ['LEGAL', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'ACCOUNTANT', 'HR'].includes(userRole)) {
       return NextResponse.redirect(new URL(getTargetRouteByRole(userRole), request.url));
     }
     return NextResponse.next();

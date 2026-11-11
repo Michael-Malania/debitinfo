@@ -1318,7 +1318,7 @@ export default function AnalystPage() {
         (cRes.status === 'rejected' && String(cRes.reason).includes('401'))
       ) {
         authService.clearSession();
-        window.location.href = '/login?expired=true';
+        window.location.href = '/ops?expired=true&redirect=/analyst';
         return;
       }
 
@@ -1492,7 +1492,7 @@ export default function AnalystPage() {
   useEffect(() => {
     const u = authService.getCurrentUser();
     if (!u) {
-      router.replace('/login?expired=true');
+      router.replace('/ops?expired=true&redirect=/analyst');
       return;
     }
     if (u.role !== 'ANALYST' && u.role !== 'ADMIN') {

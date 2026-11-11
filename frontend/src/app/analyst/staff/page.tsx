@@ -101,8 +101,13 @@ export default function StaffRegistryPage() {
 
   useEffect(() => {
     const user = authService.getCurrentUser();
-    if (!user || (user.role !== 'ANALYST' && user.role !== 'ADMIN')) {
-      router.push('/login');
+    if (!user) {
+      router.push('/ops?redirect=/analyst/staff');
+      return;
+    }
+    if (user.role !== 'ANALYST' && user.role !== 'ADMIN') {
+      const dest = authService.getPortalRouteForRole(user.role);
+      router.push(dest);
       return;
     }
     setCurrentUser(user);

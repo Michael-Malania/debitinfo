@@ -38,11 +38,12 @@ export default function PortfolioDispatchPage() {
   useEffect(() => {
     const user = authService.getCurrentUser();
     if (!user) {
-      router.push('/login');
+      router.push('/ops?redirect=/analyst/portfolio');
       return;
     }
     if (user.role !== 'ANALYST' && user.role !== 'ADMIN') {
-      router.push('/login');
+      const dest = authService.getPortalRouteForRole(user.role);
+      router.push(dest);
       return;
     }
     setCurrentUser(user);

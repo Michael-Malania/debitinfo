@@ -50,6 +50,7 @@ export default function OpsPage() {
   const [loginPassword, setLoginPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState(false);
 
   // Staff Management State
   const [staffList, setStaffList] = useState<any[]>([]);
@@ -102,19 +103,8 @@ export default function OpsPage() {
 
   // Check current session on mount with synchronization & loop prevention
   useEffect(() => {
-    // If on main production domain (e.g. debitinfo.vercel.app), restrict /ops completely so it behaves like a non-existent route
-    if (typeof window !== 'undefined') {
-      const host = (window.location.host || '').toLowerCase();
-      const isOps =
-        host.includes('ops.') ||
-        host.includes('-ops') ||
-        host.includes('localhost') ||
-        host.includes('127.0.0.1') ||
-        process.env.NEXT_PUBLIC_APP_TYPE === 'ops';
-      if (!isOps && process.env.NODE_ENV === 'production') {
-        window.location.replace('/_not-found');
-        return;
-      }
+    if (typeof window !== 'undefined' && window.location.search.includes('expired=true')) {
+      setSessionExpiredNotice(true);
     }
 
     try {
@@ -131,7 +121,7 @@ export default function OpsPage() {
       }
 
       // If not staff, clear session and show login screen
-      const staffRoles = ['ADMIN', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'LEGAL', 'ACCOUNTANT'];
+      const staffRoles = ['ADMIN', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'LEGAL', 'ACCOUNTANT', 'HR'];
       if (!staffRoles.includes(user.role)) {
         authService.clearSession();
         setCurrentUser(null);
@@ -142,7 +132,10 @@ export default function OpsPage() {
       if (user.role !== 'ADMIN') {
         document.cookie = `access_token=${token}; path=/; max-age=604800; SameSite=Lax`;
         document.cookie = `user_role=${user.role}; path=/; max-age=604800; SameSite=Lax`;
-        const dest = authService.getPortalRouteForRole(user.role);
+        const searchParams = new URLSearchParams(window.location.search);
+        const redirectParam = searchParams.get('redirect');
+        const hasValidRedirect = redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//');
+        const dest = hasValidRedirect ? redirectParam : authService.getPortalRouteForRole(user.role);
         router.replace(dest);
         return;
       }
@@ -192,17 +185,28 @@ export default function OpsPage() {
       const res = await authService.login(loginIdentifier, loginPassword);
       const user = res.user;
 
-      if (!['ADMIN', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'LEGAL', 'ACCOUNTANT'].includes(user.role)) {
+      if (!['ADMIN', 'ANALYST', 'OPERATOR', 'FIELD_OFFICER', 'LEGAL', 'ACCOUNTANT', 'HR'].includes(user.role)) {
         authService.logout();
         setLoginError('🚫 წვდომა შეზღუდულია: თქვენი ანგარიში არ წარმოადგენს საოპერაციო პერსონალს. გამოიყენეთ საჯარო შესვლა /login გვერდზე.');
         setLoginLoading(false);
         return;
       }
 
-      // If user is NOT ADMIN, redirect immediately to their specialized dashboard!
+      // Check for redirect param
+      const searchParams = new URLSearchParams(window.location.search);
+      const redirectParam = searchParams.get('redirect');
+      const hasValidRedirect = redirectParam && redirectParam.startsWith('/') && !redirectParam.startsWith('//');
+
+      // If user is NOT ADMIN, redirect immediately to their specialized dashboard or redirectParam!
       if (user.role !== 'ADMIN') {
-        const dest = authService.getPortalRouteForRole(user.role);
+        const dest = hasValidRedirect ? redirectParam : authService.getPortalRouteForRole(user.role);
         router.push(dest);
+        return;
+      }
+
+      // If ADMIN and redirect was requested (e.g. /analyst, /crm, etc.), go there
+      if (hasValidRedirect && redirectParam !== '/ops') {
+        router.push(redirectParam);
         return;
       }
 
@@ -552,6 +556,13 @@ export default function OpsPage() {
 
             {/* Login Form */}
             <form className="mt-5 space-y-4" onSubmit={handleOpsLogin}>
+              {sessionExpiredNotice && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-body-sm flex items-start gap-2 animate-in fade-in">
+                  <span className="material-symbols-outlined text-base mt-0.5 text-amber-600">history_toggle_off</span>
+                  <span>თქვენი სამუშაო სესია ამოიწურა. გთხოვთ გაიაროთ ხელახალი ავტორიზაცია საოპერაციო სისტემაში.</span>
+                </div>
+              )}
+
               {loginError && (
                 <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-body-sm flex items-start gap-2 animate-in fade-in">
                   <span className="material-symbols-outlined text-base mt-0.5">error</span>

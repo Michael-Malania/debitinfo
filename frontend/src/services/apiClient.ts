@@ -21,10 +21,41 @@ export const PROTECTED_ROUTES = [
   '/profile',
 ];
 
+export const OPS_ROUTES = [
+  '/ops',
+  '/analyst',
+  '/crm',
+  '/legal',
+  '/field-officer',
+  '/accountant',
+  '/hr',
+];
+
+export const OPS_ROLES = [
+  'ADMIN',
+  'ANALYST',
+  'OPERATOR',
+  'FIELD_OFFICER',
+  'LEGAL',
+  'ACCOUNTANT',
+  'HR',
+];
+
 export function isProtectedRoute(pathname: string): boolean {
   return PROTECTED_ROUTES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
+}
+
+export function isOpsRoute(pathname: string): boolean {
+  return OPS_ROUTES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
+export function isOpsRole(role?: string | null): boolean {
+  if (!role) return false;
+  return OPS_ROLES.includes(role.toUpperCase());
 }
 
 export async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -64,6 +95,25 @@ export async function apiFetch<T>(endpoint: string, options?: RequestInit): Prom
     if (!res.ok) {
       if (res.status === 401) {
         if (typeof window !== 'undefined') {
+          // Identify user role BEFORE wiping storage
+          let userRole: string | null = null;
+          try {
+            const rawUser = localStorage.getItem('debitinfo_user');
+            if (rawUser) {
+              const parsed = JSON.parse(rawUser);
+              userRole = parsed?.role || null;
+            }
+          } catch {
+            // ignore
+          }
+
+          if (!userRole) {
+            const cookieMatch = document.cookie.match(/(?:^|;\s*)user_role=([^;]*)/);
+            if (cookieMatch) {
+              userRole = decodeURIComponent(cookieMatch[1]);
+            }
+          }
+
           localStorage.removeItem('debitinfo_access_token');
           localStorage.removeItem('debitinfo_refresh_token');
           localStorage.removeItem('debitinfo_user');
@@ -71,10 +121,19 @@ export async function apiFetch<T>(endpoint: string, options?: RequestInit): Prom
           document.cookie = 'user_role=; path=/; max-age=0; SameSite=Lax';
 
           // Strictly redirect ONLY when session expires while inside a protected workspace.
-          // Public routes ('/', '/about', '/contact', etc.) must NEVER redirect to /login.
+          // Public routes ('/', '/about', '/contact', etc.) must NEVER redirect.
           const pathname = window.location.pathname;
           if (isProtectedRoute(pathname)) {
-            window.location.href = `/login?expired=true&redirect=${encodeURIComponent(pathname)}`;
+            const host = window.location.hostname.toLowerCase();
+            const isDedicatedOps = host.startsWith('ops.') || host.includes('-ops');
+            const isOps = isOpsRoute(pathname) || isOpsRole(userRole);
+
+            if (isOps) {
+              const base = isDedicatedOps ? '/' : '/ops';
+              window.location.href = `${base}?expired=true&redirect=${encodeURIComponent(pathname)}`;
+            } else {
+              window.location.href = `/login?expired=true&redirect=${encodeURIComponent(pathname)}`;
+            }
           }
         }
       }
