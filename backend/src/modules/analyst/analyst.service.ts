@@ -2412,10 +2412,10 @@ export class AnalystService implements OnModuleInit {
     const lostClaimsCount = expiredClaims.length;
     const lostAmountGel = expiredClaims.reduce((sum, c) => sum + Number(c.initialAmount || 0), 0);
 
-    // 2. Approaching expiration in the next 120 days
+    // 2. Approaching expiration in the next 180 days (6-month Risk Zone)
     const radarClaims = await this.prisma.debtClaim.findMany({
       where: {
-        daysOverdue: { gte: 950, lt: 1095 },
+        daysOverdue: { gte: 900, lt: 1095 },
       },
       include: {
         debtor: { include: { individualProfile: true, companyProfile: true } },
