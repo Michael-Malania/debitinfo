@@ -536,9 +536,9 @@ export default function CrmPage() {
   }
 
   return (
-    <div className="bg-surface-bg text-text-primary h-full flex flex-col font-body-md antialiased overflow-hidden" suppressHydrationWarning>
+    <div className="bg-surface-bg text-text-primary h-screen max-h-screen flex flex-col font-body-md antialiased overflow-hidden fixed inset-0 z-0" suppressHydrationWarning>
       {/* TopNavBar */}
-      <header className="w-full px-6 h-16 flex items-center justify-between border-b border-border-subtle bg-surface-card docked full-width top-0 sticky z-50 shadow-sm">
+      <header className="w-full px-6 h-16 shrink-0 flex items-center justify-between border-b border-border-subtle bg-surface-card shadow-sm">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 group cursor-pointer">
             <span className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary group-hover:scale-105 transition-transform">
@@ -906,11 +906,11 @@ export default function CrmPage() {
         </main>
       ) : (
         /* Main Split Layout: Telephony Active Call Console */
-        <main ref={splitContainerRef} className="flex-1 flex overflow-hidden relative">
+        <main ref={splitContainerRef} className="flex-1 min-h-0 flex overflow-hidden relative">
           {/* LEFT SECTION: Queue Registry & Filters */}
           <section
             style={{ width: `${leftPanelWidth}%` }}
-            className="border-r border-border-subtle flex flex-col bg-surface-card overflow-hidden shrink-0 transition-[width] duration-100"
+            className="border-r border-border-subtle flex flex-col h-full min-h-0 bg-surface-card overflow-hidden shrink-0 transition-[width] duration-100"
           >
             {/* Section Header & Filter Cluster */}
             <div className="px-5 sm:px-6 py-4 border-b border-border-subtle bg-surface-card shrink-0 space-y-3">
@@ -923,26 +923,6 @@ export default function CrmPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Table Quick Scroll Buttons */}
-                  <div className="flex items-center border border-slate-300 rounded-lg bg-slate-50 p-0.5" title="ცხრილის სქროლვა">
-                    <button
-                      type="button"
-                      onClick={() => tableContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
-                      className="p-1 rounded text-slate-600 hover:text-primary hover:bg-white transition cursor-pointer"
-                      title="ცხრილის დასაწყისში ასვლა"
-                    >
-                      <span className="material-symbols-outlined text-base">vertical_align_top</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => tableContainerRef.current?.scrollTo({ top: tableContainerRef.current.scrollHeight, behavior: 'smooth' })}
-                      className="p-1 rounded text-slate-600 hover:text-primary hover:bg-white transition cursor-pointer"
-                      title="ცხრილის ბოლოში ჩასვლა"
-                    >
-                      <span className="material-symbols-outlined text-base">vertical_align_bottom</span>
-                    </button>
-                  </div>
-
                   <button
                     type="button"
                     onClick={toggleRegistryWidth}
@@ -1019,7 +999,7 @@ export default function CrmPage() {
             </div>
 
             {/* Interactive Registry Table */}
-            <div ref={tableContainerRef} className="flex-1 overflow-auto custom-scrollbar">
+            <div ref={tableContainerRef} className="flex-1 min-h-0 overflow-auto custom-scrollbar bg-surface-card">
               <table className="w-full border-collapse text-left">
                 <thead className="sticky top-0 bg-[#F1F5F9] border-b border-border-subtle text-text-muted text-label-sm font-label-sm uppercase tracking-wider z-10">
                   <tr>
@@ -1137,8 +1117,8 @@ export default function CrmPage() {
               </table>
             </div>
 
-            {/* Pagination & Quick Scroll Bar Footer */}
-            <div className="px-4 sm:px-5 py-3 bg-white border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            {/* Pagination Bar Footer (Docked at bottom of left panel) */}
+            <div className="px-4 sm:px-5 py-3 bg-white border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 select-none">
               <div className="flex items-center gap-3 text-xs text-text-muted">
                 <span>
                   ნაჩვენებია <strong className="text-text-primary font-mono">{queue.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, queue.length)}</strong> / {queue.length} საქმე
@@ -1162,16 +1142,6 @@ export default function CrmPage() {
               </div>
 
               <div className="flex items-center gap-1">
-                {/* Scroll to Top */}
-                <button
-                  type="button"
-                  onClick={() => tableContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
-                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
-                  title="ცხრილის დასაწყისში ასვლა"
-                >
-                  <span className="material-symbols-outlined text-[16px]">vertical_align_top</span>
-                </button>
-
                 {/* Prev Button */}
                 <button
                   type="button"
@@ -1217,16 +1187,6 @@ export default function CrmPage() {
                   <span>შემდეგი</span>
                   <span className="material-symbols-outlined text-sm">chevron_right</span>
                 </button>
-
-                {/* Scroll to Bottom */}
-                <button
-                  type="button"
-                  onClick={() => tableContainerRef.current?.scrollTo({ top: tableContainerRef.current.scrollHeight, behavior: 'smooth' })}
-                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
-                  title="ცხრილის ბოლოში ჩასვლა"
-                >
-                  <span className="material-symbols-outlined text-[16px]">vertical_align_bottom</span>
-                </button>
               </div>
             </div>
           </section>
@@ -1265,7 +1225,7 @@ export default function CrmPage() {
           {/* RIGHT SECTION: Active Debtor Case & Call Logging */}
           <section
             style={{ width: `${100 - leftPanelWidth}%` }}
-            className="flex flex-col bg-surface-bg overflow-hidden shrink-0 transition-[width] duration-100"
+            className="flex flex-col h-full min-h-0 bg-surface-bg overflow-hidden shrink-0 transition-[width] duration-100"
           >
             {activeClaim ? (
               <>
@@ -1514,7 +1474,7 @@ export default function CrmPage() {
                 )}
 
                 {/* Scrollable CRM Entry & Timeline Area */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5 space-y-5">
+                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 py-5 space-y-5">
                   {/* Supporting Documents & Proofs Inspector */}
                   <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
                     <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle mb-3">

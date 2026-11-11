@@ -30,7 +30,7 @@ export default function RootLayout({
       <body className="min-h-screen flex flex-col bg-surface-bg text-text-primary antialiased" suppressHydrationWarning>
         <ImpersonationBanner />
         <PortalSwitcher />
-        <div className="flex-1 flex flex-col" suppressHydrationWarning>{children}</div>
+        <div className="flex-1 min-h-0 flex flex-col h-full" suppressHydrationWarning>{children}</div>
       </body>
     </html>
   );
