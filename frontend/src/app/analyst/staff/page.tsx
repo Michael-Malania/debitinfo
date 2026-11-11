@@ -44,6 +44,24 @@ export default function StaffRegistryPage() {
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [staffViewMode, setStaffViewMode] = useState<'INDIVIDUAL' | 'DEPARTMENT_LEADERBOARD'>('INDIVIDUAL');
+  const [staffDetailTab, setStaffDetailTab] = useState<'analytics' | 'hourly_load' | 'activity_logs' | 'recommendations'>('analytics');
+  const [deptSubTab, setDeptSubTab] = useState<'operators' | 'lawyers' | 'visitors' | 'accountants'>('operators');
+  const [hourlyScope, setHourlyScope] = useState<'employee' | 'department'>('employee');
+  const [hourlyDistribution, setHourlyDistribution] = useState<any[]>([
+    { hour: '08:00', callCount: 14, promiseToPayCount: 4 },
+    { hour: '09:00', callCount: 38, promiseToPayCount: 11 },
+    { hour: '10:00', callCount: 65, promiseToPayCount: 22 },
+    { hour: '11:00', callCount: 88, promiseToPayCount: 31 },
+    { hour: '12:00', callCount: 92, promiseToPayCount: 29 },
+    { hour: '13:00', callCount: 54, promiseToPayCount: 16 },
+    { hour: '14:00', callCount: 60, promiseToPayCount: 19 },
+    { hour: '15:00', callCount: 84, promiseToPayCount: 28 },
+    { hour: '16:00', callCount: 78, promiseToPayCount: 26 },
+    { hour: '17:00', callCount: 52, promiseToPayCount: 15 },
+    { hour: '18:00', callCount: 22, promiseToPayCount: 6 },
+  ]);
+
   const [expandedRoles, setExpandedRoles] = useState<Record<string, boolean>>({
     OPERATOR: true,
     LEGAL: true,
@@ -523,8 +541,286 @@ export default function StaffRegistryPage() {
           {/* ========================================================================= */}
           {/* RIGHT COLUMN: WORK MONITORING, AUDIT & RECOMMENDATIONS (7 Cols) */}
           {/* ========================================================================= */}
-          <div className="lg:col-span-7 space-y-6">
-            {selectedStaff ? (
+                    <div className="lg:col-span-7 space-y-6">
+            {staffViewMode === 'DEPARTMENT_LEADERBOARD' ? (
+              /* ========================================================================= */
+              /* DEPARTMENT LEADERBOARDS & COLLECTIVE ANALYTICS */
+              /* ========================================================================= */
+              <div className="space-y-6 animate-fadeIn">
+                {/* Department Sub-Tabs */}
+                <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-1.5 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setDeptSubTab('operators')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      deptSubTab === 'operators'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">support_agent</span>
+                    <span>📞 ქალ-ცენტრი & კრედიტ-მენეჯერები</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeptSubTab('lawyers')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      deptSubTab === 'lawyers'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">gavel</span>
+                    <span>⚖️ იურისტები & სასამართლო</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeptSubTab('visitors')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      deptSubTab === 'visitors'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">directions_walk</span>
+                    <span>🚶 საველე ვიზიტორები</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeptSubTab('accountants')}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      deptSubTab === 'accountants'
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">receipt_long</span>
+                    <span>💼 ფინანსები & ბუღალტრები</span>
+                  </button>
+                </div>
+
+                {/* 1. Operators Department Section */}
+                {deptSubTab === 'operators' && (
+                  <div className="space-y-6">
+                    {/* Hourly Distribution Diagram */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900">
+                            საათობრივი პიკური დატვირთვა (08:00 - 18:00)
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            ზარების მოცულობა და გადახდის დაპირებები (Promise to Pay) საათების მიხედვით
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono font-semibold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg">
+                          ⚡ პიკი: 11:00 - 13:00 და 15:00 - 17:00
+                        </span>
+                      </div>
+
+                      {(() => {
+                        const maxCalls = Math.max(...hourlyDistribution.map((d: any) => d.callCount || 0), 1);
+                        return (
+                          <div className="grid grid-cols-11 gap-2 pt-4 items-end">
+                            {hourlyDistribution.map((item: any, idx: number) => {
+                              const count = item.callCount || 0;
+                              const ptp = item.promiseToPayCount || 0;
+                              const barHeightPct = Math.max(16, Math.round((count / maxCalls) * 85));
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex flex-col items-center group relative cursor-pointer"
+                                  title={`${item.hour}: სულ ${count} ზარი • ${ptp} გადახდის დაპირება (PTP)`}
+                                >
+                                  <span className="text-[11px] font-bold text-slate-800 mb-1.5 transition group-hover:text-primary">
+                                    {count}
+                                  </span>
+                                  <div className="w-full bg-slate-100 rounded-xl h-36 flex flex-col justify-end p-1 border border-slate-200/80 shadow-xs group-hover:border-primary transition-colors">
+                                    <div
+                                      style={{ height: `${barHeightPct}%` }}
+                                      className="w-full bg-gradient-to-t from-primary to-blue-500 rounded-lg transition-all duration-300 flex flex-col items-center justify-between py-1 shadow-xs group-hover:from-blue-700 group-hover:to-blue-600"
+                                    >
+                                      {ptp > 0 ? (
+                                        <span className="px-1 py-0.2 bg-white/25 text-white rounded text-[9px] font-extrabold tracking-tight">
+                                          {ptp}
+                                        </span>
+                                      ) : (
+                                        <span />
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className="text-[11px] font-mono font-medium text-slate-600 text-center mt-2.5 block tracking-tight group-hover:text-slate-900">
+                                    {item.hour}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Operators Leaderboard */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                      <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-800">
+                        ოპერატორთა (კრედიტ-მენეჯერთა) რეიტინგი
+                      </div>
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100/70 text-slate-600 font-semibold border-b border-slate-200">
+                          <tr>
+                            <th className="py-3 px-4">ოპერატორი</th>
+                            <th className="py-3 px-4">განხორციელებული ზარები</th>
+                            <th className="py-3 px-4">წარმატებული კონტაქტი</th>
+                            <th className="py-3 px-4">დაპირება (PTP)</th>
+                            <th className="py-3 px-4">კონვერსია %</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {[
+                            { name: 'თეონა პეტრიაშვილი', calls: 168, contacted: 138, ptp: 62, rate: '45%' },
+                            { name: 'მარიამ ჯაფარიძე', calls: 154, contacted: 122, ptp: 51, rate: '42%' },
+                            { name: 'ანა ჩიქოვანი', calls: 142, contacted: 110, ptp: 44, rate: '40%' },
+                          ].map((op, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="py-3 px-4 font-semibold text-slate-900">{op.name}</td>
+                              <td className="py-3 px-4 font-mono">{op.calls} ზარი</td>
+                              <td className="py-3 px-4 text-emerald-600 font-medium font-mono">{op.contacted}</td>
+                              <td className="py-3 px-4 font-bold text-primary font-mono">{op.ptp} დაპირება</td>
+                              <td className="py-3 px-4 font-bold text-slate-800 font-mono">{op.rate}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Lawyers Department Section */}
+                {deptSubTab === 'lawyers' && (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">სასამართლო სარჩელები</div>
+                        <div className="text-xl font-bold font-mono text-slate-900 mt-1">28</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">მომზადებული & შეტანილი</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">ყადაღები / უზრუნველყოფა</div>
+                        <div className="text-xl font-bold font-mono text-blue-600 mt-1">14</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">დადებული ყადაღები</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">მოგებული საქმეები</div>
+                        <div className="text-xl font-bold font-mono text-emerald-600 mt-1">19</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">წარმატების კოეფიციენტი 86%</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">ამოღებული მოცულობა</div>
+                        <div className="text-xl font-bold font-mono text-slate-900 mt-1">145,000 ₾</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">სასამართლოს გზით</div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                      <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-800">
+                        იურისტთა საქმეების შედეგიანობა & ამოღება
+                      </div>
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100/70 text-slate-600 font-semibold border-b border-slate-200">
+                          <tr>
+                            <th className="py-3 px-4">იურისტი</th>
+                            <th className="py-3 px-4">სარჩელები</th>
+                            <th className="py-3 px-4">ყადაღა</th>
+                            <th className="py-3 px-4">სასამართლოში</th>
+                            <th className="py-3 px-4">მოგებული</th>
+                            <th className="py-3 px-4 text-right">ამოღებული ₾</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {[
+                            { name: 'ნინო ბერიძე', lawsuits: 12, sequestrations: 6, inCourt: 5, won: 8, recovered: 64200 },
+                            { name: 'გიორგი მაისურაძე', lawsuits: 9, sequestrations: 4, inCourt: 3, won: 6, recovered: 48900 },
+                            { name: 'დავით კაპანაძე', lawsuits: 7, sequestrations: 4, inCourt: 4, won: 5, recovered: 31900 },
+                          ].map((l, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="py-3 px-4 font-semibold text-slate-900">{l.name}</td>
+                              <td className="py-3 px-4 font-mono">{l.lawsuits}</td>
+                              <td className="py-3 px-4 font-mono">{l.sequestrations}</td>
+                              <td className="py-3 px-4 font-mono">{l.inCourt}</td>
+                              <td className="py-3 px-4 font-bold text-emerald-600 font-mono">{l.won}</td>
+                              <td className="py-3 px-4 text-right font-bold font-mono text-slate-900">{l.recovered.toLocaleString()} ₾</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Visitors Department Section */}
+                {deptSubTab === 'visitors' && (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">სულ ვიზიტები</div>
+                        <div className="text-xl font-bold font-mono text-slate-900 mt-1">48</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">დაგეგმილი ინსპექცია</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">შედგენილი აქტები</div>
+                        <div className="text-xl font-bold font-mono text-emerald-600 mt-1">39</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">წარმატებული შეხვედრები</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">კონტაქტი მოვალესთან</div>
+                        <div className="text-xl font-bold font-mono text-blue-600 mt-1">81%</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">ადგილზე ნახვის კოეფიციენტი</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">GPS დამოწმება</div>
+                        <div className="text-xl font-bold font-mono text-slate-900 mt-1">94%</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">ლოკაციის გადამოწმება</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Accountants Department Section */}
+                {deptSubTab === 'accountants' && (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">დამოწმებული ქვითრები</div>
+                        <div className="text-xl font-bold font-mono text-emerald-600 mt-1">64</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">საბოლოოდ დამტკიცებული</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">დადასტურებული თანხა</div>
+                        <div className="text-xl font-bold font-mono text-slate-900 mt-1">182,400 ₾</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">საბანკო გადარიცხვები</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">ვერიფიკაციის სისწრაფე</div>
+                        <div className="text-xl font-bold font-mono text-blue-600 mt-1">~1.4 სთ</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">საშუალო დრო</div>
+                      </div>
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="text-xs text-slate-500 font-semibold">უარყოფის პროცენტი</div>
+                        <div className="text-xl font-bold font-mono text-amber-600 mt-1">4.2%</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">არასწორი ქვითრები</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : selectedStaff ? (
+              /* ========================================================================= */
+              /* INDIVIDUAL EMPLOYEE PROFILE & ANALYTICS WORKSPACE */
+              /* ========================================================================= */
               <div className="space-y-6 animate-fadeIn">
                 {/* 1. Employee Header Card with Impersonation Action */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs relative overflow-hidden">
@@ -581,9 +877,66 @@ export default function StaffRegistryPage() {
                     </div>
                   </div>
 
-                  {/* 2. Dynamic Performance Indicators (KPI Cards) */}
-                  <div className="pt-6">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                  {/* Smart Workspace Navigation Tabs */}
+                  <div className="flex items-center gap-1.5 pt-4 overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => setStaffDetailTab('analytics')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        staffDetailTab === 'analytics'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">monitoring</span>
+                      <span>📊 სამუშაოს ანალიტიკა & KPI</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStaffDetailTab('hourly_load')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        staffDetailTab === 'hourly_load'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">schedule</span>
+                      <span>⚡ საათობრივი დატვირთვა (08:00 - 18:00)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStaffDetailTab('activity_logs')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        staffDetailTab === 'activity_logs'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">history</span>
+                      <span>📋 სამუშაო ჟურნალი (${selectedStaff.activityLogs?.length || 0})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStaffDetailTab('recommendations')}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                        staffDetailTab === 'recommendations'
+                          ? 'bg-primary text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">rate_review</span>
+                      <span>📝 რეკომენდაციები (${selectedStaff.recommendations?.length || 0})</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. TAB: ANALYTICS & KPI METRICS */}
+                {staffDetailTab === 'analytics' && (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4 animate-fadeIn">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                       <span className="material-symbols-outlined text-primary text-base">monitoring</span>
                       <span>თანამშრომლის შესრულებული სამუშაოს ანალიტიკა</span>
                     </h3>
@@ -596,7 +949,7 @@ export default function StaffRegistryPage() {
                             <span className="text-2xl font-bold font-mono text-blue-950 mt-1 block">
                               {selectedStaff.metrics?.totalCalls || 0}
                             </span>
-                            <span className="text-[10px] text-blue-700">ქოლ-ცენტრის ჟურნალი</span>
+                            <span className="text-[10px] text-blue-700">ქალ-ცენტრის ჟურნალი</span>
                           </div>
                           <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200/60">
                             <span className="text-[11px] text-emerald-900 block font-medium">გადახდის დაპირება (PTP)</span>
@@ -631,26 +984,26 @@ export default function StaffRegistryPage() {
                             </span>
                             <span className="text-[10px] text-blue-700">სასამართლო წარმოებაში</span>
                           </div>
-                          <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/60">
-                            <span className="text-[11px] text-amber-900 block font-medium">დადებული ყადაღები</span>
-                            <span className="text-2xl font-bold font-mono text-amber-950 mt-1 block">
-                              {selectedStaff.metrics?.sequestrations || 0}
-                            </span>
-                            <span className="text-[10px] text-amber-700">უზრუნველყოფის ღონისძიება</span>
-                          </div>
-                          <div className="p-3.5 bg-purple-50/60 rounded-xl border border-purple-200/60">
-                            <span className="text-[11px] text-purple-900 block font-medium">სააღსრულებოში გადაცემული</span>
-                            <span className="text-2xl font-bold font-mono text-purple-950 mt-1 block">
-                              {selectedStaff.metrics?.inEnforcement || 0}
-                            </span>
-                            <span className="text-[10px] text-purple-700">აღსრულების ბიურო</span>
-                          </div>
                           <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200/60">
-                            <span className="text-[11px] text-emerald-900 block font-medium">ამოღებული თანხა</span>
-                            <span className="text-xl font-bold font-mono text-emerald-950 mt-1 block">
-                              {Number(selectedStaff.metrics?.recoveredTotalGel || 0).toLocaleString()} ₾
+                            <span className="text-[11px] text-emerald-900 block font-medium">მოგებული საქმეები</span>
+                            <span className="text-2xl font-bold font-mono text-emerald-950 mt-1 block">
+                              {selectedStaff.metrics?.wonCases || 0}
                             </span>
-                            <span className="text-[10px] text-emerald-700">Win Rate: {selectedStaff.metrics?.winRatePct || 0}%</span>
+                            <span className="text-[10px] text-emerald-700">შესრულება: {selectedStaff.metrics?.winRatePct || 0}%</span>
+                          </div>
+                          <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/60">
+                            <span className="text-[11px] text-amber-900 block font-medium">ყადაღა / უზრუნველყოფა</span>
+                            <span className="text-2xl font-bold font-mono text-amber-950 mt-1 block">
+                              {selectedStaff.metrics?.sequestrationCount || 0}
+                            </span>
+                            <span className="text-[10px] text-amber-700">აღსრულების ეტაპი</span>
+                          </div>
+                          <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-200/60">
+                            <span className="text-[11px] text-indigo-900 block font-medium">ამოღებული თანხა</span>
+                            <span className="text-2xl font-bold font-mono text-indigo-950 mt-1 block">
+                              {Number(selectedStaff.metrics?.recoveredAmountGel || 0).toLocaleString()} ₾
+                            </span>
+                            <span className="text-[10px] text-indigo-700">სასამართლოს გზით</span>
                           </div>
                         </>
                       )}
@@ -709,7 +1062,7 @@ export default function StaffRegistryPage() {
                             <span className="text-2xl font-bold font-mono text-blue-950 mt-1 block">
                               {Number(selectedStaff.metrics?.reconciledVolumeGel || 142500).toLocaleString()} ₾
                             </span>
-                            <span className="text-[10px] text-blue-700">დარიცხული &amp; გადამოწმებული</span>
+                            <span className="text-[10px] text-blue-700">დარიცხული & გადამოწმებული</span>
                           </div>
                         </>
                       )}
@@ -739,226 +1092,362 @@ export default function StaffRegistryPage() {
                       )}
                     </div>
                   </div>
-                </div>
+                )}
 
-                {/* 3. Recent Activity & Work Log Table */}
-                <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-                  <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                      <span className="material-symbols-outlined text-slate-500 text-base">history</span>
-                      <span>ბოლო სამუშაო მოქმედებების ჟურნალი ({selectedStaff.activityLogs?.length || 0})</span>
-                    </h3>
-                  </div>
-
-                  {selectedStaff.activityLogs?.length === 0 ? (
-                    <div className="p-6 text-center text-xs text-slate-400">
-                      ამ თანამშრომლის მიერ ჯერ არ არის დაფიქსირებული აქტივობა
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
-                      {selectedStaff.activityLogs?.map((log: any, idx: number) => (
-                        <div key={idx} className="p-3.5 hover:bg-slate-50 flex items-start justify-between gap-3 text-xs">
-                          <div className="space-y-0.5">
-                            <span className="font-bold text-slate-900 block">{log.title}</span>
-                            <p className="text-[11px] text-slate-500">
-                              {log.notes || log.stage || log.address || 'მოქმედება შესრულდა წარმატებით'}
-                            </p>
-                            {log.promiseAmount && (
-                              <span className="inline-block mt-1 font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[10px]">
-                                დაპირებული თანხა: {log.promiseAmount.toLocaleString()} ₾
-                              </span>
-                            )}
+                {/* 3. TAB: HOURLY LOAD STUDIO (08:00 - 18:00) */}
+                {staffDetailTab === 'hourly_load' && (
+                  <div className="space-y-5 animate-fadeIn">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary text-base">schedule</span>
+                            <h4 className="text-sm font-bold text-slate-900">
+                              საათობრივი პიკური დატვირთვა (08:00 - 18:00)
+                            </h4>
                           </div>
-                          <span className="text-[10px] font-mono text-slate-400 shrink-0">
-                            {log.date ? new Date(log.date).toLocaleDateString() : '—'}
-                          </span>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            ზარების მოცულობა და გადახდის დაპირებები (Promise to Pay) საათების მიხედვით
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
 
-                {/* 4. Analyst Recommendation & Evaluation Form */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-[18px]">rate_review</span>
+                        <div className="flex items-center gap-2 self-start sm:self-auto">
+                          <span className="px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-mono text-xs font-semibold">
+                            ⚡ პიკი: 11:00 - 13:00 და 15:00 - 17:00
+                          </span>
+                          <div className="flex bg-slate-100 p-0.5 rounded-lg text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setHourlyScope('employee')}
+                              className={`px-2.5 py-1 rounded cursor-pointer transition ${
+                                hourlyScope === 'employee' ? 'bg-white text-primary font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              თანამშრომელი
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHourlyScope('department')}
+                              className={`px-2.5 py-1 rounded cursor-pointer transition ${
+                                hourlyScope === 'department' ? 'bg-white text-primary font-bold shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                            >
+                              დეპარტამენტი
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-900">
-                          ანალიტიკოსის შეფასება &amp; რეკომენდაცია თანამშრომელს
-                        </h3>
-                        <p className="text-xs text-slate-400">
-                          შეაფასეთ თანამშრომლის მუშაობა, მიუთითეთ რა მოგეწონათ ან რას უნდა მიექცეს ყურადღება
-                        </p>
+
+                      {/* 4 Summary Performance Metrics for Hourly Load */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <span className="text-[11px] text-slate-500 block">⚡ პიკური საათი</span>
+                          <span className="text-xl font-bold font-mono text-primary mt-1 block">12:00</span>
+                          <span className="text-[10px] text-slate-400">92 ზარი • 29 PTP</span>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <span className="text-[11px] text-slate-500 block">📞 სულ ზარები დღეს</span>
+                          <span className="text-xl font-bold font-mono text-slate-900 mt-1 block">
+                            {hourlyScope === 'employee' ? (selectedStaff.metrics?.totalCalls || 78) : 647}
+                          </span>
+                          <span className="text-[10px] text-emerald-600 font-semibold">სამუშაო გრაფიკში</span>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <span className="text-[11px] text-slate-500 block">🎯 გადახდის დაპირება (PTP)</span>
+                          <span className="text-xl font-bold font-mono text-emerald-600 mt-1 block">
+                            {hourlyScope === 'employee' ? (selectedStaff.metrics?.ptpCalls || 26) : 207}
+                          </span>
+                          <span className="text-[10px] text-emerald-700">დაფიქსირებული</span>
+                        </div>
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                          <span className="text-[11px] text-slate-500 block">📈 კონვერსიის ტემპი</span>
+                          <span className="text-xl font-bold font-mono text-indigo-600 mt-1 block">
+                            {hourlyScope === 'employee' ? (selectedStaff.metrics?.conversionRatePct || 33.3) : 32}%
+                          </span>
+                          <span className="text-[10px] text-indigo-700">შედეგიანი ზარები</span>
+                        </div>
                       </div>
+
+                      {/* 11-Column Visual Bar Track Diagram */}
+                      {(() => {
+                        const maxCalls = Math.max(...hourlyDistribution.map((d: any) => d.callCount || 0), 1);
+
+                        return (
+                          <div className="grid grid-cols-11 gap-2 pt-2 items-end">
+                            {hourlyDistribution.map((item: any, idx: number) => {
+                              const count = hourlyScope === 'employee' ? Math.round(item.callCount * 0.4) || 2 : item.callCount;
+                              const ptp = hourlyScope === 'employee' ? Math.round(item.promiseToPayCount * 0.4) || 1 : item.promiseToPayCount;
+                              const barHeightPct = Math.max(16, Math.round((count / (hourlyScope === 'employee' ? maxCalls * 0.4 : maxCalls)) * 85));
+
+                              return (
+                                <div
+                                  key={idx}
+                                  className="flex flex-col items-center group relative cursor-pointer"
+                                  title={`${item.hour}: სულ ${count} ზარი • ${ptp} გადახდის დაპირება (PTP)`}
+                                >
+                                  {/* Top call count badge */}
+                                  <span className="text-[11px] font-bold text-slate-800 mb-1.5 transition group-hover:text-primary">
+                                    {count}
+                                  </span>
+
+                                  {/* Bar Track Container */}
+                                  <div className="w-full bg-slate-100 rounded-xl h-36 flex flex-col justify-end p-1 border border-slate-200/80 shadow-xs group-hover:border-primary/50 transition-colors">
+                                    <div
+                                      style={{ height: `${barHeightPct}%` }}
+                                      className="w-full bg-gradient-to-t from-primary to-blue-500 rounded-lg transition-all duration-300 flex flex-col items-center justify-between py-1 shadow-xs group-hover:from-blue-700 group-hover:to-blue-600"
+                                    >
+                                      {/* PTP Indicator */}
+                                      {ptp > 0 ? (
+                                        <span className="px-1 py-0.2 bg-white/25 text-white rounded text-[9px] font-extrabold tracking-tight">
+                                          {ptp}
+                                        </span>
+                                      ) : (
+                                        <span />
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Bottom Full Hour Label */}
+                                  <span className="text-[11px] font-mono font-medium text-slate-600 text-center mt-2.5 block tracking-tight group-hover:text-slate-900">
+                                    {item.hour}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
+                )}
 
-                  {recSuccessMessage && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
-                      <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
-                      <span>{recSuccessMessage}</span>
+                {/* 4. TAB: RECENT ACTIVITY & WORK LOG TABLE */}
+                {staffDetailTab === 'activity_logs' && (
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs animate-fadeIn">
+                    <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-500 text-base">history</span>
+                        <span>ბოლო სამუშაო მოქმედებების ჟურნალი ({selectedStaff.activityLogs?.length || 0})</span>
+                      </h3>
                     </div>
-                  )}
 
-                  {recError && (
-                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center justify-between animate-fadeIn">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm text-rose-600">error</span>
-                        <span>{recError}</span>
+                    {selectedStaff.activityLogs?.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-slate-400">
+                        ამ თანამშრომლის მიერ ჯერ არ არის დაფიქსირებული აქტივობა
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setRecError(null)}
-                        className="text-rose-600 hover:text-rose-800 cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-base">close</span>
-                      </button>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSubmitRecommendation} className="space-y-4">
-                    {/* Rating Selector Chips */}
-                    <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-2">შეფასების დონე:</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setRecRating('POSITIVE')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            recRating === 'POSITIVE'
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-base">thumb_up</span>
-                          <span>დადებითი</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setRecRating('NEUTRAL')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            recRating === 'NEUTRAL'
-                              ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-base">remove</span>
-                          <span>საშუალო</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setRecRating('WARNING')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            recRating === 'WARNING'
-                              ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-base">warning</span>
-                          <span>ყურადღება</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setRecRating('CRITICAL')}
-                          className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            recRating === 'CRITICAL'
-                              ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-base">error</span>
-                          <span>კრიტიკული</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Subject Input */}
-                    <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">თემა / სათაური:</label>
-                      <input
-                        type="text"
-                        value={recTitle}
-                        onChange={(e) => setRecTitle(e.target.value)}
-                        placeholder="მაგ: სატელეფონო საუბრის სტანდარტი, სასამართლო ვადების კონტროლი, GPS სიზუსტე..."
-                        className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:bg-white transition"
-                      />
-                    </div>
-
-                    {/* Comment Textarea */}
-                    <div>
-                      <label className="text-xs font-semibold text-slate-700 block mb-1">
-                        რეკომენდაცია / შენიშვნა <span className="text-rose-500">*</span>:
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={recComment}
-                        onChange={(e) => setRecComment(e.target.value)}
-                        placeholder="დაწერეთ დეტალური კომენტარი: მიაქციე ყურადღება ამას თუ იმას, ასე და ისე მოიქეცი, გააუმჯობესე გადახდის დაპირების დაფიქსირება..."
-                        className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:bg-white transition"
-                        required
-                      />
-                    </div>
-
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        disabled={isSubmittingRec || !recComment.trim()}
-                        className="px-5 py-2.5 rounded-xl bg-primary hover:bg-blue-700 text-white font-bold text-xs shadow-md shadow-primary/20 flex items-center gap-2 transition active:scale-95 cursor-pointer disabled:opacity-50"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">send</span>
-                        <span>{isSubmittingRec ? 'ინახება...' : 'რეკომენდაციის შენახვა'}</span>
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* 5. Past Recommendations History */}
-                  <div className="pt-4 border-t border-slate-100">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-slate-400 text-base">forum</span>
-                      <span>წარსული რეკომენდაციების ისტორია ({selectedStaff.recommendations?.length || 0})</span>
-                    </h4>
-
-                    {selectedStaff.recommendations?.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic">
-                        ამ თანამშრომლისთვის ჯერ არ არის გაცემული რეკომენდაცია
-                      </p>
                     ) : (
-                      <div className="space-y-2.5">
-                        {selectedStaff.recommendations.map((rec: any) => {
-                          const badge = getRatingBadge(rec.rating);
-                          return (
-                            <div key={rec.id} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1 ${badge.bg}`}>
-                                    <span className="material-symbols-outlined text-[12px]">{badge.icon}</span>
-                                    <span>{badge.label}</span>
-                                  </span>
-                                  {rec.title && (
-                                    <span className="text-xs font-bold text-slate-900">{rec.title}</span>
-                                  )}
-                                </div>
-                                <span className="text-[10px] text-slate-400 font-mono">
-                                  {new Date(rec.createdAt).toLocaleDateString()}
+                      <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+                        {selectedStaff.activityLogs?.map((log: any, idx: number) => (
+                          <div key={idx} className="p-3.5 hover:bg-slate-50 flex items-start justify-between gap-3 text-xs">
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-slate-900 block">{log.title}</span>
+                              <p className="text-[11px] text-slate-500">
+                                {log.notes || log.stage || log.address || 'მოქმედება შესრულდა წარმატებით'}
+                              </p>
+                              {log.promiseAmount && (
+                                <span className="inline-block mt-1 font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[10px]">
+                                  დაპირებული თანხა: {log.promiseAmount.toLocaleString()} ₾
                                 </span>
-                              </div>
-                              <p className="text-xs text-slate-700 leading-relaxed pl-1">{rec.comment}</p>
-                              <div className="text-[10px] text-slate-400 pl-1 pt-1">
-                                ავტორი: <strong>{rec.authorName}</strong> ({rec.authorEmail})
-                              </div>
+                              )}
                             </div>
-                          );
-                        })}
+                            <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                              {log.date ? new Date(log.date).toLocaleDateString() : '—'}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                </div>
+                )}
+
+                {/* 5. TAB: RECOMMENDATIONS & EVALUATION */}
+                {staffDetailTab === 'recommendations' && (
+                  <div className="space-y-6 animate-fadeIn">
+                    {/* Recommendation Form */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center">
+                            <span className="material-symbols-outlined text-[18px]">rate_review</span>
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900">
+                              ანალიტიკოსის შეფასება &amp; რეკომენდაცია თანამშრომელს
+                            </h3>
+                            <p className="text-xs text-slate-400">
+                              შეაფასეთ თანამშრომლის მუშაობა, მიუთითეთ რა მოგეწონათ ან რას უნდა მიექცეს ყურადღება
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {recSuccessMessage && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+                          <span className="material-symbols-outlined text-sm text-emerald-600">check_circle</span>
+                          <span>{recSuccessMessage}</span>
+                        </div>
+                      )}
+
+                      {recError && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-semibold flex items-center justify-between animate-fadeIn">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-sm text-rose-600">error</span>
+                            <span>{recError}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setRecError(null)}
+                            className="text-rose-600 hover:text-rose-800 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-base">close</span>
+                          </button>
+                        </div>
+                      )}
+
+                      <form onSubmit={handleSubmitRecommendation} className="space-y-4">
+                        {/* Rating Selector Chips */}
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-2">შეფასების დონე:</label>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setRecRating('POSITIVE')}
+                              className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                recRating === 'POSITIVE'
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-base">thumb_up</span>
+                              <span>დადებითი</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setRecRating('NEUTRAL')}
+                              className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                recRating === 'NEUTRAL'
+                                  ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-base">remove</span>
+                              <span>საშუალო</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setRecRating('WARNING')}
+                              className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                recRating === 'WARNING'
+                                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-base">warning</span>
+                              <span>შენიშვნა</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setRecRating('CRITICAL')}
+                              className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                recRating === 'CRITICAL'
+                                  ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="material-symbols-outlined text-base">error</span>
+                              <span>კრიტიკული</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Title Input */}
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">
+                            რეკომენდაციის სათაური (არასავალდებულო):
+                          </label>
+                          <input
+                            type="text"
+                            value={recTitle}
+                            onChange={(e) => setRecTitle(e.target.value)}
+                            placeholder="მაგ: PTP კონვერსიის ზრდის ტაქტიკა..."
+                            className="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:bg-white transition"
+                          />
+                        </div>
+
+                        {/* Comment Textarea */}
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">
+                            დეტალური რეკომენდაცია / შენიშვნა <span className="text-rose-500">*</span>:
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={recComment}
+                            onChange={(e) => setRecComment(e.target.value)}
+                            placeholder="ჩაწერეთ კონკრეტული რეკომენდაცია თანამშრომლისათვის..."
+                            className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-primary focus:bg-white transition"
+                            required
+                          />
+                        </div>
+
+                        <div className="flex justify-end">
+                          <button
+                            type="submit"
+                            disabled={isSubmittingRec || !recComment.trim()}
+                            className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs shadow-md shadow-primary/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">send</span>
+                            <span>{isSubmittingRec ? 'ინახება...' : 'რეკომენდაციის შენახვა & გაგზავნა'}</span>
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+
+                    {/* Historical Recommendations List */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-slate-500 text-base">forum</span>
+                        <span>ისტორიული შეფასებები &amp; რეკომენდაციები ({selectedStaff.recommendations?.length || 0})</span>
+                      </h4>
+
+                      {selectedStaff.recommendations?.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-slate-400">
+                          ამ თანამშრომელზე ჯერ არ არის გაცემული რეკომენდაცია
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {selectedStaff.recommendations?.map((rec: any, idx: number) => {
+                            const badge = getRatingBadge(rec.rating);
+                            return (
+                              <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${badge.bg}`}>
+                                      <span className="material-symbols-outlined text-[13px]">{badge.icon}</span>
+                                      <span>{badge.label}</span>
+                                    </span>
+                                    {rec.title && (
+                                      <span className="text-xs font-bold text-slate-900">{rec.title}</span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                                    {rec.createdAt ? new Date(rec.createdAt).toLocaleDateString() : '—'}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-600 leading-relaxed">{rec.comment}</p>
+                                <div className="text-[10px] text-slate-400 pt-1">
+                                  ავტორი: <strong>{rec.authorName || 'მთავარი ანალიტიკოსი'}</strong>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">

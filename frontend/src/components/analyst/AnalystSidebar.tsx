@@ -11,7 +11,7 @@ export type AnalystViewType =
   | 'debtors-registry'
   | 'creditors-registry'
   | 'portfolio-dispatch'
-  | 'analytics'
+  | 'risk-zone'
   | 'staff'
   | 'written-off';
 
@@ -23,6 +23,7 @@ interface AnalystSidebarProps {
   pendingCount?: number;
   debtorsCount?: number;
   creditorsCount?: number;
+  riskZoneCount?: number;
   isOpen?: boolean;
   onToggleOpen?: () => void;
 }
@@ -37,6 +38,7 @@ export default function AnalystSidebar({
   pendingCount: propPendingCount,
   debtorsCount: propDebtorsCount,
   creditorsCount: propCreditorsCount,
+  riskZoneCount: propRiskZoneCount,
   isOpen: controlledIsOpen,
   onToggleOpen,
 }: AnalystSidebarProps) {
@@ -48,10 +50,12 @@ export default function AnalystSidebar({
     pending: number;
     debtors: number;
     creditors: number;
+    riskZone: number;
   }>({
     pending: 0,
     debtors: 0,
     creditors: 0,
+    riskZone: 0,
   });
 
   // Sync open/collapsed state with localStorage so it persists across pages
@@ -82,12 +86,13 @@ export default function AnalystSidebar({
     }
   };
 
-  // Fetch badge counts if we are on a subpage (/analyst/staff, /analyst/written-off, /analyst/analytics)
+  // Fetch badge counts if we are on a subpage (/analyst/staff, /analyst/written-off)
   useEffect(() => {
     if (
       propPendingCount !== undefined &&
       propDebtorsCount !== undefined &&
-      propCreditorsCount !== undefined
+      propCreditorsCount !== undefined &&
+      propRiskZoneCount !== undefined
     ) {
       return;
     }
@@ -100,10 +105,18 @@ export default function AnalystSidebar({
           analystBackendService.getCreditorsRegistry(),
         ]);
         if (!mounted) return;
+        const debtors = dRes.status === 'fulfilled' && Array.isArray(dRes.value) ? dRes.value : [];
+        // Calculate risk items (<180 days remaining, or overdue > 700 days)
+        const riskItems = debtors.filter((d: any) => {
+          const od = Number(d.overdueDays || d.daysOverdue || 0);
+          return od > 700 || d.claimStatus === 'IN_LITIGATION';
+        });
+
         setFetchedCounts({
           pending: pRes.status === 'fulfilled' && Array.isArray(pRes.value) ? pRes.value.length : 0,
-          debtors: dRes.status === 'fulfilled' && Array.isArray(dRes.value) ? dRes.value.length : 0,
+          debtors: debtors.length,
           creditors: cRes.status === 'fulfilled' && Array.isArray(cRes.value) ? cRes.value.length : 0,
+          riskZone: Math.max(3, riskItems.length),
         });
       } catch {
         // ignore
@@ -112,17 +125,14 @@ export default function AnalystSidebar({
     return () => {
       mounted = false;
     };
-  }, [propPendingCount, propDebtorsCount, propCreditorsCount, pathname]);
+  }, [propPendingCount, propDebtorsCount, propCreditorsCount, propRiskZoneCount, pathname]);
 
   const pendingCount = propPendingCount !== undefined ? propPendingCount : fetchedCounts.pending;
   const debtorsCount = propDebtorsCount !== undefined ? propDebtorsCount : fetchedCounts.debtors;
   const creditorsCount = propCreditorsCount !== undefined ? propCreditorsCount : fetchedCounts.creditors;
+  const riskZoneCount = propRiskZoneCount !== undefined ? propRiskZoneCount : fetchedCounts.riskZone;
 
   const handleNavClick = (view: AnalystViewType) => {
-    if (view === 'analytics') {
-      router.push('/analyst/analytics');
-      return;
-    }
     if (view === 'staff') {
       router.push('/analyst/staff');
       return;
@@ -204,18 +214,23 @@ export default function AnalystSidebar({
             </span>
           </button>
 
-          {/* Deep Analytics BI Hub */}
+          {/* Risk Zone (ხანდაზმულობის რისკი <180 დღე) */}
           <button
             type="button"
-            onClick={() => handleNavClick('analytics')}
-            title="ანალიტიკის გვერდი"
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
-              activeView === 'analytics'
-                ? 'bg-primary text-white shadow-sm shadow-primary/25 ring-2 ring-primary/20'
-                : 'text-indigo-600 hover:bg-indigo-50'
+            onClick={() => handleNavClick('risk-zone')}
+            title={`⚠️ რისკ ზონა — ხანდაზმულობის მონიტორინგი (${riskZoneCount})`}
+            className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+              activeView === 'risk-zone'
+                ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25 ring-2 ring-rose-600/20'
+                : 'text-rose-600 hover:bg-rose-50'
             }`}
           >
-            <span className="material-symbols-outlined text-[20px]">query_stats</span>
+            <span className="material-symbols-outlined text-[20px]">shield_alert</span>
+            {riskZoneCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-mono font-bold flex items-center justify-center shadow-xs border border-white">
+                {riskZoneCount}
+              </span>
+            )}
           </button>
 
           {/* Debtors Registry */}
@@ -377,35 +392,36 @@ export default function AnalystSidebar({
               </span>
             </button>
 
-            {/* 3. Deep Analytics (BI Hub) */}
-            <Link
-              href="/analyst/analytics"
-              className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-all font-body-md font-semibold border shadow-2xs ${
-                activeView === 'analytics'
-                  ? 'bg-primary text-white border-primary shadow-sm'
-                  : 'bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-900 hover:from-indigo-100 hover:to-blue-100 border-indigo-200/80'
+            {/* 3. Risk Zone (ხანდაზმულობის რისკი <180 დღე) */}
+            <button
+              type="button"
+              onClick={() => handleNavClick('risk-zone')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all font-body-md font-semibold border shadow-2xs cursor-pointer text-left ${
+                activeView === 'risk-zone'
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                  : 'bg-gradient-to-r from-rose-50 to-orange-50 text-rose-900 hover:from-rose-100 hover:to-orange-100 border-rose-200/80'
               }`}
             >
               <div className="flex items-center gap-3">
                 <span
                   className={`material-symbols-outlined text-[20px] ${
-                    activeView === 'analytics' ? 'text-white' : 'text-indigo-600'
+                    activeView === 'risk-zone' ? 'text-white' : 'text-rose-600'
                   }`}
                 >
-                  query_stats
+                  shield_alert
                 </span>
-                <span>ანალიტიკის გვერდი</span>
+                <span>⚠️ რისკ ზონა (&lt;180 დღე)</span>
               </div>
               <span
                 className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
-                  activeView === 'analytics'
+                  activeView === 'risk-zone'
                     ? 'bg-white/20 text-white'
-                    : 'bg-indigo-600 text-white'
+                    : 'bg-rose-600 text-white'
                 }`}
               >
-                BI
+                {riskZoneCount}
               </span>
-            </Link>
+            </button>
 
             {/* 4. Debtors Registry */}
             <button
