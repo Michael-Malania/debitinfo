@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { blogService, authService, crmBackendService } from '@/services';
@@ -60,32 +60,44 @@ export default function CrmPage() {
   const [scheduleType, setScheduleType] = useState<'STANDARD' | 'NON_STANDARD'>('STANDARD');
   const [scheduleMonths, setScheduleMonths] = useState<number>(12);
   const [schedulePaymentDay, setSchedulePaymentDay] = useState<number>(15);
+  const [scheduleCustomIntervalDays, setScheduleCustomIntervalDays] = useState<number>(30);
+  const [scheduleIntervalMode, setScheduleIntervalMode] = useState<'MONTHLY' | 'CUSTOM_DAYS'>('MONTHLY');
   const [scheduleInstallments, setScheduleInstallments] = useState<Array<{ installmentNo: number; dueDate: string; amount: number }>>([]);
   const [scheduleNotes, setScheduleNotes] = useState<string>('');
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [scheduleSuccessMessage, setScheduleSuccessMessage] = useState<string | null>(null);
   const [showScheduleDetails, setShowScheduleDetails] = useState(false);
 
+  // Queue Registry Pagination & Scrolling State
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const tableContainerRef = React.useRef<HTMLDivElement | null>(null);
+
   const generateInstallments = (
     type: 'STANDARD' | 'NON_STANDARD',
     months: number,
     day: number,
     totalDebt: number,
-    existingList?: Array<{ installmentNo: number; dueDate?: string; amount: number }>
+    existingList?: Array<{ installmentNo: number; dueDate?: string; amount: number }>,
+    intervalMode: 'MONTHLY' | 'CUSTOM_DAYS' = scheduleIntervalMode,
+    customIntervalDays: number = scheduleCustomIntervalDays
   ) => {
-    const validMonths = type === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(13, months);
+    const validMonths = type === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(1, months);
     const validDay = Math.max(1, Math.min(31, day));
     const baseAmt = Math.floor((totalDebt / validMonths) * 100) / 100;
     const remainder = Math.round((totalDebt - baseAmt * validMonths) * 100) / 100;
 
     const now = new Date();
-    const startMonth = now.getMonth() + 1;
-    const startYear = now.getFullYear();
-
     const result: Array<{ installmentNo: number; dueDate: string; amount: number }> = [];
     for (let i = 0; i < validMonths; i++) {
-      const d = new Date(startYear, startMonth + i, Math.min(validDay, 28));
-      const dateStr = d.toISOString().split('T')[0];
+      let dateStr = '';
+      if (type === 'NON_STANDARD' && intervalMode === 'CUSTOM_DAYS') {
+        const d = new Date(now.getTime() + (i + 1) * Math.max(1, customIntervalDays) * 24 * 60 * 60 * 1000);
+        dateStr = d.toISOString().split('T')[0];
+      } else {
+        const d = new Date(now.getFullYear(), now.getMonth() + 1 + i, Math.min(validDay, 28));
+        dateStr = d.toISOString().split('T')[0];
+      }
       const customVal = existingList?.[i]?.amount;
       const amt = customVal !== undefined ? customVal : (i === 0 ? baseAmt + remainder : baseAmt);
       result.push({
@@ -109,6 +121,7 @@ export default function CrmPage() {
       setScheduleType(type);
       setScheduleMonths(months);
       setSchedulePaymentDay(day);
+      setScheduleIntervalMode('MONTHLY');
       setScheduleNotes(existingSched.notes || '');
 
       if (existingSched.installments && existingSched.installments.length > 0) {
@@ -126,6 +139,8 @@ export default function CrmPage() {
       setScheduleType('STANDARD');
       setScheduleMonths(12);
       setSchedulePaymentDay(15);
+      setScheduleIntervalMode('MONTHLY');
+      setScheduleCustomIntervalDays(30);
       setScheduleNotes('');
       setScheduleInstallments(generateInstallments('STANDARD', 12, 15, totalDebt));
     }
@@ -135,23 +150,30 @@ export default function CrmPage() {
   const handleScheduleTypeChange = (type: 'STANDARD' | 'NON_STANDARD') => {
     setScheduleType(type);
     const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    const newMonths = type === 'STANDARD' ? Math.min(12, Math.max(1, scheduleMonths)) : Math.max(13, scheduleMonths);
+    const newMonths = type === 'STANDARD' ? Math.min(12, Math.max(1, scheduleMonths)) : Math.max(1, scheduleMonths);
     setScheduleMonths(newMonths);
-    setScheduleInstallments(generateInstallments(type, newMonths, schedulePaymentDay, totalDebt));
+    setScheduleInstallments(generateInstallments(type, newMonths, schedulePaymentDay, totalDebt, undefined, scheduleIntervalMode, scheduleCustomIntervalDays));
   };
 
   const handleScheduleMonthsChange = (months: number) => {
-    const validMonths = scheduleType === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(13, months);
+    const validMonths = scheduleType === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(1, months);
     setScheduleMonths(validMonths);
     const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    setScheduleInstallments(generateInstallments(scheduleType, validMonths, schedulePaymentDay, totalDebt));
+    setScheduleInstallments(generateInstallments(scheduleType, validMonths, schedulePaymentDay, totalDebt, scheduleInstallments, scheduleIntervalMode, scheduleCustomIntervalDays));
   };
 
   const handleSchedulePaymentDayChange = (day: number) => {
     const validDay = Math.max(1, Math.min(31, day));
     setSchedulePaymentDay(validDay);
     const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, validDay, totalDebt, scheduleInstallments));
+    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, validDay, totalDebt, scheduleInstallments, scheduleIntervalMode, scheduleCustomIntervalDays));
+  };
+
+  const handleScheduleIntervalChange = (mode: 'MONTHLY' | 'CUSTOM_DAYS', days: number) => {
+    setScheduleIntervalMode(mode);
+    setScheduleCustomIntervalDays(days);
+    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
+    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, schedulePaymentDay, totalDebt, scheduleInstallments, mode, days));
   };
 
   const handleInstallmentAmountChange = (idx: number, newAmount: number) => {
@@ -165,7 +187,7 @@ export default function CrmPage() {
 
   const handleAutoDistributeEvenly = () => {
     const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, schedulePaymentDay, totalDebt));
+    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, schedulePaymentDay, totalDebt, undefined, scheduleIntervalMode, scheduleCustomIntervalDays));
   };
 
   const handleSaveSchedule = async (e: React.FormEvent) => {
@@ -210,6 +232,22 @@ export default function CrmPage() {
 
   const activeClaim = claimDetail || queue.find((q) => q.id === selectedClaimId);
   const isAdmin = currentUser?.role === 'ADMIN';
+
+  const totalPages = Math.max(1, Math.ceil(queue.length / pageSize));
+  const paginatedQueue = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return queue.slice(start, start + pageSize);
+  }, [queue, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, priorityFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
 
   const loadQueueAndStats = async () => {
     setLoadingQueue(true);
@@ -500,9 +538,9 @@ export default function CrmPage() {
   return (
     <div className="bg-surface-bg text-text-primary h-full flex flex-col font-body-md antialiased overflow-hidden" suppressHydrationWarning>
       {/* TopNavBar */}
-      <header className="w-full px-space-xl h-16 flex items-center justify-between border-b border-border-subtle bg-surface-card docked full-width top-0 sticky z-50 shadow-sm">
-        <div className="flex items-center gap-space-lg">
-          <Link href="/" className="flex items-center gap-space-sm group cursor-pointer">
+      <header className="w-full px-6 h-16 flex items-center justify-between border-b border-border-subtle bg-surface-card docked full-width top-0 sticky z-50 shadow-sm">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2 group cursor-pointer">
             <span className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-lg">account_balance</span>
             </span>
@@ -511,7 +549,7 @@ export default function CrmPage() {
             </span>
           </Link>
           {/* Navigation Tabs */}
-          <nav className="hidden lg:flex items-center gap-space-md ml-space-md">
+          <nav className="hidden lg:flex items-center gap-3 ml-4">
             <button
               onClick={() => setCurrentTab('calls')}
               className={`font-headline-sm text-body-md pb-1 flex items-center gap-1.5 cursor-pointer transition-all ${
@@ -550,7 +588,7 @@ export default function CrmPage() {
         </div>
 
         {/* Trailing Actions & Operator Badge */}
-        <div className="flex items-center gap-space-md">
+        <div className="flex items-center gap-4">
           {/* Status Badge */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-bg border border-border-subtle rounded-full">
             <span className="relative flex h-2.5 w-2.5">
@@ -601,8 +639,8 @@ export default function CrmPage() {
       </header>
 
       {/* KPI Metrics Ribbon (Top Dashboard Strip) */}
-      <section className="w-full bg-surface-card border-b border-border-subtle px-space-xl py-space-sm shrink-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-space-md">
+      <section className="w-full bg-surface-card border-b border-border-subtle px-6 py-2.5 shrink-0">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {/* KPI 1 */}
           <div className="flex items-center justify-between p-2.5 bg-surface-bg border border-border-subtle rounded-xl">
             <div>
@@ -875,7 +913,7 @@ export default function CrmPage() {
             className="border-r border-border-subtle flex flex-col bg-surface-card overflow-hidden shrink-0 transition-[width] duration-100"
           >
             {/* Section Header & Filter Cluster */}
-            <div className="p-space-md border-b border-border-subtle bg-surface-card shrink-0 space-y-3">
+            <div className="px-5 sm:px-6 py-4 border-b border-border-subtle bg-surface-card shrink-0 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-primary text-xl">format_list_bulleted</span>
@@ -885,6 +923,26 @@ export default function CrmPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* Table Quick Scroll Buttons */}
+                  <div className="flex items-center border border-slate-300 rounded-lg bg-slate-50 p-0.5" title="ცხრილის სქროლვა">
+                    <button
+                      type="button"
+                      onClick={() => tableContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                      className="p-1 rounded text-slate-600 hover:text-primary hover:bg-white transition cursor-pointer"
+                      title="ცხრილის დასაწყისში ასვლა"
+                    >
+                      <span className="material-symbols-outlined text-base">vertical_align_top</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => tableContainerRef.current?.scrollTo({ top: tableContainerRef.current.scrollHeight, behavior: 'smooth' })}
+                      className="p-1 rounded text-slate-600 hover:text-primary hover:bg-white transition cursor-pointer"
+                      title="ცხრილის ბოლოში ჩასვლა"
+                    >
+                      <span className="material-symbols-outlined text-base">vertical_align_bottom</span>
+                    </button>
+                  </div>
+
                   <button
                     type="button"
                     onClick={toggleRegistryWidth}
@@ -961,7 +1019,7 @@ export default function CrmPage() {
             </div>
 
             {/* Interactive Registry Table */}
-            <div className="flex-1 overflow-auto custom-scrollbar">
+            <div ref={tableContainerRef} className="flex-1 overflow-auto custom-scrollbar">
               <table className="w-full border-collapse text-left">
                 <thead className="sticky top-0 bg-[#F1F5F9] border-b border-border-subtle text-text-muted text-label-sm font-label-sm uppercase tracking-wider z-10">
                   <tr>
@@ -989,7 +1047,7 @@ export default function CrmPage() {
                       </td>
                     </tr>
                   )}
-                  {queue.map((item) => {
+                  {paginatedQueue.map((item: any) => {
                     const isSelected = selectedClaimId === item.id;
                     const dispKa: Record<string, string> = {
                       PROMISE_TO_PAY: 'დათანხმდა',
@@ -1079,13 +1137,97 @@ export default function CrmPage() {
               </table>
             </div>
 
-            {/* Footer Info */}
-            <div className="px-4 py-2.5 bg-surface-bg border-t border-border-subtle flex items-center justify-between text-label-sm text-text-muted shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-sm">info</span>
-                <span>მონაცემები სინქრონიზებულია Debitinfo Risk Engine-თან (PostgreSQL)</span>
+            {/* Pagination & Quick Scroll Bar Footer */}
+            <div className="px-4 sm:px-5 py-3 bg-white border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-3 text-xs text-text-muted">
+                <span>
+                  ნაჩვენებია <strong className="text-text-primary font-mono">{queue.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, queue.length)}</strong> / {queue.length} საქმე
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px]">გვერდზე:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-0.5 rounded border border-slate-300 text-xs font-semibold bg-white text-slate-800 focus:outline-none cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={15}>15</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
               </div>
-              <div>ნაჩვენებია: {queue.length} საქმე</div>
+
+              <div className="flex items-center gap-1">
+                {/* Scroll to Top */}
+                <button
+                  type="button"
+                  onClick={() => tableContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+                  title="ცხრილის დასაწყისში ასვლა"
+                >
+                  <span className="material-symbols-outlined text-[16px]">vertical_align_top</span>
+                </button>
+
+                {/* Prev Button */}
+                <button
+                  type="button"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-slate-700 flex items-center gap-1 transition cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">chevron_left</span>
+                  <span>წინა</span>
+                </button>
+
+                {/* Page numbers */}
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                    .map((p, idx, arr) => (
+                      <React.Fragment key={p}>
+                        {idx > 0 && arr[idx - 1] !== p - 1 && (
+                          <span className="px-1 text-slate-400 text-xs">...</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage(p)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center ${
+                            currentPage === p
+                              ? 'bg-primary text-white shadow-xs'
+                              : 'text-slate-600 hover:bg-slate-100 border border-transparent'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      </React.Fragment>
+                    ))}
+                </div>
+
+                {/* Next Button */}
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-slate-700 flex items-center gap-1 transition cursor-pointer"
+                >
+                  <span>შემდეგი</span>
+                  <span className="material-symbols-outlined text-sm">chevron_right</span>
+                </button>
+
+                {/* Scroll to Bottom */}
+                <button
+                  type="button"
+                  onClick={() => tableContainerRef.current?.scrollTo({ top: tableContainerRef.current.scrollHeight, behavior: 'smooth' })}
+                  className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 transition cursor-pointer"
+                  title="ცხრილის ბოლოში ჩასვლა"
+                >
+                  <span className="material-symbols-outlined text-[16px]">vertical_align_bottom</span>
+                </button>
+              </div>
             </div>
           </section>
 
@@ -1128,7 +1270,7 @@ export default function CrmPage() {
             {activeClaim ? (
               <>
                 {/* Debtor Case Header */}
-                <div className="p-space-md bg-surface-card border-b border-border-subtle shrink-0">
+                <div className="px-6 py-4 bg-surface-card border-b border-border-subtle shrink-0">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
@@ -1372,9 +1514,9 @@ export default function CrmPage() {
                 )}
 
                 {/* Scrollable CRM Entry & Timeline Area */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-space-md space-y-space-md">
+                <div className="flex-1 overflow-y-auto custom-scrollbar px-6 py-5 space-y-5">
                   {/* Supporting Documents & Proofs Inspector */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
+                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
                     <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle mb-3">
                       <div className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-primary text-lg">folder_shared</span>
@@ -1477,7 +1619,7 @@ export default function CrmPage() {
                   </div>
 
                   {/* ================= REPAYMENT SCHEDULE MANAGEMENT CARD ================= */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
+                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
                     <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle mb-3">
                       <div className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-primary text-lg">calendar_month</span>
@@ -1625,7 +1767,7 @@ export default function CrmPage() {
 
                   
                   {/* Communication Result Entry Form */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
+                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
                     <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle">
                       <div className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-primary text-lg">edit_note</span>
@@ -1724,7 +1866,7 @@ export default function CrmPage() {
                   </div>
 
                   {/* CRM History / Interaction Timeline */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
+                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
                     <div className="flex items-center justify-between pb-3 border-b border-border-subtle mb-3">
                       <div className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-text-muted text-lg">history</span>
@@ -1851,32 +1993,69 @@ export default function CrmPage() {
                         <span className="material-symbols-outlined text-purple-600 text-base">tune</span>
                         არასტანდარტული გრაფიკი
                       </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">≥13 თვე</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">სპეციფიური დღეები / ≥13 თვე</span>
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                      მინიმუმ 13 თვე, შეუზღუდავი მაქსიმუმი. თანხის ხელით რედაქტირება თითოეულ თვეზე.
+                      სპეციფიური დღეების ინტერვალები (ყოველ X დღეში) ან ინდივიდუალური თვეები თანხის ხელით რედაქტირებით.
                     </p>
                   </button>
                 </div>
               </div>
 
+              {/* Timing & Interval Controls */}
+              {scheduleType === 'NON_STANDARD' && (
+                <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-200 space-y-2.5">
+                  <span className="text-xs font-bold text-purple-900 block">
+                    არასტანდარტული გრაფიკის ინტერვალის ტიპი:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => handleScheduleIntervalChange('MONTHLY', scheduleCustomIntervalDays)}
+                      className={`p-2 rounded-lg border text-left font-semibold transition cursor-pointer ${
+                        scheduleIntervalMode === 'MONTHLY'
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      📅 ყოველთვიური (რიცხვით)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleScheduleIntervalChange('CUSTOM_DAYS', scheduleCustomIntervalDays)}
+                      className={`p-2 rounded-lg border text-left font-semibold transition cursor-pointer ${
+                        scheduleIntervalMode === 'CUSTOM_DAYS'
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      ⚡ სპეციფიური დღეების ინტერვალი
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Month Count & Payment Day Controls */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    გადახდის თვეების რაოდენობა {scheduleType === 'STANDARD' ? '(1 - 12)' : '(მინ. 13)'} *
+                    {scheduleIntervalMode === 'CUSTOM_DAYS' && scheduleType === 'NON_STANDARD'
+                      ? 'შენატანების რაოდენობა *'
+                      : `გადახდის თვეების რაოდენობა ${scheduleType === 'STANDARD' ? '(1 - 12)' : '(მინ. 13)'} *`}
                   </label>
                   <div className="flex items-center gap-2">
                     <input
                       type="number"
                       required
-                      min={scheduleType === 'STANDARD' ? 1 : 13}
-                      max={scheduleType === 'STANDARD' ? 12 : 120}
+                      min={scheduleType === 'STANDARD' ? 1 : 1}
+                      max={120}
                       value={scheduleMonths}
                       onChange={(e) => handleScheduleMonthsChange(parseInt(e.target.value) || (scheduleType === 'STANDARD' ? 12 : 13))}
                       className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:border-primary focus:outline-none"
                     />
-                    <span className="text-xs font-medium text-slate-500 shrink-0">თვე</span>
+                    <span className="text-xs font-medium text-slate-500 shrink-0">
+                      {scheduleIntervalMode === 'CUSTOM_DAYS' && scheduleType === 'NON_STANDARD' ? 'შენატანი' : 'თვე'}
+                    </span>
                   </div>
                   <span className="text-[10px] text-slate-400 mt-0.5 block">
                     {scheduleType === 'STANDARD' ? 'მაქსიმუმ 12 თვე' : 'შეუზღუდავი მაქსიმალური ვადა'}
@@ -1884,24 +2063,49 @@ export default function CrmPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    გადახდის დღე (ყოველი თვის რიცხვი) *
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      required
-                      min={1}
-                      max={31}
-                      value={schedulePaymentDay}
-                      onChange={(e) => handleSchedulePaymentDayChange(parseInt(e.target.value) || 15)}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:border-primary focus:outline-none"
-                    />
-                    <span className="text-xs font-medium text-slate-500 shrink-0">რიცხვი</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    მაგ: 15 (ყოველთვიურად ამ რიცხვში)
-                  </span>
+                  {scheduleIntervalMode === 'CUSTOM_DAYS' && scheduleType === 'NON_STANDARD' ? (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        სპეციფიური ინტერვალი (ყოველ X დღეში) *
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          max={365}
+                          value={scheduleCustomIntervalDays}
+                          onChange={(e) => handleScheduleIntervalChange('CUSTOM_DAYS', parseInt(e.target.value) || 30)}
+                          className="w-full px-3 py-2 bg-white border border-purple-300 rounded-lg text-sm font-bold text-purple-900 focus:border-purple-600 focus:outline-none"
+                        />
+                        <span className="text-xs font-medium text-slate-500 shrink-0">დღე</span>
+                      </div>
+                      <span className="text-[10px] text-purple-600 mt-0.5 block">
+                        მაგ: ყოველ 15, 30 ან 45 დღეში
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        გადახდის დღე (ყოველი თვის რიცხვი) *
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          max={31}
+                          value={schedulePaymentDay}
+                          onChange={(e) => handleSchedulePaymentDayChange(parseInt(e.target.value) || 15)}
+                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:border-primary focus:outline-none"
+                        />
+                        <span className="text-xs font-medium text-slate-500 shrink-0">რიცხვი</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        მაგ: 15 (ყოველთვიურად ამ რიცხვში)
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

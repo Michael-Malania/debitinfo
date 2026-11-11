@@ -56,6 +56,13 @@
   --color-error: #ba1a1a;
   --color-error-container: #ffdad6;
   --color-on-error-container: #93000a;
+
+  --spacing-space-xs: 4px;
+  --spacing-space-sm: 8px;
+  --spacing-space-md: 16px;
+  --spacing-space-lg: 24px;
+  --spacing-space-xl: 32px;
+  --spacing-space-2xl: 48px;
 }
 
 :root {

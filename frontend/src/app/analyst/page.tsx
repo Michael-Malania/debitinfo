@@ -70,7 +70,8 @@ export default function AnalystPage() {
   // Debtor Detailed Analytics & Case File Modal State
   const [selectedDebtorForAnalytics, setSelectedDebtorForAnalytics] = useState<any | null>(null);
   const [debtorCaseFileTab, setDebtorCaseFileTab] = useState<'summary' | 'schedule' | 'documents' | 'receipts' | 'chronology'>('summary');
-  const [debtorChronologyRange, setDebtorChronologyRange] = useState<'3m' | '6m' | '1y'>('6m');
+  const [debtorChronologyRange, setDebtorChronologyRange] = useState<'3m' | '6m' | '1y' | 'custom'>('6m');
+  const [debtorCustomDays, setDebtorCustomDays] = useState<number>(45);
 
   // Creditor Portfolio Dynamics Custom Range States
   const [creditorDynTargetId, setCreditorDynTargetId] = useState<string>('ALL');
@@ -781,11 +782,20 @@ export default function AnalystPage() {
       monthNames = ['აპრილი', 'მაისი', 'ივნისი'];
     } else if (debtorChronologyRange === '6m') {
       monthNames = ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი'];
-    } else {
+    } else if (debtorChronologyRange === '1y') {
       monthNames = [
         'იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი',
         'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი',
       ];
+    } else {
+      const days = Math.max(7, debtorCustomDays || 45);
+      const stepCount = days <= 30 ? 3 : days <= 90 ? Math.min(6, Math.ceil(days / 15)) : Math.min(8, Math.ceil(days / 30));
+      const stepDays = Math.round(days / stepCount);
+      monthNames = Array.from({ length: stepCount }, (_, i) => {
+        const startDay = i * stepDays + 1;
+        const endDay = Math.min(days, (i + 1) * stepDays);
+        return `${startDay}-${endDay} დღე`;
+      });
     }
 
     const baseMonthlyExpected = Math.max(100, Math.round(amt / monthNames.length));
@@ -844,7 +854,7 @@ export default function AnalystPage() {
       totalPaid: timeline.reduce((s, p) => s + p.amount, 0),
       complianceRate: overdue > 0 ? (overdue > 60 ? 45 : 88) : 98,
     };
-  }, [selectedDebtorForAnalytics, debtorChronologyRange]);
+  }, [selectedDebtorForAnalytics, debtorChronologyRange, debtorCustomDays]);
 
   // --------------------------------------------------------------------------
   // Selection-Driven Dynamic Chart Generator for Debtors & Creditors
@@ -6521,7 +6531,7 @@ export default function AnalystPage() {
               { id: 'summary', label: '📋 ზოგადი & ბალანსი', icon: 'account_balance_wallet' },
               { id: 'schedule', label: '📅 დაფარვის ოფიციალური გრაფიკი', icon: 'calendar_month' },
               { id: 'documents', label: '📑 წარმოშობის საფუძველი & RS.GE', icon: 'verified' },
-              { id: 'receipts', label: '🧾 ქვითრები & რეკვიზიტები', icon: 'receipt_long' },
+              { id: 'receipts', label: '🧾 გადახდის ქვითრები', icon: 'receipt_long' },
               { id: 'chronology', label: '📈 გადახდების ქრონოლოგია', icon: 'insights' },
             ].map((tab) => (
               <button
@@ -7055,48 +7065,18 @@ export default function AnalystPage() {
               </div>
             )}
 
-            {/* TAB 4: 🧾 ქვითრები & საბანკო რეკვიზიტები */}
+            {/* TAB 4: 🧾 გადახდის ქვითრები */}
             {debtorCaseFileTab === 'receipts' && (
-              <div className="space-y-5">
-                {/* Bank Details */}
-                <div className="p-4 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-3">
-                  <div className="flex items-center gap-2 text-white font-bold text-sm">
-                    <span className="material-symbols-outlined text-blue-400">account_balance</span>
-                    <span>დავალიანების დაფარვის ოფიციალური საბანკო რეკვიზიტები</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700/60 space-y-1">
-                      <div className="text-slate-400">სს "საქართველოს ბანკი" (BOG)</div>
-                      <div className="font-mono font-bold text-emerald-400 text-sm">GE29BG0000000884123456</div>
-                      <div className="text-slate-300 text-[11px]">მიმღები: შპს დებიტინფო (ს/კ 405123456)</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-slate-800/80 border border-slate-700/60 space-y-1">
-                      <div className="text-slate-400">სს "თიბისი ბანკი" (TBC)</div>
-                      <div className="font-mono font-bold text-blue-400 text-sm">GE79TB7000000884198765</div>
-                      <div className="text-slate-300 text-[11px]">მიმღები: შპს დებიტინფო (ს/კ 405123456)</div>
-                    </div>
-                  </div>
-                  <div className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg">
-                    დანიშნულებაში აუცილებელია მიეთითოს: <strong>საქმე #{caseNumber}, მოვალე: {debtorName}, პ/ნ: {pin}</strong>
-                  </div>
-                </div>
-
-                {/* Uploaded Payment Receipts & Status */}
-                <div className="space-y-3">
-                  <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-emerald-600 text-base">receipt_long</span>
-                    <span>ატვირთული გადახდის ქვითრები და სტატუსი</span>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {[
-                      {
-                        name: 'order_receipt_2408.pdf',
-                        amount: '300.00 ₾',
-                        date: '25 აგვ, 2024',
-                        status: 'VERIFIED',
-                        note: 'დამოწმებულია ბუღალტრის მიერ (ორდერი #OR-99120)',
-                      },
+              <div className="space-y-3">
+                <div className="space-y-2.5">
+                  {[
+                    {
+                      name: 'order_receipt_2408.pdf',
+                      amount: '300.00 ₾',
+                      date: '25 აგვ, 2024',
+                      status: 'VERIFIED',
+                      note: 'დამოწმებულია ბუღალტრის მიერ (ორდერი #OR-99120)',
+                    },
                       {
                         name: 'payment_slip_2409.pdf',
                         amount: '300.00 ₾',
@@ -7148,7 +7128,6 @@ export default function AnalystPage() {
                     ))}
                   </div>
                 </div>
-              </div>
             )}
 
             {/* TAB 5: 📈 გადახდების ქრონოლოგია & დინამიკა */}
@@ -7163,7 +7142,7 @@ export default function AnalystPage() {
                       ყოველთვიური შენატანების პროგრესი, რეგრესი და ჩავარდნები
                     </p>
                   </div>
-                  <div className="flex items-center bg-white p-1 rounded-lg border border-slate-200 text-xs font-semibold">
+                  <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200 text-xs font-semibold">
                     {(
                       [
                         { id: '3m', label: '3 თვე' },
@@ -7184,6 +7163,36 @@ export default function AnalystPage() {
                         {r.label}
                       </button>
                     ))}
+                    <div className="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block" />
+                    <div
+                      onClick={() => setDebtorChronologyRange('custom')}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md border transition cursor-pointer ${
+                        debtorChronologyRange === 'custom'
+                          ? 'bg-blue-50 border-blue-500 text-blue-800 font-bold'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                      title="სპეციფიური დღეების ოდენობის მითითება"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">tune</span>
+                      <span>სპეციფიური:</span>
+                      <input
+                        type="number"
+                        min={7}
+                        max={730}
+                        value={debtorCustomDays}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 0;
+                          setDebtorCustomDays(val);
+                          setDebtorChronologyRange('custom');
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDebtorChronologyRange('custom');
+                        }}
+                        className="w-14 px-1.5 py-0.5 bg-white border border-slate-300 rounded text-center text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                      />
+                      <span className="text-[11px] font-normal text-slate-500">დღე</span>
+                    </div>
                   </div>
                 </div>
 
