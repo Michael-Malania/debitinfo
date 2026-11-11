@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger, OnModuleInit, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CallDisposition, ClaimStatus, UserRole } from '@prisma/client';
+import { CallDisposition, ClaimStatus, UserRole, ScheduleType } from '@prisma/client';
 
 export interface LogCallDto {
   claimId: string;
@@ -8,6 +8,24 @@ export interface LogCallDto {
   promisedDate?: string;
   promisedAmount?: number;
   notes: string;
+}
+
+export interface SaveScheduleDto {
+  type: 'STANDARD' | 'NON_STANDARD';
+  totalMonths: number;
+  paymentDay: number; // 1 to 31
+  startDate?: string;
+  installments?: Array<{
+    installmentNo: number;
+    dueDate?: string;
+    amount: number;
+  }>;
+  notes?: string;
+}
+
+export interface RespondScheduleDto {
+  decision: 'APPROVED' | 'REJECTED';
+  comment?: string;
 }
 
 @Injectable()
@@ -484,5 +502,203 @@ export class CrmService implements OnModuleInit {
     }
     await this.prisma.blogPost.delete({ where: { id } });
     return { success: true, id };
+  }
+
+  /**
+   * Save or update repayment schedule by Credit Manager
+   */
+  async saveClaimSchedule(claimId: string, dto: SaveScheduleDto, user: any) {
+    const claim = await this.prisma.debtClaim.findUnique({
+      where: { id: claimId },
+      include: {
+        debtor: {
+          include: { individualProfile: true, companyProfile: true },
+        },
+        creditor: {
+          include: { individualProfile: true, companyProfile: true },
+        },
+        schedules: {
+          include: { installments: true },
+        },
+      },
+    });
+
+    if (!claim) {
+      throw new NotFoundException(`Claim with id ${claimId} not found`);
+    }
+
+    const scheduleType = dto.type === 'NON_STANDARD' ? ScheduleType.NON_STANDARD : ScheduleType.STANDARD;
+    let totalMonths = Number(dto.totalMonths) || (scheduleType === ScheduleType.STANDARD ? 12 : 18);
+
+    if (scheduleType === ScheduleType.STANDARD) {
+      if (totalMonths < 1) totalMonths = 1;
+      if (totalMonths > 12) totalMonths = 12;
+    } else {
+      if (totalMonths < 13) totalMonths = 13;
+    }
+
+    let paymentDay = Number(dto.paymentDay) || 15;
+    if (paymentDay < 1) paymentDay = 1;
+    if (paymentDay > 31) paymentDay = 31;
+
+    const totalAmount = Number(claim.remainingAmount || claim.initialAmount || 0);
+
+    // Compute installments
+    let installmentsData: Array<{ installmentNo: number; dueDate: Date; amount: number }> = [];
+
+    const now = new Date();
+    const startMonth = now.getMonth() + 1; // start next month
+    const startYear = now.getFullYear();
+
+    if (dto.installments && Array.isArray(dto.installments) && dto.installments.length > 0) {
+      installmentsData = dto.installments.map((inst, idx) => {
+        const targetDate = new Date(startYear, startMonth + idx, Math.min(paymentDay, 28));
+        return {
+          installmentNo: inst.installmentNo || idx + 1,
+          dueDate: inst.dueDate ? new Date(inst.dueDate) : targetDate,
+          amount: Number(inst.amount) || 0,
+        };
+      });
+    } else {
+      const baseMonthly = Math.floor((totalAmount / totalMonths) * 100) / 100;
+      const remainder = Math.round((totalAmount - baseMonthly * totalMonths) * 100) / 100;
+
+      for (let i = 0; i < totalMonths; i++) {
+        const targetDate = new Date(startYear, startMonth + i, Math.min(paymentDay, 28));
+        const amount = i === 0 ? baseMonthly + remainder : baseMonthly;
+        installmentsData.push({
+          installmentNo: i + 1,
+          dueDate: targetDate,
+          amount,
+        });
+      }
+    }
+
+    const monthlyAverage =
+      installmentsData.length > 0
+        ? installmentsData.reduce((s, i) => s + i.amount, 0) / installmentsData.length
+        : totalAmount / totalMonths;
+
+    // Deactivate previous active schedules
+    await this.prisma.repaymentSchedule.updateMany({
+      where: { claimId: claim.id, isActive: true },
+      data: { isActive: false },
+    });
+
+    const createdSchedule = await this.prisma.repaymentSchedule.create({
+      data: {
+        claimId: claim.id,
+        type: scheduleType,
+        totalMonths,
+        monthlyAmount: monthlyAverage,
+        startDate: installmentsData[0]?.dueDate || new Date(),
+        paymentDay,
+        approvalStatus: 'PENDING_DEBTOR_APPROVAL',
+        createdByRole: 'CREDIT_MANAGER',
+        createdById: user?.id || null,
+        notes: dto.notes || null,
+        isActive: true,
+        installments: {
+          create: installmentsData.map((inst) => ({
+            installmentNo: inst.installmentNo,
+            dueDate: inst.dueDate,
+            amount: inst.amount,
+            paidAmount: 0,
+            isPaid: false,
+          })),
+        },
+      },
+      include: {
+        installments: {
+          orderBy: { installmentNo: 'asc' },
+        },
+      },
+    });
+
+    // Update claim status & scheduleType
+    await this.prisma.debtClaim.update({
+      where: { id: claim.id },
+      data: {
+        scheduleType,
+        status: ClaimStatus.RESTRUCTURED,
+        lastActivityAt: new Date(),
+      },
+    });
+
+    // Add timeline event
+    const managerName = user?.staffProfile?.fullName || user?.name || user?.email || 'კრედიტ მენეჯერი';
+    await this.prisma.caseTimelineEvent.create({
+      data: {
+        claimId: claim.id,
+        authorId: user?.id,
+        department: 'CALL_CENTER',
+        authorRoleTitle: `კრედიტ მენეჯერი - ${managerName}`,
+        actionType: 'SCHEDULE_OFFERED',
+        description: `შედგა გადახდის გრაფიკი (${
+          scheduleType === ScheduleType.STANDARD ? 'სტანდარტული' : 'არასტანდარტული'
+        }, ${totalMonths} თვე, ყოველი თვის ${paymentDay} რიცხვი, საშუალო: ${monthlyAverage.toFixed(2)} ₾). მოლოდინში (დებიტორის დასადასტურებელი).`,
+      },
+    });
+
+    return createdSchedule;
+  }
+
+  /**
+   * Respond to schedule (Debtor or Credit Manager / Admin)
+   */
+  async respondToSchedule(scheduleId: string, dto: RespondScheduleDto, user: any) {
+    const schedule = await this.prisma.repaymentSchedule.findUnique({
+      where: { id: scheduleId },
+      include: {
+        claim: {
+          include: {
+            debtor: { include: { individualProfile: true, companyProfile: true } },
+          },
+        },
+      },
+    });
+
+    if (!schedule) {
+      throw new NotFoundException(`Schedule ${scheduleId} not found`);
+    }
+
+    const decision = dto.decision === 'APPROVED' ? 'APPROVED' : 'REJECTED';
+
+    const updated = await this.prisma.repaymentSchedule.update({
+      where: { id: scheduleId },
+      data: {
+        approvalStatus: decision,
+        debtorRespondedAt: new Date(),
+        debtorComment: dto.comment || null,
+      },
+      include: {
+        installments: { orderBy: { installmentNo: 'asc' } },
+      },
+    });
+
+    const debtorName =
+      schedule.claim.debtor.entityType === 'LEGAL'
+        ? schedule.claim.debtor.companyProfile?.companyName
+        : `${schedule.claim.debtor.individualProfile?.firstName || ''} ${
+            schedule.claim.debtor.individualProfile?.lastName || ''
+          }`.trim() || schedule.claim.debtor.email;
+
+    await this.prisma.caseTimelineEvent.create({
+      data: {
+        claimId: schedule.claimId,
+        authorId: user?.id,
+        department: 'CALL_CENTER',
+        authorRoleTitle: `დებიტორი - ${debtorName}`,
+        actionType: decision === 'APPROVED' ? 'SCHEDULE_ACCEPTED' : 'SCHEDULE_REJECTED',
+        description:
+          decision === 'APPROVED'
+            ? `დებიტორმა ოფიციალურად დაადასტურა შემოთავაზებული გადახდის გრაფიკი (${
+                schedule.type === 'STANDARD' ? 'სტანდარტული' : 'არასტანდარტული'
+              }, ${schedule.totalMonths} თვე, ყოველი თვის ${schedule.paymentDay} რიცხვი).`
+            : `დებიტორმა უარყო შემოთავაზებული გადახდის გრაფიკი. კომენტარი: ${dto.comment || 'არ არის მითითებული'}.`,
+      },
+    });
+
+    return updated;
   }
 }

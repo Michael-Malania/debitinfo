@@ -453,7 +453,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     fullName: 'ლევან მაისურაძე',
     email: 'l.maisuradze@debitinfo.ge',
     role: 'operator',
-    roleKa: 'უფროსი კურატორი / ოპერატორი',
+    roleKa: 'უფროსი კრედიტ მენეჯერი',
     department: 'მოვალეთა მართვა & CRM',
     status: 'active',
     assignedCasesCount: 142,

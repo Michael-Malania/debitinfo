@@ -19,7 +19,7 @@ const STAFF_ROLE_OPTIONS = [
   {
     role: 'OPERATOR',
     department: 'ქოლ-ცენტრი & მოლაპარაკებები (CRM)',
-    label: '🎧 ქოლ-ცენტრის ოპერატორი — მოლაპარაკებები & CRM (Call Center)',
+    label: '🎧 კრედიტ მენეჯერი — მოლაპარაკებები & CRM (Call Center)',
   },
   {
     role: 'LEGAL',
@@ -535,9 +535,9 @@ export default function OpsPage() {
                   type="button"
                   onClick={() => handleQuickFill('operator')}
                   className="px-2 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-purple-800 font-semibold hover:bg-purple-100 transition shadow-2xs text-[11px] text-center"
-                  title="ქოლ-ცენტრის ოპერატორი"
+                  title="კრედიტ მენეჯერი"
                 >
-                  📞 ოპერატორი
+                  📞 კრედიტ მენეჯერი
                 </button>
                 <button
                   type="button"
@@ -825,7 +825,7 @@ export default function OpsPage() {
                 თანამშრომელთა რეგისტრაცია და წვდომების მენეჯმენტი
               </h1>
               <p className="text-body-md text-text-muted mt-0.5">
-                ანალიტიკოსების, ქოლ-ცენტრის ოპერატორების, საველე ვიზიტორებისა და იურისტების როლების მინიჭება და კონტროლი
+                ანალიტიკოსების, კრედიტ მენეჯერების, საველე ვიზიტორებისა და იურისტების როლების მინიჭება და კონტროლი
               </p>
             </div>
 
@@ -898,7 +898,7 @@ export default function OpsPage() {
             {/* KPI 3 */}
             <div className="p-4 bg-surface-card rounded-xl border border-border-subtle shadow-sm flex items-center justify-between">
               <div>
-                <span className="text-body-sm text-text-muted">ქოლ-ცენტრი &amp; ოპერატორები</span>
+                <span className="text-body-sm text-text-muted">ქოლ-ცენტრი &amp; კრედიტ მენეჯერები</span>
                 <div className="text-headline-md font-bold text-purple-700 mt-1 font-mono">
                   {staffCounts.operators}
                 </div>
@@ -1043,7 +1043,7 @@ export default function OpsPage() {
                         roleBadge = (
                           <span className="px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-800 border border-purple-200 text-xs font-semibold inline-flex items-center gap-1">
                             <span className="material-symbols-outlined text-[13px]">headset_mic</span>
-                            ქოლ-ცენტრი / ოპერატორი
+                            ქოლ-ცენტრი / კრედიტ მენეჯერი
                           </span>
                         );
                       } else if (staff.role === 'FIELD_OFFICER') {

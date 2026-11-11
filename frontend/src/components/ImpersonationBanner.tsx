@@ -110,7 +110,7 @@ export default function ImpersonationBanner() {
   const getRoleLabel = (role: string) => {
     switch (role) {
       case 'OPERATOR':
-        return 'ქოლ-ცენტრის ოპერატორი (კრედიტ-მენეჯერი)';
+        return 'კრედიტ მენეჯერი (Call Center & CRM)';
       case 'LEGAL':
         return 'იურისტი / სააღსრულებო';
       case 'FIELD_OFFICER':

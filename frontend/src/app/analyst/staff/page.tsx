@@ -216,7 +216,7 @@ export default function StaffRegistryPage() {
     switch (role) {
       case 'OPERATOR':
         return {
-          title: 'ქოლ-ცენტრი & ოპერატორები (კრედიტ-მენეჯერები)',
+          title: 'ქოლ-ცენტრი & კრედიტ მენეჯერები',
           badge: 'Call Center & CRM',
           color: 'blue',
           icon: 'support_agent',
@@ -667,12 +667,12 @@ export default function StaffRegistryPage() {
                     {/* Operators Leaderboard */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                       <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50 text-xs font-bold text-slate-800">
-                        ოპერატორთა (კრედიტ-მენეჯერთა) რეიტინგი
+                        კრედიტ მენეჯერთა რეიტინგი
                       </div>
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-100/70 text-slate-600 font-semibold border-b border-slate-200">
                           <tr>
-                            <th className="py-3 px-4">ოპერატორი</th>
+                            <th className="py-3 px-4">კრედიტ მენეჯერი</th>
                             <th className="py-3 px-4">განხორციელებული ზარები</th>
                             <th className="py-3 px-4">წარმატებული კონტაქტი</th>
                             <th className="py-3 px-4">დაპირება (PTP)</th>

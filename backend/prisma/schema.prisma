@@ -323,19 +323,26 @@ model DebtClaim {
 }
 
 model RepaymentSchedule {
-  id              String          @id @default(uuid())
-  claimId         String
-  claim           DebtClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
-  type            ScheduleType    @default(STANDARD)
-  totalMonths     Int             // 1 to 12 (standard) or >12 (non-standard)
-  monthlyAmount   Decimal         @db.Decimal(12, 2)
-  startDate       DateTime
-  isActive        Boolean         @default(true)
+  id                String          @id @default(uuid())
+  claimId           String
+  claim             DebtClaim       @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  type              ScheduleType    @default(STANDARD)
+  totalMonths       Int             // 1 to 12 (standard) or >12 (non-standard)
+  monthlyAmount     Decimal         @db.Decimal(12, 2)
+  startDate         DateTime
+  paymentDay        Int             @default(15) // ყოველი თვის გადახდის რიცხვი (1 - 31)
+  approvalStatus    String          @default("PENDING_DEBTOR_APPROVAL") // PENDING_DEBTOR_APPROVAL, APPROVED, REJECTED
+  debtorRespondedAt DateTime?       // როდის დაადასტურა ან უარყო დებიტორმა
+  debtorComment     String?         // დებიტორის კომენტარი
+  createdByRole     String?         @default("CREDIT_MANAGER")
+  createdById       String?
+  notes             String?
+  isActive          Boolean         @default(true)
 
-  installments    RepaymentInstallment[]
+  installments      RepaymentInstallment[]
 
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 model RepaymentInstallment {

@@ -164,7 +164,7 @@ export default function PortfolioDispatchPage() {
                 სამართავი პორტფელის განაწილება
               </span>
               <span className="text-xs text-slate-400">
-                საქმეების დისპეტჩერიზაცია ოპერატორებზე, იურისტებსა და ვიზიტორებზე
+                საქმეების დისპეტჩერიზაცია კრედიტ მენეჯერებზე, იურისტებსა და ვიზიტორებზე
               </span>
             </div>
           </div>
@@ -336,7 +336,7 @@ export default function PortfolioDispatchPage() {
                       className="bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 font-semibold text-[10px]"
                     >
                       <option value="ALL">ყველა როლი</option>
-                      <option value="OPERATOR">ოპერატორები (ქოლ-ცენტრი)</option>
+                      <option value="OPERATOR">კრედიტ მენეჯერები (ქოლ-ცენტრი)</option>
                       <option value="LEGAL">იურისტები</option>
                       <option value="FIELD_OFFICER">ვიზიტორები (საველე)</option>
                     </select>

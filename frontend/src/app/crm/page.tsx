@@ -39,6 +39,150 @@ export default function CrmPage() {
   const [submittingLog, setSubmittingLog] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
+  // Repayment Schedule Management State
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleModalMode, setScheduleModalMode] = useState<'create' | 'edit'>('create');
+  const [scheduleType, setScheduleType] = useState<'STANDARD' | 'NON_STANDARD'>('STANDARD');
+  const [scheduleMonths, setScheduleMonths] = useState<number>(12);
+  const [schedulePaymentDay, setSchedulePaymentDay] = useState<number>(15);
+  const [scheduleInstallments, setScheduleInstallments] = useState<Array<{ installmentNo: number; dueDate: string; amount: number }>>([]);
+  const [scheduleNotes, setScheduleNotes] = useState<string>('');
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleSuccessMessage, setScheduleSuccessMessage] = useState<string | null>(null);
+  const [showScheduleDetails, setShowScheduleDetails] = useState(false);
+
+  const generateInstallments = (
+    type: 'STANDARD' | 'NON_STANDARD',
+    months: number,
+    day: number,
+    totalDebt: number,
+    existingList?: Array<{ installmentNo: number; dueDate?: string; amount: number }>
+  ) => {
+    const validMonths = type === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(13, months);
+    const validDay = Math.max(1, Math.min(31, day));
+    const baseAmt = Math.floor((totalDebt / validMonths) * 100) / 100;
+    const remainder = Math.round((totalDebt - baseAmt * validMonths) * 100) / 100;
+
+    const now = new Date();
+    const startMonth = now.getMonth() + 1;
+    const startYear = now.getFullYear();
+
+    const result: Array<{ installmentNo: number; dueDate: string; amount: number }> = [];
+    for (let i = 0; i < validMonths; i++) {
+      const d = new Date(startYear, startMonth + i, Math.min(validDay, 28));
+      const dateStr = d.toISOString().split('T')[0];
+      const customVal = existingList?.[i]?.amount;
+      const amt = customVal !== undefined ? customVal : (i === 0 ? baseAmt + remainder : baseAmt);
+      result.push({
+        installmentNo: i + 1,
+        dueDate: dateStr,
+        amount: Math.round(amt * 100) / 100,
+      });
+    }
+    return result;
+  };
+
+  const openScheduleModal = (mode: 'create' | 'edit') => {
+    setScheduleModalMode(mode);
+    const existingSched = activeClaim?.schedules?.[0];
+    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
+
+    if (mode === 'edit' && existingSched) {
+      const type = existingSched.type === 'NON_STANDARD' ? 'NON_STANDARD' : 'STANDARD';
+      const months = existingSched.totalMonths || (type === 'STANDARD' ? 12 : 18);
+      const day = existingSched.paymentDay || 15;
+      setScheduleType(type);
+      setScheduleMonths(months);
+      setSchedulePaymentDay(day);
+      setScheduleNotes(existingSched.notes || '');
+
+      if (existingSched.installments && existingSched.installments.length > 0) {
+        setScheduleInstallments(
+          existingSched.installments.map((inst: any, idx: number) => ({
+            installmentNo: inst.installmentNo || idx + 1,
+            dueDate: inst.dueDate ? new Date(inst.dueDate).toISOString().split('T')[0] : '',
+            amount: Number(inst.amount) || 0,
+          }))
+        );
+      } else {
+        setScheduleInstallments(generateInstallments(type, months, day, totalDebt));
+      }
+    } else {
+      setScheduleType('STANDARD');
+      setScheduleMonths(12);
+      setSchedulePaymentDay(15);
+      setScheduleNotes('');
+      setScheduleInstallments(generateInstallments('STANDARD', 12, 15, totalDebt));
+    }
+    setIsScheduleModalOpen(true);
+  };
+
+  const handleScheduleTypeChange = (type: 'STANDARD' | 'NON_STANDARD') => {
+    setScheduleType(type);
+    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
+    const newMonths = type === 'STANDARD' ? Math.min(12, Math.max(1, scheduleMonths)) : Math.max(13, scheduleMonths);
+    setScheduleMonths(newMonths);
+    setScheduleInstallments(generateInstallments(type, newMonths, schedulePaymentDay, totalDebt));
+  };
+
+  const handleScheduleMonthsChange = (months: number) => {
+    const validMonths = scheduleType === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(13, months);
+    setScheduleMonths(validMonths);
+    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
+    setScheduleInstallments(generateInstallments(scheduleType, validMonths, schedulePaymentDay, totalDebt));
+  };
+
+  const handleSchedulePaymentDayChange = (day: number) => {
+    const validDay = Math.max(1, Math.min(31, day));
+    setSchedulePaymentDay(validDay);
+    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
+    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, validDay, totalDebt, scheduleInstallments));
+  };
+
+  const handleInstallmentAmountChange = (idx: number, newAmount: number) => {
+    const updated = [...scheduleInstallments];
+    updated[idx] = {
+      ...updated[idx],
+      amount: Math.max(0, newAmount),
+    };
+    setScheduleInstallments(updated);
+  };
+
+  const handleAutoDistributeEvenly = () => {
+    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
+    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, schedulePaymentDay, totalDebt));
+  };
+
+  const handleSaveSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeClaim?.id) return;
+
+    setSavingSchedule(true);
+    try {
+      await crmBackendService.saveClaimSchedule(activeClaim.id, {
+        type: scheduleType,
+        totalMonths: scheduleMonths,
+        paymentDay: schedulePaymentDay,
+        installments: scheduleInstallments,
+        notes: scheduleNotes || undefined,
+      });
+
+      setScheduleSuccessMessage(
+        `გადახდის გრაფიკი წარმატებით შედგა და გაიგზავნა დებიტორთან დასადასტურებლად!`
+      );
+      setTimeout(() => setScheduleSuccessMessage(null), 5000);
+      setIsScheduleModalOpen(false);
+
+      // Refresh claim detail & queue
+      await Promise.all([loadClaimDetail(activeClaim.id), loadQueueAndStats()]);
+    } catch (err: any) {
+      alert(err?.message || 'გრაფიკის შენახვა ვერ მოხერხდა');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+
   // Blog CMS State
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [postTitle, setPostTitle] = useState('');
@@ -183,7 +327,7 @@ export default function CrmPage() {
         </head>
         <body>
           <div class="header">
-            <div style="font-size: 20px; font-weight: bold; color: #002984;">Debitinfo.GE • ოპერატორის საქმის დოკუმენტი</div>
+            <div style="font-size: 20px; font-weight: bold; color: #002984;">Debitinfo.GE • კრედიტ მენეჯერის საქმის დოკუმენტი</div>
             <div class="badge">დამოწმებულია RS.GE</div>
           </div>
           <h2 style="margin: 0 0 10px;">${doc.title}</h2>
@@ -199,7 +343,7 @@ export default function CrmPage() {
           </table>
           <div class="stamp">
             RS.GE / DEBITINFO.GE<br>
-            დამოწმებულია ოპერატორისთვის
+            დამოწმებულია კრედიტ მენეჯერისთვის
           </div>
         </body>
         </html>
@@ -229,7 +373,7 @@ export default function CrmPage() {
       content: postContent,
       coverImage: postCoverImage || 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=1000',
       authorName: currentUser?.name || 'თამარ გიორგობიანი',
-      authorRole: 'CRM ოპერატორი / კონტენტ მენეჯერი',
+      authorRole: 'კრედიტ მენეჯერი / კონტენტ მენეჯერი',
       published: !isDraft,
       tags: postTags.split(',').map((t) => t.trim()).filter(Boolean),
     });
@@ -266,7 +410,7 @@ export default function CrmPage() {
               <span className="material-symbols-outlined text-lg">account_balance</span>
             </span>
             <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight group-hover:underline">
-              Debitinfo.GE Operator &amp; CRM
+              Debitinfo.GE კრედიტ მენეჯერი &amp; CRM
             </span>
           </Link>
           {/* Navigation Tabs */}
@@ -341,7 +485,7 @@ export default function CrmPage() {
                 {currentUser?.name || currentUser?.email || 'თამარ გიორგობიანი'}
               </p>
               <p className="text-label-sm font-label-sm text-text-muted mt-0.5">
-                {currentUser?.role === 'ADMIN' ? 'სისტემური ადმინისტრატორი' : 'დებიტ ოფიცერი & CRM'}
+                {currentUser?.role === 'ADMIN' ? 'სისტემური ადმინისტრატორი' : 'კრედიტ მენეჯერი & CRM'}
               </p>
             </div>
           </div>
@@ -455,7 +599,7 @@ export default function CrmPage() {
                     ბლოგისა &amp; სიახლეების მართვის სტუდია
                   </h1>
                   <p className="text-body-sm text-text-muted mt-0.5">
-                    CRM ოპერატორისა და ადმინისტრაციის პანელი — გამოაქვეყნეთ სტატიები და სიახლეები Debitinfo.GE-ის მთავარ პორტალზე
+                    კრედიტ მენეჯერისა და ადმინისტრაციის პანელი — გამოაქვეყნეთ სტატიები და სიახლეები Debitinfo.GE-ის მთავარ პორტალზე
                   </p>
                 </div>
               </div>
@@ -1037,6 +1181,154 @@ export default function CrmPage() {
                     </div>
                   </div>
 
+                  {/* ================= REPAYMENT SCHEDULE MANAGEMENT CARD ================= */}
+                  <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
+                    <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle mb-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-primary text-lg">calendar_month</span>
+                        <h3 className="text-headline-sm font-headline-sm text-sm font-bold text-text-primary">
+                          გადახდის გრაფიკის მართვა &amp; მიბმა
+                        </h3>
+                      </div>
+                      <span className="text-[11px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                        კრედიტ მენეჯერი
+                      </span>
+                    </div>
+
+                    {scheduleSuccessMessage && (
+                      <div className="p-3 mb-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2">
+                        <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
+                        <span>{scheduleSuccessMessage}</span>
+                      </div>
+                    )}
+
+                    {activeClaim.schedules && activeClaim.schedules.length > 0 ? (
+                      (() => {
+                        const sched = activeClaim.schedules[0];
+                        const isApproved = sched.approvalStatus === 'APPROVED';
+                        const isPending = sched.approvalStatus === 'PENDING_DEBTOR_APPROVAL' || !sched.approvalStatus;
+                        const isRejected = sched.approvalStatus === 'REJECTED';
+
+                        return (
+                          <div className="space-y-3">
+                            {/* Schedule Status & Type Banner */}
+                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                    sched.type === 'NON_STANDARD' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  }`}>
+                                    {sched.type === 'NON_STANDARD' ? 'არასტანდარტული გრაფიკი' : 'სტანდარტული გრაფიკი'}
+                                  </span>
+                                  {isApproved && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                                      <span className="material-symbols-outlined text-xs">verified</span> დადასტურებულია დებიტორის მიერ
+                                    </span>
+                                  )}
+                                  {isPending && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                      მოლოდინში (დებიტორის დასადასტურებელი)
+                                    </span>
+                                  )}
+                                  {isRejected && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                                      <span className="material-symbols-outlined text-xs">cancel</span> უარყოფილია დებიტორის მიერ
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-600 mt-1.5">
+                                  ვადა: <strong>{sched.totalMonths} თვე</strong> • ყოველი თვის <strong>{sched.paymentDay || 15} რიცხვი</strong> • საშუალო: <strong>~{Number(sched.monthlyAmount || 0).toFixed(2)} ₾ / თვე</strong>
+                                </p>
+                                {sched.debtorRespondedAt && (
+                                  <p className="text-[11px] text-slate-400 mt-0.5">
+                                    დებიტორის გადაწყვეტილების თარიღი: {new Date(sched.debtorRespondedAt).toLocaleString('ka-GE')}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => openScheduleModal('edit')}
+                                  className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-[#0A37CA] transition flex items-center gap-1 cursor-pointer shadow-xs"
+                                >
+                                  <span className="material-symbols-outlined text-sm">edit</span>
+                                  <span>გრაფიკის რედაქტირება</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Toggle breakdown table */}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setShowScheduleDetails(!showScheduleDetails)}
+                                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-sm">
+                                  {showScheduleDetails ? 'expand_less' : 'expand_more'}
+                                </span>
+                                <span>{showScheduleDetails ? 'გრაფიკის ცხრილის დამალვა' : `გრაფიკის პერიოდების ნახვა (${sched.installments?.length || sched.totalMonths} თვე)`}</span>
+                              </button>
+
+                              {showScheduleDetails && sched.installments && (
+                                <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200 max-h-56">
+                                  <table className="w-full text-left text-xs">
+                                    <thead className="bg-slate-100 text-slate-600 font-semibold uppercase text-[10px] sticky top-0">
+                                      <tr>
+                                        <th className="py-1.5 px-2.5 text-center">№</th>
+                                        <th className="py-1.5 px-3">გადახდის ვადა</th>
+                                        <th className="py-1.5 px-3 text-right">შენატანი</th>
+                                        <th className="py-1.5 px-3 text-center">სტატუსი</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 bg-white">
+                                      {sched.installments.map((inst: any, idx: number) => (
+                                        <tr key={inst.id || idx} className="hover:bg-slate-50">
+                                          <td className="py-1.5 px-2.5 text-center font-mono text-slate-500">{inst.installmentNo || idx + 1}</td>
+                                          <td className="py-1.5 px-3 font-mono text-slate-700">
+                                            {inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('ka-GE') : '—'}
+                                          </td>
+                                          <td className="py-1.5 px-3 text-right font-mono font-semibold text-slate-900">
+                                            {Number(inst.amount || 0).toFixed(2)} ₾
+                                          </td>
+                                          <td className="py-1.5 px-3 text-center">
+                                            {inst.isPaid ? (
+                                              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold">გადახდილი</span>
+                                            ) : (
+                                              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">დაგეგმილი</span>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <div className="p-4 rounded-xl border border-dashed border-border-subtle bg-surface-bg text-center space-y-2">
+                        <span className="material-symbols-outlined text-3xl text-slate-300">event_busy</span>
+                        <p className="text-xs text-text-muted">
+                          ამ მოვალეზე გადახდის გრაფიკი ჯერ არ არის შედგენილი.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => openScheduleModal('create')}
+                          className="px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-[#0A37CA] transition inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <span className="material-symbols-outlined text-sm">add_circle</span>
+                          <span>ახალი გადახდის გრაფიკის შედგენა</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  
                   {/* Communication Result Entry Form */}
                   <div className="bg-surface-card border border-border-subtle rounded-xl p-space-md shadow-sm">
                     <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle">
@@ -1172,7 +1464,7 @@ export default function CrmPage() {
                             )}
                             <div className="flex items-center gap-1.5 text-xs text-text-muted mt-1">
                               <span className="material-symbols-outlined text-xs">person</span>
-                              <span>ოპერატორი: {log.operatorName}</span>
+                              <span>კრედიტ მენეჯერი: {log.operatorName}</span>
                             </div>
                           </div>
                         ))
@@ -1192,6 +1484,252 @@ export default function CrmPage() {
           </section>
         </main>
       )}
+    
+      {/* ================= PAYMENT SCHEDULE CONFIGURATION MODAL ================= */}
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center">
+                    <span className="material-symbols-outlined text-base">calendar_month</span>
+                  </span>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {scheduleModalMode === 'edit' ? 'გადახდის გრაფიკის რედაქტირება' : 'ახალი გადახდის გრაფიკის შედგენა'}
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  მოვალე: <strong>{activeClaim?.debtorName}</strong> (საქმე #{activeClaim?.caseNumber}) • ვალის თანხა: <strong>{Number(activeClaim?.remainingAmount || 0).toLocaleString('ka-GE')} ₾</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition flex items-center justify-center cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleSaveSchedule} className="p-6 overflow-y-auto space-y-5 flex-1">
+              {/* Type Switcher */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-2">
+                  გრაფიკის ტიპი *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleScheduleTypeChange('STANDARD')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                      scheduleType === 'STANDARD'
+                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-primary text-base">check_circle</span>
+                        სტანდარტული გრაფიკი
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold">1-12 თვე</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      ვადა 1-დან 12 თვემდე. თანხა ავტომატურად თანაბრად ნაწილდება თვეებზე.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleScheduleTypeChange('NON_STANDARD')}
+                    className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                      scheduleType === 'NON_STANDARD'
+                        ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-200 shadow-xs'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-purple-600 text-base">tune</span>
+                        არასტანდარტული გრაფიკი
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">≥13 თვე</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                      მინიმუმ 13 თვე, შეუზღუდავი მაქსიმუმი. თანხის ხელით რედაქტირება თითოეულ თვეზე.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Month Count & Payment Day Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    გადახდის თვეების რაოდენობა {scheduleType === 'STANDARD' ? '(1 - 12)' : '(მინ. 13)'} *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      required
+                      min={scheduleType === 'STANDARD' ? 1 : 13}
+                      max={scheduleType === 'STANDARD' ? 12 : 120}
+                      value={scheduleMonths}
+                      onChange={(e) => handleScheduleMonthsChange(parseInt(e.target.value) || (scheduleType === 'STANDARD' ? 12 : 13))}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:border-primary focus:outline-none"
+                    />
+                    <span className="text-xs font-medium text-slate-500 shrink-0">თვე</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    {scheduleType === 'STANDARD' ? 'მაქსიმუმ 12 თვე' : 'შეუზღუდავი მაქსიმალური ვადა'}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    გადახდის დღე (ყოველი თვის რიცხვი) *
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      max={31}
+                      value={schedulePaymentDay}
+                      onChange={(e) => handleSchedulePaymentDayChange(parseInt(e.target.value) || 15)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:border-primary focus:outline-none"
+                    />
+                    <span className="text-xs font-medium text-slate-500 shrink-0">რიცხვი</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    მაგ: 15 (ყოველთვიურად ამ რიცხვში)
+                  </span>
+                </div>
+              </div>
+
+              {/* Installments Table / Preview with Editable Amounts */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>ყოველთვიური შენატანების განაწილება</span>
+                    {scheduleType === 'NON_STANDARD' && (
+                      <span className="text-[10px] font-normal text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded">
+                        თითოეული თვის თანხა რედაქტირებადია
+                      </span>
+                    )}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAutoDistributeEvenly}
+                    className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                    title="თანაბარი განაწილების აღდგენა"
+                  >
+                    <span className="material-symbols-outlined text-xs">restart_alt</span>
+                    <span>თანაბრად გადანაწილება</span>
+                  </button>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-100 text-slate-600 font-semibold uppercase text-[10px] sticky top-0 z-10 border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3 text-center w-12">№</th>
+                        <th className="py-2 px-3">გადახდის თარიღი</th>
+                        <th className="py-2 px-3 text-right">შენატანი (₾)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {scheduleInstallments.map((inst, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/80">
+                          <td className="py-1.5 px-3 text-center font-mono text-slate-500">{inst.installmentNo}</td>
+                          <td className="py-1.5 px-3 font-mono text-slate-700">{inst.dueDate}</td>
+                          <td className="py-1.5 px-3 text-right">
+                            {scheduleType === 'NON_STANDARD' ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={inst.amount}
+                                onChange={(e) => handleInstallmentAmountChange(idx, parseFloat(e.target.value) || 0)}
+                                className="w-28 px-2 py-1 bg-purple-50/50 border border-purple-200 rounded font-mono font-bold text-right text-xs focus:outline-none focus:border-purple-600"
+                              />
+                            ) : (
+                              <span className="font-mono font-bold text-slate-900">{inst.amount.toFixed(2)} ₾</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Live Sum Calculation */}
+                {(() => {
+                  const totalDistributed = scheduleInstallments.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+                  const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
+                  const diff = Math.round((totalDistributed - totalDebt) * 100) / 100;
+
+                  return (
+                    <div className="flex items-center justify-between p-2.5 mt-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                      <span className="text-slate-600">
+                        გადანაწილებული ჯამი: <strong className="text-slate-900">{totalDistributed.toFixed(2)} ₾</strong> / ვალის თანხა: <strong className="text-slate-900">{totalDebt.toFixed(2)} ₾</strong>
+                      </span>
+                      {diff === 0 ? (
+                        <span className="text-emerald-700 font-bold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">check_circle</span>
+                          ზუსტად ემთხვევა
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 font-bold flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">warning</span>
+                          სხვაობა: {diff > 0 ? `+${diff}` : diff} ₾
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  კომენტარი ან დამატებითი შეთანხმება (არასავალდებულო)
+                </label>
+                <textarea
+                  rows={2}
+                  value={scheduleNotes}
+                  onChange={(e) => setScheduleNotes(e.target.value)}
+                  placeholder="მაგ: შეთანხმებულია სატელეფონო საუბრის შედეგად, მოვალე იღებს ვალდებულებას დაიცვას გრაფიკი..."
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:border-primary focus:outline-none resize-none"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsScheduleModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition cursor-pointer"
+                >
+                  გაუქმება
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSchedule}
+                  className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-[#0A37CA] transition flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">send</span>
+                  <span>{savingSchedule ? 'ინახება...' : 'გრაფიკის შენახვა & დებიტორისთვის გაგზავნა'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

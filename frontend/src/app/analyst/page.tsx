@@ -2179,7 +2179,7 @@ export default function AnalystPage() {
         const ROLE_OPTIONS = [
           {
             code: 'OPERATOR',
-            label: 'კრედიტ-მენეჯერი (ოპერატორი)',
+            label: 'კრედიტ მენეჯერი',
             subtitle: 'სატელეფონო კომუნიკაცია & მოლაპარაკება',
             icon: 'support_agent',
             color: 'blue',
@@ -3688,6 +3688,7 @@ export default function AnalystPage() {
                   <th className="py-3 px-4">კრედიტორი</th>
                   <th className="py-3 px-4">სტატუსი</th>
                   <th className="py-3 px-4">რეიტინგი</th>
+                  <th className="py-3 px-4">გადახდის გრაფიკი</th>
                   <th className="py-3 px-4 text-right">ანალიტიკა / საქმე</th>
                 </tr>
               </thead>
@@ -3876,6 +3877,7 @@ export default function AnalystPage() {
                   <th className="py-3 px-4">კრედიტორი</th>
                   <th className="py-3 px-4">სტატუსი</th>
                   <th className="py-3 px-4">რეიტინგი</th>
+                  <th className="py-3 px-4">გადახდის გრაფიკი</th>
                   <th className="py-3 px-4 text-right">ანალიტიკა / საქმე</th>
                 </tr>
               </thead>
@@ -6724,101 +6726,188 @@ export default function AnalystPage() {
             )}
 
             {/* TAB 2: 📅 დაფარვის ოფიციალური გრაფიკი */}
-            {debtorCaseFileTab === 'schedule' && (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-900">
-                      ინდივიდუალური რესტრუქტურიზაციის მიმდინარე ეტაპი
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      სტანდარტული გრაფიკი (12 თვემდე) • სულ 12 პერიოდი (7 გადახდილი, 1 მიმდინარე, 4 დაგეგმილი)
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => alert(`დაფარვის გრაფიკი საქმეზე #${caseNumber} იტვირთება PDF ფორმატში...`)}
-                      className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <span className="material-symbols-outlined text-[16px] text-rose-600">picture_as_pdf</span>
-                      <span>PDF ჩამოტვირთვა</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => alert(`დაფარვის გრაფიკის Excel ამონაწერი მზადდება...`)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-xs"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">table_view</span>
-                      <span>Excel ამონაწერი</span>
-                    </button>
-                  </div>
-                </div>
+            {debtorCaseFileTab === 'schedule' && (() => {
+              const liveSchedule = selectedDebtorForAnalytics.schedule;
+              const hasLiveSchedule = Boolean(liveSchedule && Array.isArray(liveSchedule.installments) && liveSchedule.installments.length > 0);
+              const schedType = liveSchedule?.type === 'NON_STANDARD' ? 'არასტანდარტული გრაფიკი' : 'სტანდარტული გრაფიკი';
+              const isApproved = liveSchedule?.approvalStatus === 'APPROVED';
+              const isPending = liveSchedule?.approvalStatus === 'PENDING_DEBTOR_APPROVAL' || !liveSchedule?.approvalStatus;
+              const isRejected = liveSchedule?.approvalStatus === 'REJECTED';
+              const totalMonths = liveSchedule?.totalMonths || (hasLiveSchedule ? liveSchedule.installments.length : 12);
+              const paymentDay = liveSchedule?.paymentDay || 15;
+              const monthlyAmount = liveSchedule?.monthlyAmount ? Number(liveSchedule.monthlyAmount) : 300;
 
-                {/* Schedule Table */}
-                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
-                        <th className="py-2.5 px-3 text-center">№</th>
-                        <th className="py-2.5 px-4">გადახდის ვადა</th>
-                        <th className="py-2.5 px-4">შენატანის თანხა</th>
-                        <th className="py-2.5 px-4">დარჩენილი ბალანსი</th>
-                        <th className="py-2.5 px-4">სტატუსი</th>
-                        <th className="py-2.5 px-4 text-center">ქვითარი</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white font-mono">
-                      {debtorOfficialSchedule.map((row) => (
-                        <tr
-                          key={row.periodNo}
-                          className={`hover:bg-slate-50/80 transition ${
-                            row.status === 'CURRENT' ? 'bg-amber-50/50 font-bold' : ''
-                          }`}
-                        >
-                          <td className="py-2.5 px-3 text-center text-slate-500">{row.periodNo}</td>
-                          <td className="py-2.5 px-4 text-slate-800">{row.date}</td>
-                          <td className="py-2.5 px-4 font-bold text-slate-900">{row.amount.toFixed(2)} ₾</td>
-                          <td className="py-2.5 px-4 text-slate-600">{row.remaining.toFixed(2)} ₾</td>
-                          <td className="py-2.5 px-4 font-sans">
-                            {row.status === 'PAID' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
-                                <span className="material-symbols-outlined text-[13px] text-emerald-600">check</span>
-                                <span>გადახდილი</span>
-                              </span>
-                            ) : row.status === 'CURRENT' ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold">
-                                <span className="material-symbols-outlined text-[13px] text-amber-600">schedule</span>
-                                <span>მომდევნო შენატანი</span>
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
-                                <span className="material-symbols-outlined text-[13px] text-slate-400">calendar_today</span>
-                                <span>დაგეგმილი</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-4 text-center">
-                            {row.receiptAvailable ? (
-                              <button
-                                type="button"
-                                onClick={() => alert(`ქვითარი #${row.periodNo} იტვირთება...`)}
-                                className="text-blue-600 hover:text-blue-800 transition cursor-pointer p-1"
-                                title="საგადახდო ქვითრის ჩამოტვირთვა"
-                              >
-                                <span className="material-symbols-outlined text-[17px]">download</span>
-                              </button>
-                            ) : (
-                              <span className="text-slate-300 text-xs">—</span>
-                            )}
-                          </td>
+              return (
+                <div className="space-y-4">
+                  {/* Status & Overview Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-sm text-slate-900">
+                          {schedType} ({totalMonths} თვე)
+                        </h4>
+                        {liveSchedule ? (
+                          isApproved ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">verified</span> დადასტურებულია დებიტორის მიერ
+                            </span>
+                          ) : isPending ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> მოლოდინში (დებიტორის დასადასტურებელი)
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs">cancel</span> უარყოფილია დებიტორის მიერ
+                            </span>
+                          )
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-200 text-slate-700">
+                            სტანდარტული (სისტემური)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        გადახდის დღე: ყოველი თვის <strong>{paymentDay} რიცხვი</strong> • საშუალო შენატანი: <strong>~{monthlyAmount.toFixed(2)} ₾ / თვე</strong>
+                        {liveSchedule?.debtorRespondedAt && (
+                          <span className="ml-2 text-slate-400">
+                            • დებიტორის პასუხი: {new Date(liveSchedule.debtorRespondedAt).toLocaleString('ka-GE')}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => alert(`დაფარვის გრაფიკი საქმეზე #${caseNumber} იტვირთება PDF ფორმატში...`)}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[16px] text-rose-600">picture_as_pdf</span>
+                        <span>PDF ჩამოტვირთვა</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => alert(`დაფარვის გრაფიკის Excel ამონაწერი მზადდება...`)}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-xs"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">table_view</span>
+                        <span>Excel ამონაწერი</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Schedule Table */}
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+                          <th className="py-2.5 px-3 text-center">№</th>
+                          <th className="py-2.5 px-4">გადახდის ვადა</th>
+                          <th className="py-2.5 px-4 text-right">შენატანის თანხა</th>
+                          <th className="py-2.5 px-4 text-center">სტატუსი</th>
+                          <th className="py-2.5 px-4 text-center">ქვითარი</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white font-mono">
+                        {hasLiveSchedule ? (
+                          liveSchedule.installments.map((inst: any, idx: number) => (
+                            <tr
+                              key={inst.id || idx}
+                              className={`hover:bg-slate-50/80 transition ${
+                                !inst.isPaid && idx === 0 ? 'bg-blue-50/40 font-bold' : ''
+                              }`}
+                            >
+                              <td className="py-2.5 px-3 text-center text-slate-500">{inst.installmentNo || idx + 1}</td>
+                              <td className="py-2.5 px-4 text-slate-800">
+                                {inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('ka-GE') : '—'}
+                              </td>
+                              <td className="py-2.5 px-4 text-right font-bold text-slate-900">{Number(inst.amount || 0).toFixed(2)} ₾</td>
+                              <td className="py-2.5 px-4 text-center font-sans">
+                                {inst.isPaid ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                                    <span className="material-symbols-outlined text-[13px] text-emerald-600">check</span>
+                                    <span>გადახდილი</span>
+                                  </span>
+                                ) : idx === 0 ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-primary border border-blue-200 text-[11px] font-semibold">
+                                    <span className="material-symbols-outlined text-[13px] text-primary">schedule</span>
+                                    <span>მომდევნო შენატანი</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                                    <span className="material-symbols-outlined text-[13px] text-slate-400">calendar_today</span>
+                                    <span>დაგეგმილი</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-4 text-center">
+                                {inst.isPaid ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => alert(`ქვითარი #${inst.installmentNo} იტვირთება...`)}
+                                    className="text-blue-600 hover:text-blue-800 transition cursor-pointer p-1"
+                                    title="საგადახდო ქვითრის ჩამოტვირთვა"
+                                  >
+                                    <span className="material-symbols-outlined text-[17px]">download</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-300 text-xs">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          debtorOfficialSchedule.map((row) => (
+                            <tr
+                              key={row.periodNo}
+                              className={`hover:bg-slate-50/80 transition ${
+                                row.status === 'CURRENT' ? 'bg-amber-50/50 font-bold' : ''
+                              }`}
+                            >
+                              <td className="py-2.5 px-3 text-center text-slate-500">{row.periodNo}</td>
+                              <td className="py-2.5 px-4 text-slate-800">{row.date}</td>
+                              <td className="py-2.5 px-4 text-right font-bold text-slate-900">{row.amount.toFixed(2)} ₾</td>
+                              <td className="py-2.5 px-4 text-center font-sans">
+                                {row.status === 'PAID' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-semibold">
+                                    <span className="material-symbols-outlined text-[13px] text-emerald-600">check</span>
+                                    <span>გადახდილი</span>
+                                  </span>
+                                ) : row.status === 'CURRENT' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold">
+                                    <span className="material-symbols-outlined text-[13px] text-amber-600">schedule</span>
+                                    <span>მომდევნო შენატანი</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">
+                                    <span className="material-symbols-outlined text-[13px] text-slate-400">calendar_today</span>
+                                    <span>დაგეგმილი</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-4 text-center">
+                                {row.receiptAvailable ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => alert(`ქვითარი #${row.periodNo} იტვირთება...`)}
+                                    className="text-blue-600 hover:text-blue-800 transition cursor-pointer p-1"
+                                    title="საგადახდო ქვითრის ჩამოტვირთვა"
+                                  >
+                                    <span className="material-symbols-outlined text-[17px]">download</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-300 text-xs">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* TAB 3: 📑 წარმოშობის საფუძველი & RS.GE */}
             {debtorCaseFileTab === 'documents' && (

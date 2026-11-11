@@ -59,4 +59,14 @@ export class ClaimsController {
   ) {
     return this.claimsService.openDispute(userId, claimId, reason || 'დავის გახსნა დებიტორის მიერ');
   }
+
+  @Post('debtor/schedules/:id/respond')
+  @Roles(UserRole.DEBTOR, UserRole.ADMIN, UserRole.REGULAR, UserRole.OPERATOR, UserRole.ANALYST)
+  async respondToSchedule(
+    @CurrentUser() user: User,
+    @Param('id') scheduleId: string,
+    @Body() body: { decision: 'APPROVED' | 'REJECTED'; comment?: string },
+  ) {
+    return this.claimsService.respondToSchedule(scheduleId, body, user);
+  }
 }

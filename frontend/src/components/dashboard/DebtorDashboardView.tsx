@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { authService, debtorBackendService, paymentsService, PaymentReceiptItem, AuthUser } from '@/services';
+import { authService, debtorBackendService, paymentsService, debtorScheduleService, PaymentReceiptItem, AuthUser } from '@/services';
 import { downloadDebtorScheduleStatementXLSX, downloadDebtorAccountTurnoverXLSX } from '@/utils/excel';
 
 interface DebtorDashboardViewProps {
@@ -21,6 +21,34 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
   const [disputeReason, setDisputeReason] = useState('');
   const [disputeSuccess, setDisputeSuccess] = useState(false);
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+
+  // Debtor schedule approval states
+  const [debtorAgreed, setDebtorAgreed] = useState(false);
+  const [submittingScheduleResponse, setSubmittingScheduleResponse] = useState(false);
+  const [scheduleActionFeedback, setScheduleActionFeedback] = useState<string | null>(null);
+
+  const handleDebtorScheduleRespond = async (decision: 'APPROVED' | 'REJECTED') => {
+    const activeSchedule = liabilities?.claims?.[0]?.schedules?.[0];
+    if (!activeSchedule?.id) return;
+    setSubmittingScheduleResponse(true);
+    try {
+      await debtorScheduleService.respondToSchedule(activeSchedule.id, {
+        decision,
+        comment: decision === 'APPROVED' ? 'დებიტორმა ერთჯერადად დაადასტურა შემოთავაზებული გრაფიკი' : 'დებიტორმა უარყო შემოთავაზებული გრაფიკი',
+      });
+      setScheduleActionFeedback(
+        decision === 'APPROVED'
+          ? 'თქვენ წარმატებით დაეთანხმეთ გადახდის გრაფიკს! სტატუსი გააქტიურებულია.'
+          : 'თქვენ უარყავით შემოთავაზებული გრაფიკი. კრედიტ მენეჯერი შემოგთავაზებთ ალტერნატიულ პირობებს.'
+      );
+      const updated = await debtorBackendService.getMyLiabilities();
+      if (updated) setLiabilities(updated);
+    } catch (err: any) {
+      alert(err?.message || 'გრაფიკზე პასუხის დაფიქსირება ვერ მოხერხდა');
+    } finally {
+      setSubmittingScheduleResponse(false);
+    }
+  };
 
   // Manual payment receipt upload states
   const [receipts, setReceipts] = useState<PaymentReceiptItem[]>([]);
@@ -247,7 +275,7 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
 
   const schedule = primaryClaim?.schedules?.[0];
   const scheduleType = primaryClaim?.scheduleType || 'STANDARD';
-  const isNonStandard = scheduleType === 'NON_STANDARD';
+  const isNonStandard = scheduleType === 'NON_STANDARD' || schedule?.type === 'NON_STANDARD';
 
   // Supporting proof of debt documents strictly from database
   const supportingDocs: any[] = Array.isArray(primaryClaim?.supportingDocuments)
@@ -931,6 +959,111 @@ export default function DebtorDashboardView({ user }: DebtorDashboardViewProps) 
             </div>
           </div>
         </div>
+        {/* ================= DEBTOR SCHEDULE APPROVAL BANNER ================= */}
+        {schedule && (
+          <div className="px-5 pb-2">
+            {scheduleActionFeedback && (
+              <div className="p-3 mb-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2">
+                <span className="material-symbols-outlined text-emerald-600 text-base">check_circle</span>
+                <span>{scheduleActionFeedback}</span>
+              </div>
+            )}
+
+            {/* PENDING APPROVAL ALERT BOX */}
+            {schedule.approvalStatus === 'PENDING_DEBTOR_APPROVAL' && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/90 border-2 border-amber-300 shadow-sm space-y-3.5 animate-fadeIn">
+                <div className="flex items-start gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <span className="material-symbols-outlined text-2xl">pending_actions</span>
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900 uppercase tracking-wide">
+                        ⚡ დასადასტურებელი გადახდის გრაფიკი
+                      </span>
+                      <span className="text-xs text-amber-700 font-medium">
+                        შედგენილია კრედიტ მენეჯერის მიერ
+                      </span>
+                    </div>
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 mt-1">
+                      თქვენთვის მომზადებულია {schedule.type === 'NON_STANDARD' ? 'არასტანდარტული' : 'სტანდარტული'} გადახდის გრაფიკი ({schedule.totalMonths} თვე)
+                    </h3>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      გთხოვთ გაეცნოთ ქვემოთ გაწერილ ყოველთვიურ შენატანებს (ყოველი თვის <strong>{schedule.paymentDay || 15} რიცხვი</strong>, საშუალო შენატანი <strong>~{Number(schedule.monthlyAmount || 0).toFixed(2)} ₾</strong>). გრაფიკის გასააქტიურებლად მონიშნეთ თანხმობა და დააჭირეთ დადასტურებას.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Agreement Checkbox & Action Controls */}
+                <div className="p-3.5 bg-white rounded-xl border border-amber-200 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={debtorAgreed}
+                      onChange={(e) => setDebtorAgreed(e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-primary rounded border-slate-300 focus:ring-primary cursor-pointer shrink-0"
+                    />
+                    <span className="text-xs font-medium text-slate-800 leading-snug">
+                      ვადასტურებ, რომ გავეცანი შემოთავაზებულ გადახდის გრაფიკს და <strong>ვეთანხმები ამ გრაფიკით გადახდას</strong>.
+                    </span>
+                  </label>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={!debtorAgreed || submittingScheduleResponse}
+                      onClick={() => handleDebtorScheduleRespond('APPROVED')}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-base">check_circle</span>
+                      <span>{submittingScheduleResponse ? 'მუშავდება...' : 'დადასტურება & მიღება'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={submittingScheduleResponse}
+                      onClick={() => handleDebtorScheduleRespond('REJECTED')}
+                      className="px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100 disabled:opacity-50 transition cursor-pointer"
+                    >
+                      უარყოფა
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* APPROVED STATUS BANNER */}
+            {schedule.approvalStatus === 'APPROVED' && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-emerald-600 text-lg">verified</span>
+                  <span className="text-emerald-900 font-medium">
+                    თქვენ ოფიციალურად დაადასტურეთ აღნიშნული გადახდის გრაფიკი {schedule.debtorRespondedAt && `(${new Date(schedule.debtorRespondedAt).toLocaleDateString('ka-GE')})`}. გადახდები წარმოებს ამ გრაფიკის დაცვით.
+                  </span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white font-bold text-[11px] shrink-0">
+                  აქტიური & დადასტურებული
+                </span>
+              </div>
+            )}
+
+            {/* REJECTED STATUS BANNER */}
+            {schedule.approvalStatus === 'REJECTED' && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-rose-600 text-lg">cancel</span>
+                  <span className="text-rose-900 font-medium">
+                    თქვენ უარყავით შემოთავაზებული გრაფიკი. კრედიტ მენეჯერი შემოგთავაზებთ განახლებულ პირობებს.
+                  </span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white font-bold text-[11px] shrink-0">
+                  უარყოფილია
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        
         {/* Table Responsive Container (Point 2: All 12 Periods from Database) */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">

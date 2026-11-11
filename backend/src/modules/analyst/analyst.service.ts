@@ -591,6 +591,14 @@ export class AnalystService implements OnModuleInit {
         status: true,
         rating: true,
         riskScore: true,
+        scheduleType: true,
+        schedules: {
+          include: {
+            installments: {
+              orderBy: { installmentNo: 'asc' },
+            },
+          },
+        },
       },
     });
 
@@ -684,6 +692,9 @@ export class AnalystService implements OnModuleInit {
         rating,
         ratingGrade,
         riskScore: claim?.riskScore ?? (rating === 'A' ? 88 : rating === 'B' ? 68 : 42),
+        schedule: (claim?.schedules?.find((s: any) => s.isActive) || claim?.schedules?.[0]) || null,
+        scheduleType: claim?.scheduleType || (claim?.schedules?.[0]?.type) || 'STANDARD',
+        scheduleApprovalStatus: claim?.schedules?.[0]?.approvalStatus || 'NONE',
         matchedUser: matched || null,
         isRegisteredOnPlatform: !!matched,
       };

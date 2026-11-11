@@ -41,7 +41,7 @@ export default function Footer() {
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-white uppercase tracking-wider">სისტემა</h4>
             <ul className="space-y-2 text-xs">
-              <li><Link href="/crm" className="hover:text-white transition-colors">CRM ოპერატორის სამუშაო მაგიდა</Link></li>
+              <li><Link href="/crm" className="hover:text-white transition-colors">კრედიტ მენეჯერის სამუშაო მაგიდა</Link></li>
               <li><Link href="/field-officer" className="hover:text-white transition-colors">საველე მონიტორინგის აპლიკაცია</Link></li>
               <li><Link href="/hr" className="hover:text-white transition-colors">HR & ადმინისტრატორი</Link></li>
               <li><Link href="/about" className="hover:text-white transition-colors">მედიაციის პლატფორმის შესახებ</Link></li>

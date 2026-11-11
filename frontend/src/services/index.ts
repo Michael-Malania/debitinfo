@@ -1132,6 +1132,41 @@ export const crmBackendService = {
   async getStats(): Promise<any> {
     return await apiFetch('/api/v1/crm/stats');
   },
+
+  async saveClaimSchedule(claimId: string, data: {
+    type: 'STANDARD' | 'NON_STANDARD';
+    totalMonths: number;
+    paymentDay: number;
+    installments?: Array<{ installmentNo: number; dueDate?: string; amount: number }>;
+    notes?: string;
+  }): Promise<any> {
+    return await apiFetch(`/api/v1/crm/claims/${claimId}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async respondToSchedule(scheduleId: string, data: {
+    decision: 'APPROVED' | 'REJECTED';
+    comment?: string;
+  }): Promise<any> {
+    return await apiFetch(`/api/v1/crm/schedules/${scheduleId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+export const debtorScheduleService = {
+  async respondToSchedule(scheduleId: string, data: {
+    decision: 'APPROVED' | 'REJECTED';
+    comment?: string;
+  }): Promise<any> {
+    return await apiFetch(`/api/v1/debtor/schedules/${scheduleId}/respond`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 export const opsBackendService = {

@@ -276,4 +276,66 @@ export class ClaimsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  /**
+   * Debtor confirms or rejects a proposed repayment schedule
+   */
+  async respondToSchedule(
+    scheduleId: string,
+    dto: { decision: 'APPROVED' | 'REJECTED'; comment?: string },
+    user: any,
+  ) {
+    const schedule = await this.prisma.repaymentSchedule.findUnique({
+      where: { id: scheduleId },
+      include: {
+        claim: {
+          include: {
+            debtor: {
+              include: { individualProfile: true, companyProfile: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!schedule) {
+      throw new NotFoundException(`Schedule ${scheduleId} not found`);
+    }
+
+    const decision = dto.decision === 'APPROVED' ? 'APPROVED' : 'REJECTED';
+
+    const updated = await this.prisma.repaymentSchedule.update({
+      where: { id: scheduleId },
+      data: {
+        approvalStatus: decision,
+        debtorRespondedAt: new Date(),
+        debtorComment: dto.comment || null,
+      },
+      include: {
+        installments: { orderBy: { installmentNo: 'asc' } },
+      },
+    });
+
+    const debtorName =
+      schedule.claim.debtor.entityType === 'LEGAL'
+        ? schedule.claim.debtor.companyProfile?.companyName
+        : `${schedule.claim.debtor.individualProfile?.firstName || ''} ${schedule.claim.debtor.individualProfile?.lastName || ''}`.trim() ||
+          schedule.claim.debtor.email;
+
+    await this.prisma.caseTimelineEvent.create({
+      data: {
+        claimId: schedule.claimId,
+        authorId: user?.id,
+        department: 'CALL_CENTER',
+        authorRoleTitle: `დებიტორი - ${debtorName}`,
+        actionType: decision === 'APPROVED' ? 'SCHEDULE_ACCEPTED' : 'SCHEDULE_REJECTED',
+        description:
+          decision === 'APPROVED'
+            ? `დებიტორმა ოფიციალურად დაადასტურა შემოთავაზებული გადახდის გრაფიკი (${schedule.type === 'STANDARD' ? 'სტანდარტული' : 'არასტანდარტული'}, ${schedule.totalMonths} თვე, ყოველი თვის ${schedule.paymentDay} რიცხვი).`
+            : `დებიტორმა უარყო შემოთავაზებული გადახდის გრაფიკი. კომენტარი: ${dto.comment || 'არ არის მითითებული'}.`,
+      },
+    });
+
+    return updated;
+  }
 }

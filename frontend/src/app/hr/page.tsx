@@ -132,7 +132,7 @@ export default function HrPage() {
     ADMIN: 'სისტემური ადმინისტრატორი',
     ANALYST: 'ფინანსური ანალიტიკოსი',
     LEGAL: 'იურისტი',
-    OPERATOR: 'ქოლ-ცენტრის ოპერატორი',
+    OPERATOR: 'კრედიტ მენეჯერი',
     FIELD_OFFICER: 'საველე ვიზიტორი',
   };
 
@@ -252,7 +252,7 @@ export default function HrPage() {
                 <div className="mt-2 text-xs text-text-muted border-t border-border-subtle pt-2">სასამართლო &amp; აღსრულება</div>
               </div>
               <div className="bg-surface-card border border-border-subtle rounded-xl p-4 shadow-sm">
-                <span className="text-body-sm font-medium text-text-muted">ქოლ-ცენტრის ოპერატორები</span>
+                <span className="text-body-sm font-medium text-text-muted">კრედიტ მენეჯერები</span>
                 <div className="mt-2 text-headline-lg font-bold text-emerald-700">
                   {staffList.filter((s) => s.role === 'OPERATOR').length}
                 </div>
@@ -563,7 +563,7 @@ export default function HrPage() {
                       }}
                       className="w-full px-3 py-2 border border-border-subtle rounded-lg text-sm"
                     >
-                      <option value="OPERATOR">ქოლ-ცენტრის ოპერატორი</option>
+                      <option value="OPERATOR">კრედიტ მენეჯერი</option>
                       <option value="ANALYST">ფინანსური ანალიტიკოსი</option>
                       <option value="LEGAL">იურისტი</option>
                       <option value="FIELD_OFFICER">საველე ვიზიტორი</option>
