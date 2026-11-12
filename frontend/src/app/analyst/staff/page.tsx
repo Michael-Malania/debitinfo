@@ -388,29 +388,28 @@ export default function StaffRegistryPage() {
           onToggleOpen={toggleSidebar}
         />
         <main className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 flex flex-col gap-6">
-        {/* Top Overview Banner */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1 z-10 max-w-2xl">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 text-xs font-semibold text-emerald-300 border border-white/10 mb-1">
-              <span className="material-symbols-outlined text-sm">badge</span>
-              <span>საოპერაციო პერსონალის მონიტორინგი</span>
+        {/* Compact Header Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+              <span className="material-symbols-outlined text-xl">badge</span>
             </div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-              თანამშრომელთა რეესტრი, სამუშაო შედეგები &amp; პირდაპირი მონიტორინგი
-            </h1>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              გაეცანით HR-ის მიერ რეგისტრირებულ ყველა თანამშრომელს დეპარტამენტებისა და როლების მიხედვით. დააკვირდით მათ მიერ შესრულებულ სამუშაოს (ზარები, ვიზიტები, სასამართლო საქმეები, ბუღალტრული გადახდები), მიეცით ანალიტიკური რეკომენდაცია და შედით სისტემაში მათი პროფილით.
-            </p>
+            <div>
+              <h1 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                თანამშრომელთა რეესტრი
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">HR მონიტორინგი</span>
+              </h1>
+              <p className="text-xs text-slate-500">საოპერაციო გუნდის პირდაპირი მონიტორინგი და ანალიტიკა</p>
+            </div>
           </div>
-
-          <div className="flex items-center gap-3 z-10 shrink-0">
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10 text-center min-w-[120px]">
-              <span className="text-[11px] text-slate-300 block">სულ თანამშრომელი</span>
-              <span className="text-2xl font-bold font-mono text-white mt-0.5 block">{staffList.length}</span>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700">
+              <span className="text-slate-500">სულ:</span>
+              <span className="font-bold font-mono text-slate-900">{staffList.length} თანამშრომელი</span>
             </div>
-            <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/10 text-center min-w-[120px]">
-              <span className="text-[11px] text-slate-300 block">აქტიური როლები</span>
-              <span className="text-2xl font-bold font-mono text-emerald-400 mt-0.5 block">6 როლი</span>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              <span className="font-semibold">6 აქტიური როლი</span>
             </div>
           </div>
         </div>

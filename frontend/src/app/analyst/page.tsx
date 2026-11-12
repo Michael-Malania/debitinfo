@@ -1184,6 +1184,65 @@ export default function AnalystPage() {
   const [riskZoneFilterLevel, setRiskZoneFilterLevel] = useState<'ALL' | 'CRITICAL' | 'HIGH' | 'WARNING'>('ALL');
   const [riskZoneSearch, setRiskZoneSearch] = useState('');
 
+  // Risk Zone selection and comprehensive filter state
+  const [selectedRiskZoneClaimIds, setSelectedRiskZoneClaimIds] = useState<string[]>([]);
+  const [isRiskZoneFilterPanelOpen, setIsRiskZoneFilterPanelOpen] = useState(false);
+  const [rzFilterCaseNumber, setRzFilterCaseNumber] = useState('');
+  const [rzFilterDebtorName, setRzFilterDebtorName] = useState('');
+  const [rzFilterPersonalId, setRzFilterPersonalId] = useState('');
+  const [rzFilterCreditorName, setRzFilterCreditorName] = useState('');
+  const [rzFilterMinAmount, setRzFilterMinAmount] = useState('');
+  const [rzFilterMaxAmount, setRzFilterMaxAmount] = useState('');
+  const [rzFilterMinOverdue, setRzFilterMinOverdue] = useState('');
+  const [rzFilterMaxOverdue, setRzFilterMaxOverdue] = useState('');
+  const [rzFilterMinRemaining, setRzFilterMinRemaining] = useState('');
+  const [rzFilterMaxRemaining, setRzFilterMaxRemaining] = useState('');
+
+  const resetRiskZoneFilters = () => {
+    setRzFilterCaseNumber('');
+    setRzFilterDebtorName('');
+    setRzFilterPersonalId('');
+    setRzFilterCreditorName('');
+    setRzFilterMinAmount('');
+    setRzFilterMaxAmount('');
+    setRzFilterMinOverdue('');
+    setRzFilterMaxOverdue('');
+    setRzFilterMinRemaining('');
+    setRzFilterMaxRemaining('');
+    setRiskZoneSearch('');
+    setRiskZoneFilterLevel('ALL');
+  };
+
+  const activeRiskZoneFiltersCount = useMemo(() => {
+    let count = 0;
+    if (rzFilterCaseNumber.trim()) count++;
+    if (rzFilterDebtorName.trim()) count++;
+    if (rzFilterPersonalId.trim()) count++;
+    if (rzFilterCreditorName.trim()) count++;
+    if (rzFilterMinAmount.trim()) count++;
+    if (rzFilterMaxAmount.trim()) count++;
+    if (rzFilterMinOverdue.trim()) count++;
+    if (rzFilterMaxOverdue.trim()) count++;
+    if (rzFilterMinRemaining.trim()) count++;
+    if (rzFilterMaxRemaining.trim()) count++;
+    if (riskZoneFilterLevel !== 'ALL') count++;
+    if (riskZoneSearch.trim()) count++;
+    return count;
+  }, [
+    rzFilterCaseNumber,
+    rzFilterDebtorName,
+    rzFilterPersonalId,
+    rzFilterCreditorName,
+    rzFilterMinAmount,
+    rzFilterMaxAmount,
+    rzFilterMinOverdue,
+    rzFilterMaxOverdue,
+    rzFilterMinRemaining,
+    rzFilterMaxRemaining,
+    riskZoneFilterLevel,
+    riskZoneSearch,
+  ]);
+
   const riskZoneClaims = useMemo(() => {
     const items: any[] = [];
     excelDebtors.forEach((deb: any) => {
@@ -1257,9 +1316,12 @@ export default function AnalystPage() {
 
   const filteredRiskClaims = useMemo(() => {
     return riskZoneClaims.filter((c: any) => {
+      // 1. Urgency Level filter
       if (riskZoneFilterLevel !== 'ALL' && c.urgencyLevel !== riskZoneFilterLevel) {
         return false;
       }
+
+      // 2. Quick search bar
       if (riskZoneSearch.trim()) {
         const q = riskZoneSearch.toLowerCase().trim();
         const matchCase = (c.caseNumber || '').toLowerCase().includes(q);
@@ -1268,18 +1330,129 @@ export default function AnalystPage() {
         const matchCred = (c.creditorName || '').toLowerCase().includes(q);
         if (!matchCase && !matchName && !matchPin && !matchCred) return false;
       }
+
+      // 3. Detailed Filters
+      if (rzFilterCaseNumber.trim() && !(c.caseNumber || '').toLowerCase().includes(rzFilterCaseNumber.toLowerCase().trim())) {
+        return false;
+      }
+      if (rzFilterDebtorName.trim() && !(c.debtorName || '').toLowerCase().includes(rzFilterDebtorName.toLowerCase().trim())) {
+        return false;
+      }
+      if (rzFilterPersonalId.trim() && !(c.personalId || '').toLowerCase().includes(rzFilterPersonalId.toLowerCase().trim())) {
+        return false;
+      }
+      if (rzFilterCreditorName.trim() && !(c.creditorName || '').toLowerCase().includes(rzFilterCreditorName.toLowerCase().trim())) {
+        return false;
+      }
+      if (rzFilterMinAmount.trim()) {
+        const minAmt = parseFloat(rzFilterMinAmount);
+        if (!isNaN(minAmt) && (c.amount || 0) < minAmt) return false;
+      }
+      if (rzFilterMaxAmount.trim()) {
+        const maxAmt = parseFloat(rzFilterMaxAmount);
+        if (!isNaN(maxAmt) && (c.amount || 0) > maxAmt) return false;
+      }
+      if (rzFilterMinOverdue.trim()) {
+        const minO = parseInt(rzFilterMinOverdue, 10);
+        if (!isNaN(minO) && (c.daysOverdue || 0) < minO) return false;
+      }
+      if (rzFilterMaxOverdue.trim()) {
+        const maxO = parseInt(rzFilterMaxOverdue, 10);
+        if (!isNaN(maxO) && (c.daysOverdue || 0) > maxO) return false;
+      }
+      if (rzFilterMinRemaining.trim()) {
+        const minR = parseInt(rzFilterMinRemaining, 10);
+        if (!isNaN(minR) && (c.daysRemaining || 0) < minR) return false;
+      }
+      if (rzFilterMaxRemaining.trim()) {
+        const maxR = parseInt(rzFilterMaxRemaining, 10);
+        if (!isNaN(maxR) && (c.daysRemaining || 0) > maxR) return false;
+      }
+
       return true;
     });
-  }, [riskZoneClaims, riskZoneFilterLevel, riskZoneSearch]);
+  }, [
+    riskZoneClaims,
+    riskZoneFilterLevel,
+    riskZoneSearch,
+    rzFilterCaseNumber,
+    rzFilterDebtorName,
+    rzFilterPersonalId,
+    rzFilterCreditorName,
+    rzFilterMinAmount,
+    rzFilterMaxAmount,
+    rzFilterMinOverdue,
+    rzFilterMaxOverdue,
+    rzFilterMinRemaining,
+    rzFilterMaxRemaining,
+  ]);
+
+  const handleOpenDebtorCardForRiskClaim = (claim: any) => {
+    const existing = excelDebtors.find(
+      (d: any) =>
+        (claim.id && d.id === claim.id) ||
+        (claim.personalId && (d.personalId === claim.personalId || d.taxId === claim.personalId)) ||
+        (claim.caseNumber && d.caseNumber === claim.caseNumber)
+    );
+    if (existing) {
+      setSelectedDebtorForAnalytics(existing);
+      return;
+    }
+    if (claim.rawDebtor) {
+      setSelectedDebtorForAnalytics(claim.rawDebtor);
+      return;
+    }
+    const debtorObj = {
+      id: claim.id || `claim-debtor-${claim.personalId}`,
+      personalId: claim.personalId,
+      taxId: claim.personalId,
+      name: claim.debtorName,
+      firstName: claim.debtorName?.split(' ')[0] || '',
+      lastName: claim.debtorName?.split(' ').slice(1).join(' ') || '',
+      companyName: claim.debtorName,
+      entityType: (String(claim.personalId || '').length === 11 ? 'PHYSICAL' : 'LEGAL'),
+      creditorName: claim.creditorName,
+      currentDebt: claim.amount,
+      principalAmount: claim.amount,
+      amount: claim.amount,
+      initialAmount: Math.round(claim.amount * 1.3),
+      currentAmount: claim.amount,
+      remainingAmount: claim.amount,
+      caseNumber: claim.caseNumber,
+      agreementNumber: claim.agreementNumber || `AGR-${claim.personalId ? String(claim.personalId).slice(-5) : 'RZ-101'}`,
+      overdueDays: claim.daysOverdue,
+      daysOverdue: claim.daysOverdue,
+      daysRemaining: claim.daysRemaining,
+      urgencyLevel: claim.urgencyLevel,
+      loanStatus: 'OVERDUE',
+      status: 'ვადაგადაცილებული',
+      phone: claim.phone || '+995 599 00 00 00',
+      email: claim.email || 'debtor@example.ge',
+      ratingGrade: 'Grade C',
+      address: 'საქართველო, თბილისი',
+    };
+    setSelectedDebtorForAnalytics(debtorObj);
+  };
 
   const handleSendToLitigation = (claim: any) => {
     setActionSuccessMessage(`საქმე #${claim.caseNumber} (${claim.debtorName}) წარმატებით გადაიგზავნა იურიდიულ დეპარტამენტში სარჩელის აღსაძვრელად!`);
     setTimeout(() => setActionSuccessMessage(null), 5000);
   };
 
+  const handleBatchSendToLitigation = () => {
+    if (selectedRiskZoneClaimIds.length === 0) return;
+    setActionSuccessMessage(`მონიშნული ${selectedRiskZoneClaimIds.length} საქმე წარმატებით გადაიგზავნა იურიდიულ დეპარტამენტში სარჩელის აღსაძვრელად!`);
+    setTimeout(() => setActionSuccessMessage(null), 5000);
+    setSelectedRiskZoneClaimIds([]);
+  };
+
   const exportRiskZoneToExcel = () => {
     try {
-      const rows = filteredRiskClaims.map((c: any) => ({
+      const sourceList = selectedRiskZoneClaimIds.length > 0
+        ? filteredRiskClaims.filter((c: any) => selectedRiskZoneClaimIds.includes(c.id))
+        : filteredRiskClaims;
+
+      const rows = sourceList.map((c: any) => ({
         'საქმის №': c.caseNumber,
         'დებიტორი': c.debtorName,
         'პ/ნ / ს/კ': c.personalId,
@@ -1287,14 +1460,20 @@ export default function AnalystPage() {
         'დავალიანება (GEL)': c.amount,
         'ვადაგადაცილება (დღე)': c.daysOverdue,
         'ხანდაზმულობამდე დარჩა (დღე)': c.daysRemaining,
-        'რისკის დონე': c.urgencyLevel === 'CRITICAL' ? 'კრიტიკული (<30 დღე)' : c.urgencyLevel === 'HIGH' ? 'მაღალი (30-90 დღე)' : 'გაფრთხილება (90-180 დღე)',
+        'რისკის დონე':
+          c.urgencyLevel === 'CRITICAL'
+            ? 'კრიტიკული (<30 დღე)'
+            : c.urgencyLevel === 'HIGH'
+            ? 'მაღალი (30-90 დღე)'
+            : 'გაფრთხილება (90-180 დღე)',
         'ხელშეკრულების №': c.agreementNumber || '—',
       }));
 
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'რისკ ზონა');
-      XLSX.writeFile(wb, `Debitinfo_Risk_Zone_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const filenameSuffix = selectedRiskZoneClaimIds.length > 0 ? `Selected_${selectedRiskZoneClaimIds.length}` : 'All';
+      XLSX.writeFile(wb, `Debitinfo_Risk_Zone_${filenameSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch (err) {
       console.error('Failed to export risk zone to excel:', err);
     }
@@ -5330,40 +5509,74 @@ export default function AnalystPage() {
             </div>
           )}
 
-          {/* 1. Header & Summary Alert Banner */}
-          <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-slate-900 rounded-2xl p-6 text-white shadow-xl border border-rose-900/40 relative overflow-hidden">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-              <div className="space-y-2 max-w-3xl">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-bold">
-                  <span className="material-symbols-outlined text-[16px]">gavel</span>
-                  <span>სამოქალაქო კოდექსის 128-140 მუხლები — 3-წლიანი ხანდაზმულობა</span>
+          {/* 1. Sleek Compact Header & Action Toolbar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 font-bold shrink-0">
+                <span className="material-symbols-outlined text-2xl">warning</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-bold text-slate-900 tracking-tight">
+                    რისკ ზონა (<span className="text-rose-600 font-mono">&lt;180 დღე</span>)
+                  </h1>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                    ხანდაზმულობის ზღვარი
+                  </span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-                  ⚠️ რისკ ზონა — ხანდაზმულობის ზღვარი (&lt;180 დღე)
-                </h2>
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  ამ სექციაში ავტომატურად მონიტორინგდება ყველა ის საქმე და მოთხოვნა, რომლის 3-წლიანი სასარჩელო ხანდაზმულობის ვადა იწურება მომდევნო 6 თვის განმავლობაში (&lt;180 დღე). დროული სამართლებრივი რეაგირების (სასამართლოში სარჩელის შეტანა, ყადაღის მოთხოვნა) გარეშე მოთხოვნის უფლება იურიდიულად გაუქმდება.
+                <p className="text-xs text-slate-500">
+                  3-წლიანი სასარჩელო ხანდაზმულობის კრიტიკული და მაღალი რისკის საქმეები
                 </p>
               </div>
+            </div>
 
-              {/* Aggregate KPI in banner */}
-              <div className="flex items-center gap-4 shrink-0">
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-4 border border-white/10 text-right min-w-[150px]">
-                  <span className="text-[11px] text-rose-300 block font-medium">საფრთხის ქვეშ მყოფი თანხა</span>
-                  <span className="text-2xl font-black font-mono text-white mt-1 block">
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              {/* საფრთხის ქვეშ მყოფი თანხა KPI */}
+              <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-rose-50/80 border border-rose-200 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-rose-600 block leading-tight">საფრთხის ქვეშ</span>
+                  <span className="text-sm font-extrabold font-mono text-rose-950">
                     {riskZoneSummary.totalAmountGel.toLocaleString()} ₾
                   </span>
-                  <span className="text-[10px] text-slate-300">სულ {riskZoneClaims.length} სარისკო მოთხოვნა</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={exportRiskZoneToExcel}
-                  className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 flex items-center gap-2 transition-all active:scale-95 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-[18px]">file_download</span>
-                  <span>ექსპორტი (Excel)</span>
-                </button>
+                <span className="text-[11px] text-rose-500 font-mono border-l border-rose-200 pl-2">
+                  {riskZoneClaims.length} საქმე
+                </span>
               </div>
+
+              {/* Filters Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setIsRiskZoneFilterPanelOpen(!isRiskZoneFilterPanelOpen)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
+                  isRiskZoneFilterPanelOpen || activeRiskZoneFiltersCount > 0
+                    ? 'bg-rose-50 border-rose-300 text-rose-700 shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">tune</span>
+                <span>ფილტრები</span>
+                {activeRiskZoneFiltersCount > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">
+                    {activeRiskZoneFiltersCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Excel Export Button */}
+              <button
+                type="button"
+                onClick={exportRiskZoneToExcel}
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                title="რისკ ზონის მონაცემების Excel-ში ექსპორტი"
+              >
+                <span className="material-symbols-outlined text-[16px]">file_download</span>
+                <span>
+                  {selectedRiskZoneClaimIds.length > 0
+                    ? `მონიშნულის ექსპორტი (${selectedRiskZoneClaimIds.length})`
+                    : 'Excel ექსპორტი'}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -5434,9 +5647,161 @@ export default function AnalystPage() {
             </div>
           </div>
 
-          {/* 3. Filter Bar & Search */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Urgency Toggle */}
+          {/* 3. Comprehensive Expandable Filter Panel */}
+          {isRiskZoneFilterPanelOpen && (
+            <div className="p-4 rounded-xl bg-rose-50/50 border border-rose-200 space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between pb-2 border-b border-rose-200">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-rose-600 text-[18px]">tune</span>
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    რისკ ზონის დეტალური ფილტრაცია
+                  </span>
+                </div>
+                {activeRiskZoneFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetRiskZoneFilters}
+                    className="text-xs text-rose-600 hover:text-rose-800 font-semibold cursor-pointer flex items-center gap-1 transition"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">refresh</span>
+                    ყველას გასუფთავება
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+                {/* საქმის № */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">საქმის №:</label>
+                  <input
+                    type="text"
+                    value={rzFilterCaseNumber}
+                    onChange={(e) => setRzFilterCaseNumber(e.target.value)}
+                    placeholder="მაგ: DI-2024-8841"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                  />
+                </div>
+
+                {/* დებიტორი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დებიტორი (სახელი/კომპანია):</label>
+                  <input
+                    type="text"
+                    value={rzFilterDebtorName}
+                    onChange={(e) => setRzFilterDebtorName(e.target.value)}
+                    placeholder="მაგ: ევროპა ლოჯისტიკსი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                {/* პირადი № / ს/კ */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პირადი № ან ს/კ:</label>
+                  <input
+                    type="text"
+                    value={rzFilterPersonalId}
+                    onChange={(e) => setRzFilterPersonalId(e.target.value)}
+                    placeholder="მაგ: 01019012345 ან 404987654"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                  />
+                </div>
+
+                {/* კრედიტორი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კრედიტორი:</label>
+                  <input
+                    type="text"
+                    value={rzFilterCreditorName}
+                    onChange={(e) => setRzFilterCreditorName(e.target.value)}
+                    placeholder="მაგ: სს თიბისი ბანკი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+
+                {/* დავალიანება (Min - Max ₾) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დავალიანება (Min - Max ₾):</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="number"
+                      value={rzFilterMinAmount}
+                      onChange={(e) => setRzFilterMinAmount(e.target.value)}
+                      placeholder="Min ₾"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                    />
+                    <input
+                      type="number"
+                      value={rzFilterMaxAmount}
+                      onChange={(e) => setRzFilterMaxAmount(e.target.value)}
+                      placeholder="Max ₾"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* ვადაგადაცილება (Min - Max დღე) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ვადაგადაცილება (დღე):</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="number"
+                      value={rzFilterMinOverdue}
+                      onChange={(e) => setRzFilterMinOverdue(e.target.value)}
+                      placeholder="Min დღე"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                    />
+                    <input
+                      type="number"
+                      value={rzFilterMaxOverdue}
+                      onChange={(e) => setRzFilterMaxOverdue(e.target.value)}
+                      placeholder="Max დღე"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* დარჩენილი დღეები (Min - Max დღე) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დარჩენილი დღეები (&lt;180):</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="number"
+                      value={rzFilterMinRemaining}
+                      onChange={(e) => setRzFilterMinRemaining(e.target.value)}
+                      placeholder="Min დღე"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                    />
+                    <input
+                      type="number"
+                      value={rzFilterMaxRemaining}
+                      onChange={(e) => setRzFilterMaxRemaining(e.target.value)}
+                      placeholder="Max დღე"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* რისკის დონე */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">რისკის დონე:</label>
+                  <select
+                    value={riskZoneFilterLevel}
+                    onChange={(e) => setRiskZoneFilterLevel(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-rose-500 text-xs"
+                  >
+                    <option value="ALL">ყველა დონე</option>
+                    <option value="CRITICAL">🚨 კრიტიკული (&lt;30 დღე)</option>
+                    <option value="HIGH">⚠️ მაღალი (30-90 დღე)</option>
+                    <option value="WARNING">🟡 გაფრთხილება (90-180 დღე)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. Filter Toolbar & Search Bar */}
+          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* Urgency Toggle Pills */}
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-semibold overflow-x-auto">
               {(
                 [
@@ -5461,21 +5826,21 @@ export default function AnalystPage() {
               ))}
             </div>
 
-            {/* Search Bar */}
+            {/* Quick Search */}
             <div className="relative flex-1 max-w-md">
-              <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-base">search</span>
+              <span className="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-base">search</span>
               <input
                 type="text"
                 value={riskZoneSearch}
                 onChange={(e) => setRiskZoneSearch(e.target.value)}
                 placeholder="ძიება: საქმის N, დებიტორი, პ/ნ, ს/კ, კრედიტორი..."
-                className="w-full pl-9 pr-4 py-2 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white transition"
+                className="w-full pl-9 pr-7 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white transition"
               />
               {riskZoneSearch && (
                 <button
                   type="button"
                   onClick={() => setRiskZoneSearch('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-sm">close</span>
                 </button>
@@ -5483,7 +5848,51 @@ export default function AnalystPage() {
             </div>
           </div>
 
-          {/* 4. Filtered Table of Risk Claims */}
+          {/* 5. Active Selection Action Banner for Risk Claims */}
+          {selectedRiskZoneClaimIds.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-rose-50/90 border border-rose-200 text-rose-950 text-xs font-medium animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-rose-600 text-[20px]">check_circle</span>
+                <span>
+                  მონიშნულია <strong className="font-bold text-rose-700">{selectedRiskZoneClaimIds.length}</strong> საქმე — სულ {filteredRiskClaims.length}-დან
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRiskZoneClaimIds(filteredRiskClaims.map((c) => c.id))}
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold transition cursor-pointer"
+                >
+                  ყველას მონიშვნა ({filteredRiskClaims.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRiskZoneClaimIds([])}
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold transition cursor-pointer"
+                >
+                  მონიშვნის მოხსნა
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchSendToLitigation}
+                  className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[15px]">gavel</span>
+                  <span>სასამართლოში გადაცემა ({selectedRiskZoneClaimIds.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={exportRiskZoneToExcel}
+                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[15px]">file_download</span>
+                  <span>მონიშნულის ექსპორტი ({selectedRiskZoneClaimIds.length})</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 6. Filtered Table of Risk Claims */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-700">
               <span>რისკ ზონის საქმეების რეესტრი ({filteredRiskClaims.length})</span>
@@ -5495,6 +5904,24 @@ export default function AnalystPage() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-100/70 text-slate-600 font-semibold border-b border-slate-200">
                   <tr>
+                    <th className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="ყველას მონიშვნა"
+                        className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                        checked={
+                          filteredRiskClaims.length > 0 &&
+                          selectedRiskZoneClaimIds.length === filteredRiskClaims.length
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedRiskZoneClaimIds(filteredRiskClaims.map((c: any) => c.id));
+                          } else {
+                            setSelectedRiskZoneClaimIds([]);
+                          }
+                        }}
+                      />
+                    </th>
                     <th className="py-3 px-4">საქმის N</th>
                     <th className="py-3 px-4">დებიტორი</th>
                     <th className="py-3 px-4">პ/ნ / ს/კ</th>
@@ -5509,13 +5936,34 @@ export default function AnalystPage() {
                 <tbody className="divide-y divide-slate-100">
                   {filteredRiskClaims.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="text-center py-12 text-slate-400 text-xs">
+                      <td colSpan={10} className="text-center py-12 text-slate-400 text-xs">
                         მითითებული ფილტრით რისკ ზონის საქმეები არ მოიძებნა.
                       </td>
                     </tr>
                   ) : (
                     filteredRiskClaims.map((claim) => (
-                      <tr key={claim.id} className="hover:bg-rose-50/40 transition">
+                      <tr
+                        key={claim.id}
+                        className={`transition hover:bg-rose-50/40 ${
+                          selectedRiskZoneClaimIds.includes(claim.id) ? 'bg-rose-50/60' : ''
+                        }`}
+                      >
+                        <td className="py-3 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`მონიშნე ${claim.caseNumber}`}
+                            className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                            checked={selectedRiskZoneClaimIds.includes(claim.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              setSelectedRiskZoneClaimIds((prev) =>
+                                prev.includes(claim.id)
+                                  ? prev.filter((id) => id !== claim.id)
+                                  : [...prev, claim.id]
+                              );
+                            }}
+                          />
+                        </td>
                         <td className="py-3 px-4 font-mono font-bold text-slate-900">
                           {claim.caseNumber}
                         </td>
@@ -5566,17 +6014,16 @@ export default function AnalystPage() {
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {claim.rawDebtor && (
-                              <button
-                                type="button"
-                                onClick={() => setSelectedDebtorForAnalytics(claim.rawDebtor)}
-                                className="px-2.5 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition cursor-pointer flex items-center gap-1"
-                                title="საქმის სრული ბარათის ნახვა"
-                              >
-                                <span className="material-symbols-outlined text-[13px]">folder_open</span>
-                                <span>საქმე</span>
-                              </button>
-                            )}
+                            {/* "საქმე" button is ALWAYS rendered for every claim */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDebtorCardForRiskClaim(claim)}
+                              className="px-2.5 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              title="საქმის სრული ბარათის ნახვა"
+                            >
+                              <span className="material-symbols-outlined text-[13px] text-slate-500">folder_open</span>
+                              <span>საქმე</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => handleSendToLitigation(claim)}
