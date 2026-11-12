@@ -51,7 +51,11 @@ export function middleware(request: NextRequest) {
 
   // If on Ops domain and someone visits /ops explicitly, redirect to root '/' to keep the address bar clean
   if (isOpsDomain && pathname === '/ops') {
-    return NextResponse.redirect(new URL('/', request.url));
+    const u = new URL('/', request.url);
+    request.nextUrl.searchParams.forEach((value, key) => {
+      u.searchParams.set(key, value);
+    });
+    return NextResponse.redirect(u);
   }
 
   // 1. Operations & Admin Portal (/ops)
