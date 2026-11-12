@@ -230,7 +230,7 @@ export default function AnalystSidebar({
           <button
             type="button"
             onClick={() => handleNavClick('risk-zone')}
-            title={`რისკ ზონა — ხანდაზმულობის მონიტორინგი (${riskZoneCount})`}
+            title={`რისკ ზონა (${riskZoneCount})`}
             className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
               activeView === 'risk-zone'
                 ? 'bg-rose-600 text-white shadow-sm shadow-rose-600/25 ring-2 ring-rose-600/20'
@@ -441,7 +441,7 @@ export default function AnalystSidebar({
                 >
                   warning
                 </span>
-                <span>რისკ ზონა (&lt;180 დღე)</span>
+                <span>რისკ ზონა</span>
               </div>
               <span
                 className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${

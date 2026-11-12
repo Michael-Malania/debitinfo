@@ -69,7 +69,8 @@ export default function AnalystPage() {
   const [selectedDebtorForAnalytics, setSelectedDebtorForAnalytics] = useState<any | null>(null);
   const [debtorCaseFileTab, setDebtorCaseFileTab] = useState<'summary' | 'schedule' | 'documents' | 'receipts' | 'chronology'>('summary');
   const [debtorChronologyRange, setDebtorChronologyRange] = useState<'3m' | '6m' | '1y' | 'custom'>('6m');
-  const [debtorCustomDays, setDebtorCustomDays] = useState<number>(45);
+  const [debtorDateFrom, setDebtorDateFrom] = useState<string>('2024-01-01');
+  const [debtorDateTo, setDebtorDateTo] = useState<string>('2024-06-30');
 
   // Creditor Portfolio Dynamics Custom Range States
   const [creditorDynTargetId, setCreditorDynTargetId] = useState<string>('ALL');
@@ -775,6 +776,11 @@ export default function AnalystPage() {
     const overdue = d.overdueDays || 0;
     const amt = Number(d.amount ?? d.currentAmount ?? 2900);
 
+    const georgianMonths = [
+      'იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი',
+      'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი'
+    ];
+
     let monthNames: string[] = [];
     if (debtorChronologyRange === '3m') {
       monthNames = ['აპრილი', 'მაისი', 'ივნისი'];
@@ -786,14 +792,49 @@ export default function AnalystPage() {
         'ივლისი', 'აგვისტო', 'სექტემბერი', 'ოქტომბერი', 'ნოემბერი', 'დეკემბერი',
       ];
     } else {
-      const days = Math.max(7, debtorCustomDays || 45);
-      const stepCount = days <= 30 ? 3 : days <= 90 ? Math.min(6, Math.ceil(days / 15)) : Math.min(8, Math.ceil(days / 30));
-      const stepDays = Math.round(days / stepCount);
-      monthNames = Array.from({ length: stepCount }, (_, i) => {
-        const startDay = i * stepDays + 1;
-        const endDay = Math.min(days, (i + 1) * stepDays);
-        return `${startDay}-${endDay} დღე`;
-      });
+      // Date Range mode (აქედან - აქამდე)
+      try {
+        const dStart = new Date(debtorDateFrom || '2024-01-01');
+        const dEnd = new Date(debtorDateTo || '2024-06-30');
+        const sY = isNaN(dStart.getFullYear()) ? 2024 : dStart.getFullYear();
+        const sM = isNaN(dStart.getMonth()) ? 0 : dStart.getMonth();
+        const eY = isNaN(dEnd.getFullYear()) ? 2024 : dEnd.getFullYear();
+        const eM = isNaN(dEnd.getMonth()) ? 5 : dEnd.getMonth();
+
+        const count = Math.max(1, (eY - sY) * 12 + (eM - sM) + 1);
+        if (count <= 12) {
+          monthNames = [];
+          let y = sY;
+          let m = sM;
+          for (let i = 0; i < count; i++) {
+            monthNames.push(`${georgianMonths[m]} ${y}`);
+            m++;
+            if (m > 11) {
+              m = 0;
+              y++;
+            }
+          }
+        } else {
+          const step = Math.ceil(count / 8);
+          monthNames = [];
+          let y = sY;
+          let m = sM;
+          for (let i = 0; i < count; i += step) {
+            monthNames.push(`${georgianMonths[m]} ${y}`);
+            m += step;
+            while (m > 11) {
+              m -= 12;
+              y++;
+            }
+          }
+        }
+      } catch {
+        monthNames = ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი'];
+      }
+    }
+
+    if (monthNames.length === 0) {
+      monthNames = ['იანვარი', 'თებერვალი', 'მარტი', 'აპრილი', 'მაისი', 'ივნისი'];
     }
 
     const baseMonthlyExpected = Math.max(100, Math.round(amt / monthNames.length));
@@ -852,7 +893,7 @@ export default function AnalystPage() {
       totalPaid: timeline.reduce((s, p) => s + p.amount, 0),
       complianceRate: overdue > 0 ? (overdue > 60 ? 45 : 88) : 98,
     };
-  }, [selectedDebtorForAnalytics, debtorChronologyRange, debtorCustomDays]);
+  }, [selectedDebtorForAnalytics, debtorChronologyRange, debtorDateFrom, debtorDateTo]);
 
   // --------------------------------------------------------------------------
   // Selection-Driven Dynamic Chart Generator for Debtors & Creditors
@@ -5943,17 +5984,9 @@ export default function AnalystPage() {
                 <span className="material-symbols-outlined text-2xl">warning</span>
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-base font-bold text-slate-900 tracking-tight">
-                    რისკ ზონა (<span className="text-rose-600 font-mono">&lt;180 დღე</span>)
-                  </h1>
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
-                    ხანდაზმულობის ზღვარი
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  3-წლიანი სასარჩელო ხანდაზმულობის კრიტიკული და მაღალი რისკის საქმეები
-                </p>
+                <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+                  რისკ ზონა
+                </h1>
               </div>
             </div>
 
@@ -8617,35 +8650,47 @@ export default function AnalystPage() {
                         {r.label}
                       </button>
                     ))}
-                    <div className="h-4 w-px bg-slate-200 mx-0.5 hidden sm:block" />
+                    <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
+
+                    {/* Calendar Date Range: აქედან - აქამდე */}
                     <div
                       onClick={() => setDebtorChronologyRange('custom')}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md border transition cursor-pointer ${
+                      className={`flex flex-wrap items-center gap-1.5 px-3 py-1 rounded-md border transition cursor-pointer ${
                         debtorChronologyRange === 'custom'
-                          ? 'bg-blue-50 border-blue-500 text-blue-800 font-bold'
+                          ? 'bg-blue-50/90 border-blue-500 text-blue-900 font-semibold'
                           : 'border-slate-200 text-slate-600 hover:border-slate-300'
                       }`}
-                      title="სპეციფიური დღეების ოდენობის მითითება"
+                      title="კალენდრით თარიღების არჩევა (აქედან - აქამდე)"
                     >
-                      <span className="material-symbols-outlined text-[14px]">tune</span>
-                      <span>სპეციფიური:</span>
+                      <span className="material-symbols-outlined text-[16px] text-blue-600">calendar_month</span>
+                      <span className="text-xs font-semibold text-slate-700">აქედან:</span>
                       <input
-                        type="number"
-                        min={7}
-                        max={730}
-                        value={debtorCustomDays}
+                        type="date"
+                        value={debtorDateFrom}
                         onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
-                          setDebtorCustomDays(val);
+                          setDebtorDateFrom(e.target.value);
                           setDebtorChronologyRange('custom');
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
                           setDebtorChronologyRange('custom');
                         }}
-                        className="w-14 px-1.5 py-0.5 bg-white border border-slate-300 rounded text-center text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-600"
+                        className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-600 cursor-pointer shadow-2xs"
                       />
-                      <span className="text-[11px] font-normal text-slate-500">დღე</span>
+                      <span className="text-xs font-semibold text-slate-700">აქამდე:</span>
+                      <input
+                        type="date"
+                        value={debtorDateTo}
+                        onChange={(e) => {
+                          setDebtorDateTo(e.target.value);
+                          setDebtorChronologyRange('custom');
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDebtorChronologyRange('custom');
+                        }}
+                        className="px-2 py-0.5 bg-white border border-slate-300 rounded text-xs text-slate-900 font-medium focus:outline-none focus:border-blue-600 cursor-pointer shadow-2xs"
+                      />
                     </div>
                   </div>
                 </div>
