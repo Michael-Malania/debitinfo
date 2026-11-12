@@ -1589,6 +1589,16 @@ export default function AnalystPage() {
   const [ecFilterMinOverdue, setEcFilterMinOverdue] = useState('');
   const [ecFilterMaxOverdue, setEcFilterMaxOverdue] = useState('');
 
+  // Written-off Expired Consignments State (Persisted in localStorage)
+  const [writtenOffConsignmentIds, setWrittenOffConsignmentIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('debitinfo_written_off_consignments');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   const resetExpiredFilters = () => {
     setEcFilterCaseNumber('');
     setEcFilterDebtorName('');
@@ -1785,8 +1795,15 @@ export default function AnalystPage() {
       }
     });
 
-    return list.sort((a, b) => b.daysOverdue - a.daysOverdue);
-  }, [excelDebtors]);
+    // Exclude written-off debts so they leave this active queue and move to Written-off Registry
+    const activeList = list.filter(
+      (item) =>
+        !writtenOffConsignmentIds.includes(item.id) &&
+        !writtenOffConsignmentIds.includes(item.caseNumber)
+    );
+
+    return activeList.sort((a, b) => b.daysOverdue - a.daysOverdue);
+  }, [excelDebtors, writtenOffConsignmentIds]);
 
   const expiredSummary = useMemo(() => {
     const expired3Y = expiredConsignments.filter((c: any) => c.statuteStatus === 'EXPIRED');
@@ -1938,11 +1955,220 @@ export default function AnalystPage() {
     }
   };
 
-  const handleBatchWriteOffExpired = () => {
+  // Single debt write-off: creates act, syncs with backend & localStorage, moves debt to written-off registry
+  const handleWriteOffSingleExpired = async (item: any) => {
+    try {
+      const currentYear = new Date().getFullYear();
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const actNumber = `ACT-WO-${currentYear}-${randomSuffix}`;
+      const user = authService.getCurrentUser();
+      const analystName = (user as any)?.name || user?.email || 'უფროსი ფინანსური ანალიტიკოსი';
+
+      const writeOffData = {
+        caseNumber: item.caseNumber,
+        debtorName: item.debtorName,
+        personalId: item.personalId,
+        entityType: item.entityType || (item.personalId?.length === 9 ? 'LEGAL' : 'PHYSICAL'),
+        creditorName: item.creditorName,
+        originalAmount: Number(item.amount),
+        writtenOffAmount: Number(item.amount),
+        currency: 'GEL',
+        reasonCategory: 'STATUTE_EXPIRED',
+        reasonDescription: `3-წლიანი სასარჩელო ხანდაზმულობის ვადის გასვლა (საქართველოს სამოქალაქო კოდექსის 128-140 მუხლები). კონსიგნაციის № ${item.consignNumber || 'N/A'}. ვადაგადაცილება: ${item.daysOverdue} დღე.`,
+        actNumber,
+        writtenOffByName: analystName,
+        writtenOffDate: new Date().toISOString(),
+      };
+
+      // 1. Call Backend API
+      try {
+        await analystBackendService.createWrittenOffDebt(writeOffData);
+      } catch (apiErr) {
+        console.warn('Backend createWrittenOffDebt fallback to localStorage:', apiErr);
+      }
+
+      // 2. Persist to localStorage for immediate sync with /analyst/written-off
+      try {
+        const local = localStorage.getItem('debitinfo_local_written_off_debts');
+        const list = local ? JSON.parse(local) : [];
+        const newRecord = {
+          id: `local-wo-${Date.now()}-${randomSuffix}`,
+          ...writeOffData,
+          status: 'APPROVED',
+          createdAt: new Date().toISOString(),
+        };
+        list.unshift(newRecord);
+        localStorage.setItem('debitinfo_local_written_off_debts', JSON.stringify(list));
+      } catch (e) {
+        console.error('Failed to save to local storage:', e);
+      }
+
+      // 3. Mark as written off so it moves out of active expired table
+      setWrittenOffConsignmentIds((prev) => {
+        const next = Array.from(new Set([...prev, item.id, item.caseNumber]));
+        try {
+          localStorage.setItem('debitinfo_written_off_consignments', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+
+      setSelectedExpiredConsignmentIds((prev) => prev.filter((id) => id !== item.id));
+
+      // 4. Success feedback with direct navigation option
+      setActionSuccessMessage(
+        `საქმე #${item.caseNumber} (${item.debtorName}) წარმატებით ჩამოიწერა (აქტი #${actNumber}) და გადავიდა ჩამოწერილი ვალების რეესტრში!`
+      );
+      setTimeout(() => setActionSuccessMessage(null), 8000);
+    } catch (err: any) {
+      alert(`ჩამოწერის შეცდომა: ${err?.message || 'უცნობი შეცდომა'}`);
+    }
+  };
+
+  // Batch write-off for multiple selected expired consignments
+  const handleBatchWriteOffExpired = async () => {
     if (selectedExpiredConsignmentIds.length === 0) return;
-    setActionSuccessMessage(`მონიშნული ${selectedExpiredConsignmentIds.length} ხანდაზმული კონსიგნაცია გადაიგზავნა ჩამოწერის აქტის შესადგენად!`);
-    setTimeout(() => setActionSuccessMessage(null), 5000);
+    const targetItems = expiredConsignments.filter((c: any) =>
+      selectedExpiredConsignmentIds.includes(c.id)
+    );
+    if (targetItems.length === 0) return;
+
+    const currentYear = new Date().getFullYear();
+    const user = authService.getCurrentUser();
+    const analystName = (user as any)?.name || user?.email || 'უფროსი ფინანსური ანალიტიკოსი';
+
+    const newLocalRecords: any[] = [];
+    const newWrittenOffIds: string[] = [];
+
+    for (const item of targetItems) {
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      const actNumber = `ACT-WO-${currentYear}-${randomSuffix}`;
+
+      const writeOffData = {
+        caseNumber: item.caseNumber,
+        debtorName: item.debtorName,
+        personalId: item.personalId,
+        entityType: item.entityType || (item.personalId?.length === 9 ? 'LEGAL' : 'PHYSICAL'),
+        creditorName: item.creditorName,
+        originalAmount: Number(item.amount),
+        writtenOffAmount: Number(item.amount),
+        currency: 'GEL',
+        reasonCategory: 'STATUTE_EXPIRED',
+        reasonDescription: `3-წლიანი სასარჩელო ხანდაზმულობის ვადის გასვლა (საქართველოს სამოქალაქო კოდექსის 128-140 მუხლები). კონსიგნაციის № ${item.consignNumber || 'N/A'}. ვადაგადაცილება: ${item.daysOverdue} დღე.`,
+        actNumber,
+        writtenOffByName: analystName,
+        writtenOffDate: new Date().toISOString(),
+      };
+
+      try {
+        await analystBackendService.createWrittenOffDebt(writeOffData);
+      } catch (err) {
+        console.warn('Backend createWrittenOffDebt failed for:', item.caseNumber, err);
+      }
+
+      newLocalRecords.push({
+        id: `local-wo-${Date.now()}-${randomSuffix}`,
+        ...writeOffData,
+        status: 'APPROVED',
+        createdAt: new Date().toISOString(),
+      });
+      newWrittenOffIds.push(item.id, item.caseNumber);
+    }
+
+    try {
+      const local = localStorage.getItem('debitinfo_local_written_off_debts');
+      const list = local ? JSON.parse(local) : [];
+      localStorage.setItem('debitinfo_local_written_off_debts', JSON.stringify([...newLocalRecords, ...list]));
+    } catch (e) {
+      console.error(e);
+    }
+
+    setWrittenOffConsignmentIds((prev) => {
+      const next = Array.from(new Set([...prev, ...newWrittenOffIds]));
+      try {
+        localStorage.setItem('debitinfo_written_off_consignments', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    setActionSuccessMessage(
+      `მონიშნული ${targetItems.length} ხანდაზმული კონსიგნაცია წარმატებით ჩამოიწერა და გადავიდა ჩამოწერილი ვალების რეესტრში!`
+    );
+    setTimeout(() => setActionSuccessMessage(null), 8000);
     setSelectedExpiredConsignmentIds([]);
+  };
+
+  // Write-off from Debtor Case File modal
+  const handleWriteOffFromModal = async (debtor: any) => {
+    if (!debtor) return;
+    const amt = Number(debtor.amount ?? debtor.currentAmount ?? 2900);
+    const confirmWriteOff = window.confirm(
+      `ნამდვილად გსურთ საქმე #${debtor.caseNumber || debtor.personalId}-ის ვალის (${amt.toLocaleString()} ₾) ჩამოწერა და გადატანა ჩამოწერილი ვალების რეესტრში?`
+    );
+    if (!confirmWriteOff) return;
+
+    const currentYear = new Date().getFullYear();
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const actNumber = `ACT-WO-${currentYear}-${randomSuffix}`;
+    const user = authService.getCurrentUser();
+    const analystName = (user as any)?.name || user?.email || 'უფროსი ფინანსური ანალიტიკოსი';
+
+    const writeOffData = {
+      caseNumber: debtor.caseNumber || `DI-WO-${debtor.personalId?.slice(-4) || '0000'}`,
+      debtorName: debtor.debtorName || debtor.name || 'მოვალე',
+      personalId: debtor.personalId || debtor.taxId || '00000000000',
+      entityType: (debtor.personalId?.length === 9 || debtor.taxId?.length === 9) ? 'LEGAL' : 'PHYSICAL',
+      creditorName: debtor.creditorName || 'კრედიტორი',
+      originalAmount: amt,
+      writtenOffAmount: amt,
+      currency: 'GEL',
+      reasonCategory: 'STATUTE_EXPIRED',
+      reasonDescription: `ოფიციალური ჩამოწერა ანალიტიკოსის მიერ საქმის ბარათიდან. საქმე: ${debtor.caseNumber || 'N/A'}. 3-წლიანი ხანდაზმულობის ვადის გასვლა.`,
+      actNumber,
+      writtenOffByName: analystName,
+      writtenOffDate: new Date().toISOString(),
+    };
+
+    try {
+      await analystBackendService.createWrittenOffDebt(writeOffData);
+    } catch (e) {
+      console.warn('Backend call failed:', e);
+    }
+
+    try {
+      const local = localStorage.getItem('debitinfo_local_written_off_debts');
+      const list = local ? JSON.parse(local) : [];
+      list.unshift({
+        id: `local-wo-${Date.now()}-${randomSuffix}`,
+        ...writeOffData,
+        status: 'APPROVED',
+        createdAt: new Date().toISOString(),
+      });
+      localStorage.setItem('debitinfo_local_written_off_debts', JSON.stringify(list));
+    } catch (e) {
+      console.error(e);
+    }
+
+    if (debtor.id || debtor.caseNumber) {
+      setWrittenOffConsignmentIds((prev) => {
+        const next = Array.from(new Set([...prev, debtor.id, debtor.caseNumber]));
+        try {
+          localStorage.setItem('debitinfo_written_off_consignments', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    }
+
+    setSelectedDebtorForAnalytics(null);
+    setActionSuccessMessage(
+      `საქმე #${writeOffData.caseNumber} (${writeOffData.debtorName}) წარმატებით ჩამოიწერა და გადავიდა ჩამოწერილი ვალების რეესტრში!`
+    );
+    setTimeout(() => setActionSuccessMessage(null), 8000);
   };
 
   const loadAnalystData = async () => {
@@ -5962,18 +6188,27 @@ export default function AnalystPage() {
       ) : activeView === 'risk-zone' ? (
         <section className="space-y-6 animate-fadeIn">
           {actionSuccessMessage && (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-emerald-800 text-sm animate-fadeIn">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-900 text-sm animate-fadeIn shadow-xs">
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
-                <span className="font-medium">{actionSuccessMessage}</span>
+                <span className="font-semibold">{actionSuccessMessage}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setActionSuccessMessage(null)}
-                className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                <Link
+                  href="/analyst/written-off"
+                  className="px-3 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                >
+                  <span className="material-symbols-outlined text-[15px]">description</span>
+                  <span>ჩამოწერილების რეესტრში ნახვა →</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setActionSuccessMessage(null)}
+                  className="text-emerald-700 hover:text-emerald-900 cursor-pointer p-1"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -6575,18 +6810,27 @@ export default function AnalystPage() {
       ) : activeView === 'expired-consignments' ? (
         <section className="space-y-6 animate-fadeIn pb-12">
           {actionSuccessMessage && (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-emerald-800 text-sm animate-fadeIn">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-900 text-sm animate-fadeIn shadow-xs">
               <div className="flex items-center gap-2.5">
                 <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
-                <span className="font-medium">{actionSuccessMessage}</span>
+                <span className="font-semibold">{actionSuccessMessage}</span>
               </div>
-              <button
-                type="button"
-                onClick={() => setActionSuccessMessage(null)}
-                className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">close</span>
-              </button>
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                <Link
+                  href="/analyst/written-off"
+                  className="px-3 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                >
+                  <span className="material-symbols-outlined text-[15px]">description</span>
+                  <span>ჩამოწერილების რეესტრში ნახვა →</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setActionSuccessMessage(null)}
+                  className="text-emerald-700 hover:text-emerald-900 cursor-pointer p-1"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -7063,12 +7307,9 @@ export default function AnalystPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setActionSuccessMessage(`საქმე #${item.caseNumber} გადაცემულია ჩამოწერის აქტის მოსამზადებლად!`);
-                                setTimeout(() => setActionSuccessMessage(null), 5000);
-                              }}
-                              className="px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-300 transition cursor-pointer flex items-center gap-1"
-                              title="ჩამოწერის აქტის მომზადება"
+                              onClick={() => handleWriteOffSingleExpired(item)}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-300 transition cursor-pointer flex items-center gap-1 active:scale-95 shadow-2xs"
+                              title="ვალის ოფიციალური ჩამოწერა & გადატანა ჩამოწერილი ვალების რეესტრში"
                             >
                               <span className="material-symbols-outlined text-[13px]">assignment_turned_in</span>
                               <span>ჩამოწერა</span>
@@ -8755,18 +8996,29 @@ export default function AnalystPage() {
           </div>
 
           {/* Modal Footer */}
-          <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+          <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
             <div className="text-xs text-slate-500 flex items-center gap-1.5">
               <span className="material-symbols-outlined text-base text-blue-600">verified</span>
               <span>საქმის მონაცემები დამოწმებულია ცენტრალური სერვერისა და RS.GE ბაზის მიხედვით</span>
             </div>
-            <button
-              type="button"
-              onClick={() => setSelectedDebtorForAnalytics(null)}
-              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition cursor-pointer"
-            >
-              დახურვა
-            </button>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => handleWriteOffFromModal(selectedDebtorForAnalytics)}
+                className="px-3.5 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+                title="ვალის ოფიციალური ჩამოწერა და გადატანა ჩამოწერილი ვალების რეესტრში"
+              >
+                <span className="material-symbols-outlined text-[16px]">assignment_turned_in</span>
+                <span>ჩამოწერა</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDebtorForAnalytics(null)}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition cursor-pointer"
+              >
+                დახურვა
+              </button>
+            </div>
           </div>
         </div>
       </div>

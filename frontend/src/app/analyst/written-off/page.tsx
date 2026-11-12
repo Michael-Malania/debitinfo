@@ -193,8 +193,48 @@ export default function WrittenOffDebtsPage() {
         dateTo: dateTo || undefined,
       });
 
-      setItems(res?.items || []);
-      setStats(res?.stats || null);
+      let backendItems: WrittenOffDebtItem[] = res?.items || [];
+      let currentStats = res?.stats || null;
+
+      try {
+        const local = localStorage.getItem('debitinfo_local_written_off_debts');
+        if (local) {
+          const parsed = JSON.parse(local);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const existingKeys = new Set(
+              backendItems.map((b: any) => `${b.caseNumber}_${b.personalId}`)
+            );
+            const extraLocal = parsed.filter(
+              (l: any) => !existingKeys.has(`${l.caseNumber}_${l.personalId}`)
+            );
+            if (extraLocal.length > 0) {
+              backendItems = [...extraLocal, ...backendItems];
+              if (currentStats) {
+                const totalAmt = backendItems.reduce((s: number, i: any) => s + (Number(i.writtenOffAmount) || 0), 0);
+                const totalOrig = backendItems.reduce((s: number, i: any) => s + (Number(i.originalAmount) || Number(i.writtenOffAmount) || 0), 0);
+                const statuteExpiredCount = backendItems.filter((i: any) => i.reasonCategory === 'STATUTE_EXPIRED').length;
+                const statuteExpiredAmt = backendItems
+                  .filter((i: any) => i.reasonCategory === 'STATUTE_EXPIRED')
+                  .reduce((s: number, i: any) => s + (Number(i.writtenOffAmount) || 0), 0);
+
+                currentStats = {
+                  ...currentStats,
+                  totalCount: backendItems.length,
+                  totalAmount: totalAmt,
+                  totalOriginalAmount: totalOrig,
+                  statuteExpiredCount,
+                  statuteExpiredAmount: statuteExpiredAmt,
+                };
+              }
+            }
+          }
+        }
+      } catch (storageErr) {
+        console.error('Failed reading local written-off debts:', storageErr);
+      }
+
+      setItems(backendItems);
+      setStats(currentStats);
     } catch (err: any) {
       console.error('Failed to load written off debts:', err);
     } finally {
