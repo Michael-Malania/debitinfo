@@ -19,9 +19,7 @@ export default function AnalystPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
   const [filterPeriod, setFilterPeriod] = useState('30d');
-  const [activeView, setActiveView] = useState<
-    'overview' | 'pending-debtors' | 'debtors-registry' | 'creditors-registry' | 'portfolio-dispatch' | 'risk-zone' | 'risk-zone'
-  >('overview');
+  const [activeView, setActiveView] = useState<AnalystViewType>('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [isFilterDrawerOpen, setIsFilterDrawerOpen] = useState(false);
@@ -1181,7 +1179,7 @@ export default function AnalystPage() {
   // --------------------------------------------------------------------------
   // RISK ZONE (<180 Days to 3-Year Limitation Expiry) State & Calculations
   // --------------------------------------------------------------------------
-  const [riskZoneFilterLevel, setRiskZoneFilterLevel] = useState<'ALL' | 'CRITICAL' | 'HIGH' | 'WARNING'>('ALL');
+  const [riskZoneFilterLevel, setRiskZoneFilterLevel] = useState<'ALL' | 'CRITICAL' | 'HIGH' | 'WARNING' | 'ARCHIVE'>('ALL');
   const [riskZoneSearch, setRiskZoneSearch] = useState('');
 
   // Risk Zone selection and comprehensive filter state
@@ -1197,6 +1195,44 @@ export default function AnalystPage() {
   const [rzFilterMaxOverdue, setRzFilterMaxOverdue] = useState('');
   const [rzFilterMinRemaining, setRzFilterMinRemaining] = useState('');
   const [rzFilterMaxRemaining, setRzFilterMaxRemaining] = useState('');
+
+  // Risk Zone Archive State (Stored in localStorage to prevent spamming analyst)
+  const [archivedRiskZoneClaimIds, setArchivedRiskZoneClaimIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('debitinfo_risk_zone_archived_ids');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleArchiveRiskClaims = (claimIds: string[]) => {
+    if (claimIds.length === 0) return;
+    setArchivedRiskZoneClaimIds((prev) => {
+      const next = Array.from(new Set([...prev, ...claimIds]));
+      try {
+        localStorage.setItem('debitinfo_risk_zone_archived_ids', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    setSelectedRiskZoneClaimIds((prev) => prev.filter((id) => !claimIds.includes(id)));
+    setActionSuccessMessage(`${claimIds.length} საქმე წარმატებით გადავიდა არქივში!`);
+    setTimeout(() => setActionSuccessMessage(null), 5000);
+  };
+
+  const handleUnarchiveRiskClaims = (claimIds: string[]) => {
+    if (claimIds.length === 0) return;
+    setArchivedRiskZoneClaimIds((prev) => {
+      const next = prev.filter((id) => !claimIds.includes(id));
+      try {
+        localStorage.setItem('debitinfo_risk_zone_archived_ids', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    setSelectedRiskZoneClaimIds((prev) => prev.filter((id) => !claimIds.includes(id)));
+    setActionSuccessMessage(`${claimIds.length} საქმე წარმატებით აღდგა არქივიდან აქტიურ სიაში!`);
+    setTimeout(() => setActionSuccessMessage(null), 5000);
+  };
 
   const resetRiskZoneFilters = () => {
     setRzFilterCaseNumber('');
@@ -1225,7 +1261,7 @@ export default function AnalystPage() {
     if (rzFilterMaxOverdue.trim()) count++;
     if (rzFilterMinRemaining.trim()) count++;
     if (rzFilterMaxRemaining.trim()) count++;
-    if (riskZoneFilterLevel !== 'ALL') count++;
+    if (riskZoneFilterLevel !== 'ALL' && riskZoneFilterLevel !== 'ARCHIVE') count++;
     if (riskZoneSearch.trim()) count++;
     return count;
   }, [
@@ -1293,14 +1329,24 @@ export default function AnalystPage() {
     return items.sort((a, b) => a.daysRemaining - b.daysRemaining);
   }, [excelDebtors]);
 
+  // Split risk zone claims into active and archived
+  const activeRiskZoneClaims = useMemo(() => {
+    return riskZoneClaims.filter((c: any) => !archivedRiskZoneClaimIds.includes(c.id));
+  }, [riskZoneClaims, archivedRiskZoneClaimIds]);
+
+  const archivedRiskZoneClaims = useMemo(() => {
+    return riskZoneClaims.filter((c: any) => archivedRiskZoneClaimIds.includes(c.id));
+  }, [riskZoneClaims, archivedRiskZoneClaimIds]);
+
   const riskZoneSummary = useMemo(() => {
-    const critical = riskZoneClaims.filter((c: any) => c.urgencyLevel === 'CRITICAL');
-    const high = riskZoneClaims.filter((c: any) => c.urgencyLevel === 'HIGH');
-    const warning = riskZoneClaims.filter((c: any) => c.urgencyLevel === 'WARNING');
-    const totalAmountGel = riskZoneClaims.reduce((s: number, c: any) => s + (c.amount || 0), 0);
+    const critical = activeRiskZoneClaims.filter((c: any) => c.urgencyLevel === 'CRITICAL');
+    const high = activeRiskZoneClaims.filter((c: any) => c.urgencyLevel === 'HIGH');
+    const warning = activeRiskZoneClaims.filter((c: any) => c.urgencyLevel === 'WARNING');
+    const totalAmountGel = activeRiskZoneClaims.reduce((s: number, c: any) => s + (c.amount || 0), 0);
     const criticalGel = critical.reduce((s: number, c: any) => s + (c.amount || 0), 0);
     const highGel = high.reduce((s: number, c: any) => s + (c.amount || 0), 0);
     const warningGel = warning.reduce((s: number, c: any) => s + (c.amount || 0), 0);
+    const archivedTotalGel = archivedRiskZoneClaims.reduce((s: number, c: any) => s + (c.amount || 0), 0);
 
     return {
       criticalCount: critical.length,
@@ -1310,14 +1356,18 @@ export default function AnalystPage() {
       criticalGel,
       highGel,
       warningGel,
-      inLitigationCount: Math.max(3, Math.round(riskZoneClaims.length * 0.4)),
+      inLitigationCount: Math.max(3, Math.round(activeRiskZoneClaims.length * 0.4)),
+      archivedCount: archivedRiskZoneClaims.length,
+      archivedTotalGel,
     };
-  }, [riskZoneClaims]);
+  }, [activeRiskZoneClaims, archivedRiskZoneClaims]);
 
   const filteredRiskClaims = useMemo(() => {
-    return riskZoneClaims.filter((c: any) => {
-      // 1. Urgency Level filter
-      if (riskZoneFilterLevel !== 'ALL' && c.urgencyLevel !== riskZoneFilterLevel) {
+    const baseList = riskZoneFilterLevel === 'ARCHIVE' ? archivedRiskZoneClaims : activeRiskZoneClaims;
+
+    return baseList.filter((c: any) => {
+      // 1. Urgency Level filter (when not in archive and not ALL)
+      if (riskZoneFilterLevel !== 'ALL' && riskZoneFilterLevel !== 'ARCHIVE' && c.urgencyLevel !== riskZoneFilterLevel) {
         return false;
       }
 
@@ -1372,7 +1422,8 @@ export default function AnalystPage() {
       return true;
     });
   }, [
-    riskZoneClaims,
+    activeRiskZoneClaims,
+    archivedRiskZoneClaims,
     riskZoneFilterLevel,
     riskZoneSearch,
     rzFilterCaseNumber,
@@ -1466,17 +1517,391 @@ export default function AnalystPage() {
             : c.urgencyLevel === 'HIGH'
             ? 'მაღალი (30-90 დღე)'
             : 'გაფრთხილება (90-180 დღე)',
+        'სტატუსი': archivedRiskZoneClaimIds.includes(c.id) ? 'არქივირებული' : 'აქტიური',
         'ხელშეკრულების №': c.agreementNumber || '—',
       }));
 
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'რისკ ზონა');
-      const filenameSuffix = selectedRiskZoneClaimIds.length > 0 ? `Selected_${selectedRiskZoneClaimIds.length}` : 'All';
+      const sheetName = riskZoneFilterLevel === 'ARCHIVE' ? 'არქივი' : 'რისკ ზონა';
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      const filenameSuffix = selectedRiskZoneClaimIds.length > 0 ? `Selected_${selectedRiskZoneClaimIds.length}` : (riskZoneFilterLevel === 'ARCHIVE' ? 'Archive' : 'All');
       XLSX.writeFile(wb, `Debitinfo_Risk_Zone_${filenameSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch (err) {
       console.error('Failed to export risk zone to excel:', err);
     }
+  };
+
+  // --------------------------------------------------------------------------
+  // EXPIRED CONSIGNMENTS (ხანდაზმული კონსიგნაციები - >1095 Days / Prescribed)
+  // --------------------------------------------------------------------------
+  const [selectedExpiredConsignmentIds, setSelectedExpiredConsignmentIds] = useState<string[]>([]);
+  const [isExpiredFilterPanelOpen, setIsExpiredFilterPanelOpen] = useState(false);
+  const [expiredSearch, setExpiredSearch] = useState('');
+  const [expiredFilterStatus, setExpiredFilterStatus] = useState<'ALL' | 'EXPIRED' | 'AT_LIMIT'>('ALL');
+  const [ecFilterCaseNumber, setEcFilterCaseNumber] = useState('');
+  const [ecFilterDebtorName, setEcFilterDebtorName] = useState('');
+  const [ecFilterPersonalId, setEcFilterPersonalId] = useState('');
+  const [ecFilterCreditorName, setEcFilterCreditorName] = useState('');
+  const [ecFilterMinAmount, setEcFilterMinAmount] = useState('');
+  const [ecFilterMaxAmount, setEcFilterMaxAmount] = useState('');
+  const [ecFilterMinOverdue, setEcFilterMinOverdue] = useState('');
+  const [ecFilterMaxOverdue, setEcFilterMaxOverdue] = useState('');
+
+  const resetExpiredFilters = () => {
+    setEcFilterCaseNumber('');
+    setEcFilterDebtorName('');
+    setEcFilterPersonalId('');
+    setEcFilterCreditorName('');
+    setEcFilterMinAmount('');
+    setEcFilterMaxAmount('');
+    setEcFilterMinOverdue('');
+    setEcFilterMaxOverdue('');
+    setExpiredSearch('');
+    setExpiredFilterStatus('ALL');
+  };
+
+  const activeExpiredFiltersCount = useMemo(() => {
+    let count = 0;
+    if (ecFilterCaseNumber.trim()) count++;
+    if (ecFilterDebtorName.trim()) count++;
+    if (ecFilterPersonalId.trim()) count++;
+    if (ecFilterCreditorName.trim()) count++;
+    if (ecFilterMinAmount.trim()) count++;
+    if (ecFilterMaxAmount.trim()) count++;
+    if (ecFilterMinOverdue.trim()) count++;
+    if (ecFilterMaxOverdue.trim()) count++;
+    if (expiredFilterStatus !== 'ALL') count++;
+    if (expiredSearch.trim()) count++;
+    return count;
+  }, [
+    ecFilterCaseNumber,
+    ecFilterDebtorName,
+    ecFilterPersonalId,
+    ecFilterCreditorName,
+    ecFilterMinAmount,
+    ecFilterMaxAmount,
+    ecFilterMinOverdue,
+    ecFilterMaxOverdue,
+    expiredFilterStatus,
+    expiredSearch,
+  ]);
+
+  const expiredConsignments = useMemo(() => {
+    const list: any[] = [];
+    excelDebtors.forEach((deb: any) => {
+      const overdue = Number(deb.overdueDays || deb.daysOverdue || 0);
+      if (overdue >= 980) {
+        list.push({
+          id: deb.id || `exp-${deb.personalId}`,
+          caseNumber: deb.caseNumber || (deb.agreementNumber ? `BI-STAT-${deb.agreementNumber}` : `BI-STAT-EXP-${deb.id || '101'}`),
+          debtorName: deb.name || `${deb.firstName || ''} ${deb.lastName || ''}`.trim() || 'დებიტორი',
+          personalId: deb.personalId || deb.taxId || '204918233',
+          creditorName: deb.creditorName || 'შპს ალფა ფინანსი',
+          amount: Number(deb.amount ?? deb.currentAmount ?? deb.remainingAmount ?? 14500),
+          daysOverdue: overdue,
+          consignNumber: deb.consignNumber || `CON-2021-${String(deb.personalId || '1234').slice(-3)}`,
+          consignType: deb.entityType === 'PHYSICAL' ? 'ფიზიკური პირის კონსიგნაცია' : 'სასაქონლო კონსიგნაცია (B2B)',
+          statuteStatus: overdue >= 1095 ? 'EXPIRED' as const : 'AT_LIMIT' as const,
+          prescriptionDate: '2023-11-15',
+          rawDebtor: deb,
+        });
+      }
+    });
+
+    const defaultExpired = [
+      {
+        id: 'stat-exp-1',
+        caseNumber: 'BI-STAT-EXP-1',
+        debtorName: 'შპს "ალფა ლოჯისტიკსი"',
+        personalId: '204918233',
+        creditorName: 'შპს ალფა ფინანსი',
+        amount: 8500,
+        daysOverdue: 1170,
+        consignNumber: 'CON-2021-991',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'EXPIRED' as const,
+        prescriptionDate: '2023-08-10',
+        rawDebtor: excelDebtors[0] || null,
+      },
+      {
+        id: 'stat-exp-2',
+        caseNumber: 'BI-STAT-EXP-2',
+        debtorName: 'შპს ორბი დეველოპმენტი',
+        personalId: '405891101',
+        creditorName: 'სს თიბისი ბანკი',
+        amount: 14200,
+        daysOverdue: 1150,
+        consignNumber: 'CON-2021-842',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'EXPIRED' as const,
+        prescriptionDate: '2023-09-01',
+        rawDebtor: excelDebtors[1] || null,
+      },
+      {
+        id: 'stat-exp-3',
+        caseNumber: 'BI-STAT-EXP-3',
+        debtorName: 'შპს ტრანსლოჯისტიკ ჯორჯია',
+        personalId: '405772299',
+        creditorName: 'შპს ალფა ფინანსი',
+        amount: 6700,
+        daysOverdue: 1120,
+        consignNumber: 'CON-2021-771',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'EXPIRED' as const,
+        prescriptionDate: '2023-10-14',
+        rawDebtor: excelDebtors[2] || null,
+      },
+      {
+        id: 'stat-warn-1',
+        caseNumber: 'BI-STAT-WARN-1',
+        debtorName: 'შპს ორბი დეველოპმენტი',
+        personalId: '405891101',
+        creditorName: 'შპს ექსპრეს კრედიტი',
+        amount: 12500,
+        daysOverdue: 1080,
+        consignNumber: 'CON-2021-504',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'AT_LIMIT' as const,
+        prescriptionDate: '2024-01-20',
+        rawDebtor: excelDebtors[1] || null,
+      },
+      {
+        id: 'stat-warn-2',
+        caseNumber: 'BI-STAT-WARN-2',
+        debtorName: 'შპს ტრანსლოჯისტიკ ჯორჯია',
+        personalId: '405772299',
+        creditorName: 'სს საქართველოს ბანკი',
+        amount: 9400,
+        daysOverdue: 1065,
+        consignNumber: 'CON-2021-419',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'AT_LIMIT' as const,
+        prescriptionDate: '2024-02-12',
+        rawDebtor: excelDebtors[2] || null,
+      },
+      {
+        id: 'stat-warn-3',
+        caseNumber: 'BI-STAT-WARN-3',
+        debtorName: 'შპს ქართული პროდუქტები',
+        personalId: '405663388',
+        creditorName: 'შპს სოლუშენსი',
+        amount: 18000,
+        daysOverdue: 1025,
+        consignNumber: 'CON-2021-380',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'AT_LIMIT' as const,
+        prescriptionDate: '2024-03-05',
+        rawDebtor: null,
+      },
+      {
+        id: 'stat-warn-4',
+        caseNumber: 'BI-STAT-WARN-4',
+        debtorName: 'შპს "ალფა ლოჯისტიკსი"',
+        personalId: '204918233',
+        creditorName: 'შპს ალფა ფინანსი',
+        amount: 21500,
+        daysOverdue: 990,
+        consignNumber: 'CON-2022-101',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'AT_LIMIT' as const,
+        prescriptionDate: '2024-04-18',
+        rawDebtor: null,
+      },
+      {
+        id: 'stat-exp-4',
+        caseNumber: 'DI-2024-7889',
+        debtorName: 'დავით კობახიძე',
+        personalId: '01024077889',
+        creditorName: 'გიორგი ბერიძე',
+        amount: 11200,
+        daysOverdue: 1110,
+        consignNumber: 'AGR-01019-1',
+        consignType: 'ფიზიკური პირის კონსიგნაცია',
+        statuteStatus: 'EXPIRED' as const,
+        prescriptionDate: '2023-10-22',
+        rawDebtor: null,
+      },
+      {
+        id: 'stat-exp-5',
+        caseNumber: 'DI-2023-1102',
+        debtorName: 'შპს ჯორჯიან ექსპრესი',
+        personalId: '405118822',
+        creditorName: 'სს თიბისი ბანკი',
+        amount: 28400,
+        daysOverdue: 1205,
+        consignNumber: 'CON-2021-018',
+        consignType: 'სასაქონლო კონსიგნაცია (B2B)',
+        statuteStatus: 'EXPIRED' as const,
+        prescriptionDate: '2023-06-15',
+        rawDebtor: null,
+      },
+    ];
+
+    defaultExpired.forEach((item) => {
+      if (!list.find((x) => x.caseNumber === item.caseNumber)) {
+        list.push(item);
+      }
+    });
+
+    return list.sort((a, b) => b.daysOverdue - a.daysOverdue);
+  }, [excelDebtors]);
+
+  const expiredSummary = useMemo(() => {
+    const expired3Y = expiredConsignments.filter((c: any) => c.statuteStatus === 'EXPIRED');
+    const atLimit = expiredConsignments.filter((c: any) => c.statuteStatus === 'AT_LIMIT');
+    const totalGel = expiredConsignments.reduce((s: number, c: any) => s + (c.amount || 0), 0);
+    const expired3YGel = expired3Y.reduce((s: number, c: any) => s + (c.amount || 0), 0);
+    const atLimitGel = atLimit.reduce((s: number, c: any) => s + (c.amount || 0), 0);
+
+    return {
+      totalCount: expiredConsignments.length,
+      totalGel,
+      expired3YCount: expired3Y.length,
+      expired3YGel,
+      atLimitCount: atLimit.length,
+      atLimitGel,
+      b2bCount: expiredConsignments.filter((c: any) => c.consignType.includes('B2B')).length,
+    };
+  }, [expiredConsignments]);
+
+  const filteredExpiredConsignments = useMemo(() => {
+    return expiredConsignments.filter((c: any) => {
+      if (expiredFilterStatus !== 'ALL' && c.statuteStatus !== expiredFilterStatus) {
+        return false;
+      }
+      if (expiredSearch.trim()) {
+        const q = expiredSearch.toLowerCase().trim();
+        const matchCase = (c.caseNumber || '').toLowerCase().includes(q);
+        const matchName = (c.debtorName || '').toLowerCase().includes(q);
+        const matchPin = (c.personalId || '').toLowerCase().includes(q);
+        const matchCred = (c.creditorName || '').toLowerCase().includes(q);
+        const matchConsign = (c.consignNumber || '').toLowerCase().includes(q);
+        if (!matchCase && !matchName && !matchPin && !matchCred && !matchConsign) return false;
+      }
+      if (ecFilterCaseNumber.trim() && !(c.caseNumber || '').toLowerCase().includes(ecFilterCaseNumber.toLowerCase().trim())) {
+        return false;
+      }
+      if (ecFilterDebtorName.trim() && !(c.debtorName || '').toLowerCase().includes(ecFilterDebtorName.toLowerCase().trim())) {
+        return false;
+      }
+      if (ecFilterPersonalId.trim() && !(c.personalId || '').toLowerCase().includes(ecFilterPersonalId.toLowerCase().trim())) {
+        return false;
+      }
+      if (ecFilterCreditorName.trim() && !(c.creditorName || '').toLowerCase().includes(ecFilterCreditorName.toLowerCase().trim())) {
+        return false;
+      }
+      if (ecFilterMinAmount.trim()) {
+        const minAmt = parseFloat(ecFilterMinAmount);
+        if (!isNaN(minAmt) && (c.amount || 0) < minAmt) return false;
+      }
+      if (ecFilterMaxAmount.trim()) {
+        const maxAmt = parseFloat(ecFilterMaxAmount);
+        if (!isNaN(maxAmt) && (c.amount || 0) > maxAmt) return false;
+      }
+      if (ecFilterMinOverdue.trim()) {
+        const minO = parseInt(ecFilterMinOverdue, 10);
+        if (!isNaN(minO) && (c.daysOverdue || 0) < minO) return false;
+      }
+      if (ecFilterMaxOverdue.trim()) {
+        const maxO = parseInt(ecFilterMaxOverdue, 10);
+        if (!isNaN(maxO) && (c.daysOverdue || 0) > maxO) return false;
+      }
+      return true;
+    });
+  }, [
+    expiredConsignments,
+    expiredFilterStatus,
+    expiredSearch,
+    ecFilterCaseNumber,
+    ecFilterDebtorName,
+    ecFilterPersonalId,
+    ecFilterCreditorName,
+    ecFilterMinAmount,
+    ecFilterMaxAmount,
+    ecFilterMinOverdue,
+    ecFilterMaxOverdue,
+  ]);
+
+  const handleOpenDebtorCardForExpired = (item: any) => {
+    const existing = excelDebtors.find(
+      (d: any) =>
+        (item.id && d.id === item.id) ||
+        (item.personalId && (d.personalId === item.personalId || d.taxId === item.personalId)) ||
+        (item.caseNumber && d.caseNumber === item.caseNumber)
+    );
+    if (existing) {
+      setSelectedDebtorForAnalytics(existing);
+      return;
+    }
+    if (item.rawDebtor) {
+      setSelectedDebtorForAnalytics(item.rawDebtor);
+      return;
+    }
+    const debtorObj = {
+      id: item.id || `consign-debtor-${item.personalId}`,
+      personalId: item.personalId,
+      taxId: item.personalId,
+      name: item.debtorName,
+      firstName: item.debtorName?.split(' ')[0] || '',
+      lastName: item.debtorName?.split(' ').slice(1).join(' ') || '',
+      companyName: item.debtorName,
+      entityType: (String(item.personalId || '').length === 11 ? 'PHYSICAL' : 'LEGAL'),
+      creditorName: item.creditorName,
+      currentDebt: item.amount,
+      principalAmount: item.amount,
+      amount: item.amount,
+      initialAmount: Math.round(item.amount * 1.25),
+      currentAmount: item.amount,
+      remainingAmount: item.amount,
+      caseNumber: item.caseNumber,
+      agreementNumber: item.consignNumber || `CON-${item.personalId ? String(item.personalId).slice(-4) : '2021'}`,
+      overdueDays: item.daysOverdue,
+      daysOverdue: item.daysOverdue,
+      urgencyLevel: 'CRITICAL',
+      loanStatus: 'STATUTE_BARRED',
+      status: 'ხანდაზმული კონსიგნაცია',
+      phone: '+995 599 00 00 00',
+      email: 'consign@example.ge',
+      ratingGrade: 'Grade C',
+      address: 'საქართველო, თბილისი',
+    };
+    setSelectedDebtorForAnalytics(debtorObj);
+  };
+
+  const exportExpiredConsignmentsToExcel = () => {
+    try {
+      const sourceList = selectedExpiredConsignmentIds.length > 0
+        ? filteredExpiredConsignments.filter((c: any) => selectedExpiredConsignmentIds.includes(c.id))
+        : filteredExpiredConsignments;
+
+      const rows = sourceList.map((c: any) => ({
+        'საქმის №': c.caseNumber,
+        'დებიტორი / მიმღები': c.debtorName,
+        'პ/ნ / ს/კ': c.personalId,
+        'კრედიტორი': c.creditorName,
+        'დავალიანება (GEL)': c.amount,
+        'ვადაგადაცილება (დღე)': c.daysOverdue,
+        'ხანდაზმულობის სტატუსი': c.statuteStatus === 'EXPIRED' ? 'ხანდაზმული (3+ წელი / >1095 დღე)' : 'ზღვარზე (1000-1095 დღე)',
+        'კონსიგნაციის №': c.consignNumber,
+        'კონსიგნაციის ტიპი': c.consignType,
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'ხანდაზმული კონსიგნაციები');
+      const suffix = selectedExpiredConsignmentIds.length > 0 ? `Selected_${selectedExpiredConsignmentIds.length}` : 'All';
+      XLSX.writeFile(wb, `Debitinfo_Expired_Consignments_${suffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (err) {
+      console.error('Failed to export expired consignments to excel:', err);
+    }
+  };
+
+  const handleBatchWriteOffExpired = () => {
+    if (selectedExpiredConsignmentIds.length === 0) return;
+    setActionSuccessMessage(`მონიშნული ${selectedExpiredConsignmentIds.length} ხანდაზმული კონსიგნაცია გადაიგზავნა ჩამოწერის აქტის შესადგენად!`);
+    setTimeout(() => setActionSuccessMessage(null), 5000);
+    setSelectedExpiredConsignmentIds([]);
   };
 
   const loadAnalystData = async () => {
@@ -1693,9 +2118,9 @@ export default function AnalystPage() {
         viewParam === 'creditors-registry' ||
         viewParam === 'portfolio-dispatch' ||
         viewParam === 'risk-zone' ||
-        viewParam === 'risk-zone'
+        viewParam === 'expired-consignments'
       ) {
-        setActiveView(viewParam);
+        setActiveView(viewParam as AnalystViewType);
       }
       if (params.get('registerCreditor') === '1') {
         setIsRegistrationOpen(true);
@@ -2210,7 +2635,8 @@ export default function AnalystPage() {
           v === 'debtors-registry' ||
           v === 'creditors-registry' ||
           v === 'portfolio-dispatch' ||
-          v === 'risk-zone'
+          v === 'risk-zone' ||
+          v === 'expired-consignments'
         ) {
           setActiveView(v);
         }
@@ -2220,7 +2646,8 @@ export default function AnalystPage() {
       pendingCount={pendingCreditorDebtors.length}
       debtorsCount={excelDebtors.length}
       creditorsCount={excelCreditors.length}
-      riskZoneCount={riskZoneClaims.length}
+      riskZoneCount={activeRiskZoneClaims.length}
+      expiredConsignmentsCount={expiredConsignments.length}
       isOpen={isSidebarOpen}
       onToggleOpen={toggleSidebar}
     />
@@ -5801,14 +6228,15 @@ export default function AnalystPage() {
 
           {/* 4. Filter Toolbar & Search Bar */}
           <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-            {/* Urgency Toggle Pills */}
+            {/* Urgency & Archive Toggle Pills */}
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-semibold overflow-x-auto">
               {(
                 [
-                  { id: 'ALL', label: `ყველა (${riskZoneClaims.length})` },
+                  { id: 'ALL', label: `ყველა (${activeRiskZoneClaims.length})` },
                   { id: 'CRITICAL', label: `🚨 კრიტიკული (${riskZoneSummary.criticalCount})` },
                   { id: 'HIGH', label: `⚠️ მაღალი (${riskZoneSummary.highCount})` },
                   { id: 'WARNING', label: `🟡 გაფრთხილება (${riskZoneSummary.warningCount})` },
+                  { id: 'ARCHIVE', label: `📦 არქივი (${archivedRiskZoneClaims.length})` },
                 ] as const
               ).map((lvl) => (
                 <button
@@ -5817,7 +6245,7 @@ export default function AnalystPage() {
                   onClick={() => setRiskZoneFilterLevel(lvl.id)}
                   className={`px-3 py-1.5 rounded-md transition cursor-pointer whitespace-nowrap ${
                     riskZoneFilterLevel === lvl.id
-                      ? 'bg-rose-600 text-white font-bold shadow-xs'
+                      ? (lvl.id === 'ARCHIVE' ? 'bg-slate-800 text-white font-bold shadow-xs' : 'bg-rose-600 text-white font-bold shadow-xs')
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -5854,7 +6282,8 @@ export default function AnalystPage() {
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-rose-600 text-[20px]">check_circle</span>
                 <span>
-                  მონიშნულია <strong className="font-bold text-rose-700">{selectedRiskZoneClaimIds.length}</strong> საქმე — სულ {filteredRiskClaims.length}-დან
+                  მონიშნულია <strong className="font-bold text-rose-700">{selectedRiskZoneClaimIds.length}</strong>{' '}
+                  {riskZoneFilterLevel === 'ARCHIVE' ? 'არქივირებული საქმე' : 'საქმე'} — სულ {filteredRiskClaims.length}-დან
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -5872,14 +6301,41 @@ export default function AnalystPage() {
                 >
                   მონიშვნის მოხსნა
                 </button>
-                <button
-                  type="button"
-                  onClick={handleBatchSendToLitigation}
-                  className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
-                >
-                  <span className="material-symbols-outlined text-[15px]">gavel</span>
-                  <span>სასამართლოში გადაცემა ({selectedRiskZoneClaimIds.length})</span>
-                </button>
+
+                {/* Archive / Unarchive Action Buttons */}
+                {riskZoneFilterLevel === 'ARCHIVE' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleUnarchiveRiskClaims(selectedRiskZoneClaimIds)}
+                    className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+                    title="არქივიდან აქტიურ სიაში დაბრუნება"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">unarchive</span>
+                    <span>არქივიდან ამოღება ({selectedRiskZoneClaimIds.length})</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleArchiveRiskClaims(selectedRiskZoneClaimIds)}
+                    className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+                    title="საქმის არქივში გადატანა (დამალვა აქტიური სამუშაო სიიდან)"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">archive</span>
+                    <span>არქივში გადატანა ({selectedRiskZoneClaimIds.length})</span>
+                  </button>
+                )}
+
+                {riskZoneFilterLevel !== 'ARCHIVE' && (
+                  <button
+                    type="button"
+                    onClick={handleBatchSendToLitigation}
+                    className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">gavel</span>
+                    <span>სასამართლოში გადაცემა ({selectedRiskZoneClaimIds.length})</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={exportRiskZoneToExcel}
@@ -5895,9 +6351,20 @@ export default function AnalystPage() {
           {/* 6. Filtered Table of Risk Claims */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-700">
-              <span>რისკ ზონის საქმეების რეესტრი ({filteredRiskClaims.length})</span>
+              <span className="flex items-center gap-2">
+                {riskZoneFilterLevel === 'ARCHIVE' ? (
+                  <>
+                    <span className="material-symbols-outlined text-slate-600 text-[18px]">inventory_2</span>
+                    <span>რისკ ზონის არქივირებული საქმეები ({filteredRiskClaims.length})</span>
+                  </>
+                ) : (
+                  <span>რისკ ზონის საქმეების რეესტრი ({filteredRiskClaims.length})</span>
+                )}
+              </span>
               <span className="text-[11px] text-slate-500 font-mono">
-                დარჩენილი დღეების ზრდადობით
+                {riskZoneFilterLevel === 'ARCHIVE'
+                  ? 'არქივიდან ამოღება შესაძლებელია ნებისმიერ დროს'
+                  : 'დარჩენილი დღეების ზრდადობით'}
               </span>
             </div>
             <div className="overflow-x-auto">
@@ -5937,7 +6404,9 @@ export default function AnalystPage() {
                   {filteredRiskClaims.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="text-center py-12 text-slate-400 text-xs">
-                        მითითებული ფილტრით რისკ ზონის საქმეები არ მოიძებნა.
+                        {riskZoneFilterLevel === 'ARCHIVE'
+                          ? 'არქივში საქმეები არ არის მოთავსებული.'
+                          : 'მითითებული ფილტრით რისკ ზონის საქმეები არ მოიძებნა.'}
                       </td>
                     </tr>
                   ) : (
@@ -6024,14 +6493,552 @@ export default function AnalystPage() {
                               <span className="material-symbols-outlined text-[13px] text-slate-500">folder_open</span>
                               <span>საქმე</span>
                             </button>
+
+                            {/* Archive / Restore Button */}
+                            {riskZoneFilterLevel === 'ARCHIVE' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleUnarchiveRiskClaims([claim.id])}
+                                className="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-300 transition cursor-pointer flex items-center gap-1"
+                                title="არქივიდან აქტიურ სიაში დაბრუნება"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">unarchive</span>
+                                <span>აღდგენა</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleArchiveRiskClaims([claim.id])}
+                                className="px-2 py-1 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition cursor-pointer flex items-center gap-1"
+                                title="არქივში გადატანა (დამალვა აქტიური სამუშაო სიიდან)"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">archive</span>
+                                <span>არქივში</span>
+                              </button>
+                            )}
+
+                            {riskZoneFilterLevel !== 'ARCHIVE' && (
+                              <button
+                                type="button"
+                                onClick={() => handleSendToLitigation(claim)}
+                                className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded border border-rose-300 transition cursor-pointer flex items-center gap-1"
+                                title="იურისტისთვის გადაცემა"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">gavel</span>
+                                <span>სასამართლოში</span>
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      ) : activeView === 'expired-consignments' ? (
+        <section className="space-y-6 animate-fadeIn pb-12">
+          {actionSuccessMessage && (
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-3 text-emerald-800 text-sm animate-fadeIn">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-emerald-600 text-[20px]">check_circle</span>
+                <span className="font-medium">{actionSuccessMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionSuccessMessage(null)}
+                className="text-emerald-700 hover:text-emerald-900 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+          )}
+
+          {/* 1. Header Toolbar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700 font-bold shrink-0">
+                <span className="material-symbols-outlined text-2xl">history_edu</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-bold text-slate-900 tracking-tight">
+                    ხანდაზმული კონსიგნაციები (ვადაგადაცილებული)
+                  </h1>
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                    3-წლიანი ხანდაზმულობა
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  სასაქონლო და საკონსიგნაციო დავალიანებები ხანდაზმულობის ზღვრით (1095+ დღე)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
+              {/* ჯამური ხანდაზმული თანხა */}
+              <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-amber-50/80 border border-amber-200 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-amber-700 block leading-tight">ხანდაზმული პორტფელი</span>
+                  <span className="text-sm font-extrabold font-mono text-amber-950">
+                    {expiredSummary.totalGel.toLocaleString()} ₾
+                  </span>
+                </div>
+                <span className="text-[11px] text-amber-600 font-mono border-l border-amber-200 pl-2">
+                  {expiredConsignments.length} საქმე
+                </span>
+              </div>
+
+              {/* Filters Toggle Button */}
+              <button
+                type="button"
+                onClick={() => setIsExpiredFilterPanelOpen(!isExpiredFilterPanelOpen)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
+                  isExpiredFilterPanelOpen || activeExpiredFiltersCount > 0
+                    ? 'bg-amber-50 border-amber-300 text-amber-800 shadow-xs'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">tune</span>
+                <span>ფილტრები</span>
+                {activeExpiredFiltersCount > 0 && (
+                  <span className="w-5 h-5 rounded-full bg-amber-600 text-white text-[10px] font-bold flex items-center justify-center">
+                    {activeExpiredFiltersCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Excel Export Button */}
+              <button
+                type="button"
+                onClick={exportExpiredConsignmentsToExcel}
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                title="ხანდაზმული კონსიგნაციების Excel ექსპორტი"
+              >
+                <span className="material-symbols-outlined text-[16px]">file_download</span>
+                <span>
+                  {selectedExpiredConsignmentIds.length > 0
+                    ? `მონიშნულის ექსპორტი (${selectedExpiredConsignmentIds.length})`
+                    : 'Excel ექსპორტი'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. 4 Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-rose-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-rose-700 font-bold block">⌛ ხანდაზმული (&gt;1095 დღე)</span>
+                <span className="text-2xl font-extrabold font-mono text-rose-950 mt-1 block">
+                  {expiredSummary.expired3YCount} საქმე
+                </span>
+                <span className="text-[11px] text-rose-600 font-mono mt-0.5 block">
+                  {expiredSummary.expired3YGel.toLocaleString()} ₾
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
+                <span className="material-symbols-outlined text-[22px]">timer_off</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-amber-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-amber-700 font-bold block">⚠️ ხანდაზმულობის ზღვარზე</span>
+                <span className="text-2xl font-extrabold font-mono text-amber-950 mt-1 block">
+                  {expiredSummary.atLimitCount} საქმე
+                </span>
+                <span className="text-[11px] text-amber-700 font-mono mt-0.5 block">
+                  {expiredSummary.atLimitGel.toLocaleString()} ₾
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+                <span className="material-symbols-outlined text-[22px]">hourglass_top</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-blue-700 font-bold block">📦 B2B სასაქონლო კონსიგნაცია</span>
+                <span className="text-2xl font-extrabold font-mono text-blue-950 mt-1 block">
+                  {expiredSummary.b2bCount} საქმე
+                </span>
+                <span className="text-[11px] text-blue-600 font-mono mt-0.5 block">
+                  იურიდიული პირები
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                <span className="material-symbols-outlined text-[22px]">inventory_2</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-purple-200 shadow-xs flex items-center justify-between">
+              <div>
+                <span className="text-xs text-purple-700 font-bold block">📋 ჩამოწერის აქტებისთვის</span>
+                <span className="text-2xl font-extrabold font-mono text-purple-950 mt-1 block">
+                  {expiredSummary.totalCount} საქმე
+                </span>
+                <span className="text-[11px] text-purple-600 font-mono mt-0.5 block">
+                  საბუღალტრო რეესტრი
+                </span>
+              </div>
+              <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+                <span className="material-symbols-outlined text-[22px]">assignment_turned_in</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Comprehensive Expandable Filter Panel */}
+          {isExpiredFilterPanelOpen && (
+            <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-4 animate-fadeIn">
+              <div className="flex items-center justify-between pb-2 border-b border-amber-200">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-amber-700 text-[18px]">tune</span>
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    ხანდაზმული კონსიგნაციების დეტალური ფილტრაცია
+                  </span>
+                </div>
+                {activeExpiredFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetExpiredFilters}
+                    className="text-xs text-amber-700 hover:text-amber-900 font-semibold cursor-pointer flex items-center gap-1 transition"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">refresh</span>
+                    ყველას გასუფთავება
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 text-xs">
+                {/* საქმის № */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">საქმის №:</label>
+                  <input
+                    type="text"
+                    value={ecFilterCaseNumber}
+                    onChange={(e) => setEcFilterCaseNumber(e.target.value)}
+                    placeholder="მაგ: BI-STAT-EXP-1"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600 font-mono"
+                  />
+                </div>
+
+                {/* დებიტორი / მიმღები */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დებიტორი / მიმღები:</label>
+                  <input
+                    type="text"
+                    value={ecFilterDebtorName}
+                    onChange={(e) => setEcFilterDebtorName(e.target.value)}
+                    placeholder="მაგ: ალფა ლოჯისტიკსი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600"
+                  />
+                </div>
+
+                {/* პირადი № / ს/კ */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">პირადი № ან ს/კ:</label>
+                  <input
+                    type="text"
+                    value={ecFilterPersonalId}
+                    onChange={(e) => setEcFilterPersonalId(e.target.value)}
+                    placeholder="მაგ: 204918233"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600 font-mono"
+                  />
+                </div>
+
+                {/* კრედიტორი / მომწოდებელი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">კრედიტორი / მომწოდებელი:</label>
+                  <input
+                    type="text"
+                    value={ecFilterCreditorName}
+                    onChange={(e) => setEcFilterCreditorName(e.target.value)}
+                    placeholder="მაგ: შპს ალფა ფინანსი"
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600"
+                  />
+                </div>
+
+                {/* დავალიანება (Min - Max ₾) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">დავალიანება (Min - Max ₾):</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="number"
+                      value={ecFilterMinAmount}
+                      onChange={(e) => setEcFilterMinAmount(e.target.value)}
+                      placeholder="Min ₾"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600 font-mono"
+                    />
+                    <input
+                      type="number"
+                      value={ecFilterMaxAmount}
+                      onChange={(e) => setEcFilterMaxAmount(e.target.value)}
+                      placeholder="Max ₾"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* ვადაგადაცილება (Min - Max დღე) */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">ვადაგადაცილება (დღე):</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <input
+                      type="number"
+                      value={ecFilterMinOverdue}
+                      onChange={(e) => setEcFilterMinOverdue(e.target.value)}
+                      placeholder="Min დღე"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600 font-mono"
+                    />
+                    <input
+                      type="number"
+                      value={ecFilterMaxOverdue}
+                      onChange={(e) => setEcFilterMaxOverdue(e.target.value)}
+                      placeholder="Max დღე"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* ხანდაზმულობის სტატუსი */}
+                <div>
+                  <label className="block text-slate-600 font-semibold mb-1">სტატუსი:</label>
+                  <select
+                    value={expiredFilterStatus}
+                    onChange={(e) => setExpiredFilterStatus(e.target.value as any)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-amber-600 text-xs"
+                  >
+                    <option value="ALL">ყველა სტატუსი</option>
+                    <option value="EXPIRED">⌛ ხანდაზმული (&gt;1095 დღე)</option>
+                    <option value="AT_LIMIT">⚠️ ხანდაზმულობის ზღვარზე (1000-1095 დღე)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. Toolbar & Search Bar */}
+          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg text-xs font-semibold overflow-x-auto">
+              {(
+                [
+                  { id: 'ALL', label: `ყველა (${expiredConsignments.length})` },
+                  { id: 'EXPIRED', label: `⌛ ხანდაზმული (${expiredSummary.expired3YCount})` },
+                  { id: 'AT_LIMIT', label: `⚠️ ზღვარზე (${expiredSummary.atLimitCount})` },
+                ] as const
+              ).map((lvl) => (
+                <button
+                  key={lvl.id}
+                  type="button"
+                  onClick={() => setExpiredFilterStatus(lvl.id)}
+                  className={`px-3 py-1.5 rounded-md transition cursor-pointer whitespace-nowrap ${
+                    expiredFilterStatus === lvl.id
+                      ? 'bg-amber-700 text-white font-bold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {lvl.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Quick Search */}
+            <div className="relative flex-1 max-w-md">
+              <span className="material-symbols-outlined absolute left-3 top-2 text-slate-400 text-base">search</span>
+              <input
+                type="text"
+                value={expiredSearch}
+                onChange={(e) => setExpiredSearch(e.target.value)}
+                placeholder="ძიება: საქმის N, კონსიგნაცია, დებიტორი, ს/კ, კრედიტორი..."
+                className="w-full pl-9 pr-7 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-amber-600 focus:bg-white transition"
+              />
+              {expiredSearch && (
+                <button
+                  type="button"
+                  onClick={() => setExpiredSearch('')}
+                  className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 5. Active Selection Action Banner */}
+          {selectedExpiredConsignmentIds.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs font-medium animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-700 text-[20px]">check_circle</span>
+                <span>
+                  მონიშნულია <strong className="font-bold text-amber-800">{selectedExpiredConsignmentIds.length}</strong> კონსიგნაცია — სულ {filteredExpiredConsignments.length}-დან
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedExpiredConsignmentIds(filteredExpiredConsignments.map((c) => c.id))}
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-semibold transition cursor-pointer"
+                >
+                  ყველას მონიშვნა ({filteredExpiredConsignments.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedExpiredConsignmentIds([])}
+                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold transition cursor-pointer"
+                >
+                  მონიშვნის მოხსნა
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBatchWriteOffExpired}
+                  className="px-3 py-1 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[15px]">assignment_turned_in</span>
+                  <span>ჩამოწერაზე გადაცემა ({selectedExpiredConsignmentIds.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={exportExpiredConsignmentsToExcel}
+                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1 transition cursor-pointer shadow-2xs active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-[15px]">file_download</span>
+                  <span>მონიშნულის ექსპორტი ({selectedExpiredConsignmentIds.length})</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 6. Filtered Table of Expired Consignments */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between text-xs font-semibold text-slate-700">
+              <span>ხანდაზმული კონსიგნაციების რეესტრი ({filteredExpiredConsignments.length})</span>
+              <span className="text-[11px] text-slate-500 font-mono">
+                ვადაგადაცილების კლებადობით
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100/70 text-slate-600 font-semibold border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="ყველას მონიშვნა"
+                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                        checked={
+                          filteredExpiredConsignments.length > 0 &&
+                          selectedExpiredConsignmentIds.length === filteredExpiredConsignments.length
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedExpiredConsignmentIds(filteredExpiredConsignments.map((c: any) => c.id));
+                          } else {
+                            setSelectedExpiredConsignmentIds([]);
+                          }
+                        }}
+                      />
+                    </th>
+                    <th className="py-3 px-4">საქმის N</th>
+                    <th className="py-3 px-4">დებიტორი (მიმღები)</th>
+                    <th className="py-3 px-4">პ/ნ / ს/კ</th>
+                    <th className="py-3 px-4">კრედიტორი (მომწოდებელი)</th>
+                    <th className="py-3 px-4">დავალიანება (GEL)</th>
+                    <th className="py-3 px-4">ვადაგადაცილება</th>
+                    <th className="py-3 px-4">კონსიგნაციის №</th>
+                    <th className="py-3 px-4">ხანდაზმულობის სტატუსი</th>
+                    <th className="py-3 px-4 text-right">ოპერატიული ქმედება</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredExpiredConsignments.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-center py-12 text-slate-400 text-xs">
+                        მითითებული ფილტრით ხანდაზმული კონსიგნაციები არ მოიძებნა.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredExpiredConsignments.map((item) => (
+                      <tr
+                        key={item.id}
+                        className={`transition hover:bg-amber-50/40 ${
+                          selectedExpiredConsignmentIds.includes(item.id) ? 'bg-amber-50/60' : ''
+                        }`}
+                      >
+                        <td className="py-3 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`მონიშნე ${item.caseNumber}`}
+                            className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+                            checked={selectedExpiredConsignmentIds.includes(item.id)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              setSelectedExpiredConsignmentIds((prev) =>
+                                prev.includes(item.id)
+                                  ? prev.filter((id) => id !== item.id)
+                                  : [...prev, item.id]
+                              );
+                            }}
+                          />
+                        </td>
+                        <td className="py-3 px-4 font-mono font-bold text-slate-900">
+                          {item.caseNumber}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-slate-900">
+                          {item.debtorName}
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {item.personalId}
+                        </td>
+                        <td className="py-3 px-4 text-slate-700">
+                          {item.creditorName}
+                        </td>
+                        <td className="py-3 px-4 font-extrabold font-mono text-slate-900">
+                          {item.amount.toLocaleString()} ₾
+                        </td>
+                        <td className="py-3 px-4 font-mono text-rose-700 font-bold">
+                          {item.daysOverdue} დღე
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-700 text-[11px]">
+                          {item.consignNumber}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              item.statuteStatus === 'EXPIRED'
+                                ? 'bg-rose-700 text-white'
+                                : 'bg-amber-500 text-white'
+                            }`}
+                          >
+                            {item.statuteStatus === 'EXPIRED' ? '⌛ ხანდაზმული (>3 წელი)' : '⚠️ ზღვარზე'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Mandatory "საქმე" button */}
                             <button
                               type="button"
-                              onClick={() => handleSendToLitigation(claim)}
-                              className="px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded border border-rose-300 transition cursor-pointer flex items-center gap-1"
-                              title="იურისტისთვის გადაცემა"
+                              onClick={() => handleOpenDebtorCardForExpired(item)}
+                              className="px-2.5 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                              title="საქმის სრული ბარათის ნახვა"
                             >
-                              <span className="material-symbols-outlined text-[13px]">gavel</span>
-                              <span>სასამართლოში</span>
+                              <span className="material-symbols-outlined text-[13px] text-slate-500">folder_open</span>
+                              <span>საქმე</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActionSuccessMessage(`საქმე #${item.caseNumber} გადაცემულია ჩამოწერის აქტის მოსამზადებლად!`);
+                                setTimeout(() => setActionSuccessMessage(null), 5000);
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 rounded border border-purple-300 transition cursor-pointer flex items-center gap-1"
+                              title="ჩამოწერის აქტის მომზადება"
+                            >
+                              <span className="material-symbols-outlined text-[13px]">assignment_turned_in</span>
+                              <span>ჩამოწერა</span>
                             </button>
                           </div>
                         </td>

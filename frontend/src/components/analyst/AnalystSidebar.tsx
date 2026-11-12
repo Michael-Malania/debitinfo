@@ -12,6 +12,7 @@ export type AnalystViewType =
   | 'creditors-registry'
   | 'portfolio-dispatch'
   | 'risk-zone'
+  | 'expired-consignments'
   | 'staff'
   | 'written-off';
 
@@ -24,6 +25,7 @@ interface AnalystSidebarProps {
   debtorsCount?: number;
   creditorsCount?: number;
   riskZoneCount?: number;
+  expiredConsignmentsCount?: number;
   isOpen?: boolean;
   onToggleOpen?: () => void;
 }
@@ -39,6 +41,7 @@ export default function AnalystSidebar({
   debtorsCount: propDebtorsCount,
   creditorsCount: propCreditorsCount,
   riskZoneCount: propRiskZoneCount,
+  expiredConsignmentsCount: propExpiredConsignmentsCount,
   isOpen: controlledIsOpen,
   onToggleOpen,
 }: AnalystSidebarProps) {
@@ -51,11 +54,13 @@ export default function AnalystSidebar({
     debtors: number;
     creditors: number;
     riskZone: number;
+    expiredConsignments: number;
   }>({
     pending: 0,
     debtors: 0,
     creditors: 0,
     riskZone: 0,
+    expiredConsignments: 0,
   });
 
   // Sync open/collapsed state with localStorage so it persists across pages
@@ -92,7 +97,8 @@ export default function AnalystSidebar({
       propPendingCount !== undefined &&
       propDebtorsCount !== undefined &&
       propCreditorsCount !== undefined &&
-      propRiskZoneCount !== undefined
+      propRiskZoneCount !== undefined &&
+      propExpiredConsignmentsCount !== undefined
     ) {
       return;
     }
@@ -111,12 +117,17 @@ export default function AnalystSidebar({
           const od = Number(d.overdueDays || d.daysOverdue || 0);
           return od > 700 || d.claimStatus === 'IN_LITIGATION';
         });
+        const expiredConsignments = debtors.filter((d: any) => {
+          const od = Number(d.overdueDays || d.daysOverdue || 0);
+          return od >= 1000;
+        });
 
         setFetchedCounts({
           pending: pRes.status === 'fulfilled' && Array.isArray(pRes.value) ? pRes.value.length : 0,
           debtors: debtors.length,
           creditors: cRes.status === 'fulfilled' && Array.isArray(cRes.value) ? cRes.value.length : 0,
           riskZone: Math.max(3, riskItems.length),
+          expiredConsignments: Math.max(8, expiredConsignments.length),
         });
       } catch {
         // ignore
@@ -125,12 +136,13 @@ export default function AnalystSidebar({
     return () => {
       mounted = false;
     };
-  }, [propPendingCount, propDebtorsCount, propCreditorsCount, propRiskZoneCount, pathname]);
+  }, [propPendingCount, propDebtorsCount, propCreditorsCount, propRiskZoneCount, propExpiredConsignmentsCount, pathname]);
 
   const pendingCount = propPendingCount !== undefined ? propPendingCount : fetchedCounts.pending;
   const debtorsCount = propDebtorsCount !== undefined ? propDebtorsCount : fetchedCounts.debtors;
   const creditorsCount = propCreditorsCount !== undefined ? propCreditorsCount : fetchedCounts.creditors;
   const riskZoneCount = propRiskZoneCount !== undefined ? propRiskZoneCount : fetchedCounts.riskZone;
+  const expiredConsignmentsCount = propExpiredConsignmentsCount !== undefined ? propExpiredConsignmentsCount : fetchedCounts.expiredConsignments;
 
   const handleNavClick = (view: AnalystViewType) => {
     if (view === 'staff') {
@@ -229,6 +241,25 @@ export default function AnalystSidebar({
             {riskZoneCount > 0 && (
               <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-mono font-bold flex items-center justify-center shadow-xs border border-white">
                 {riskZoneCount}
+              </span>
+            )}
+          </button>
+
+          {/* Expired Consignments (ხანდაზმული კონსიგნაციები) */}
+          <button
+            type="button"
+            onClick={() => handleNavClick('expired-consignments')}
+            title={`ხანდაზმული კონსიგნაციები (${expiredConsignmentsCount})`}
+            className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
+              activeView === 'expired-consignments'
+                ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/25 ring-2 ring-amber-600/20'
+                : 'text-amber-700 hover:bg-amber-50'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[20px]">history_edu</span>
+            {expiredConsignmentsCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-amber-600 text-white text-[10px] font-mono font-bold flex items-center justify-center shadow-xs border border-white">
+                {expiredConsignmentsCount}
               </span>
             )}
           </button>
@@ -420,6 +451,37 @@ export default function AnalystSidebar({
                 }`}
               >
                 {riskZoneCount}
+              </span>
+            </button>
+
+            {/* 4. Expired Consignments (ხანდაზმული კონსიგნაციები) */}
+            <button
+              type="button"
+              onClick={() => handleNavClick('expired-consignments')}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all font-body-md font-semibold border shadow-2xs cursor-pointer text-left ${
+                activeView === 'expired-consignments'
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                  : 'bg-gradient-to-r from-amber-50 to-orange-50/60 text-amber-950 hover:from-amber-100 hover:to-orange-100 border-amber-200/80'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <span
+                  className={`material-symbols-outlined text-[20px] ${
+                    activeView === 'expired-consignments' ? 'text-white' : 'text-amber-700'
+                  }`}
+                >
+                  history_edu
+                </span>
+                <span>ხანდაზმული კონსიგნაციები</span>
+              </div>
+              <span
+                className={`px-1.5 py-0.2 rounded text-[10px] font-mono font-bold ${
+                  activeView === 'expired-consignments'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-amber-600 text-white'
+                }`}
+              >
+                {expiredConsignmentsCount}
               </span>
             </button>
 
