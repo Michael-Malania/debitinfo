@@ -4506,7 +4506,7 @@ export default function AnalystPage() {
                 ({debtorsEntityType === 'PHYSICAL' ? 'ფიზიკური პირი' : 'იურიდიული პირი'}) — სულ {filteredDebtors.length}-დან
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setSelectedDebtorIds(filteredDebtors.map((d) => d.id))}
@@ -4521,6 +4521,17 @@ export default function AnalystPage() {
               >
                 მონიშვნის მოხსნა
               </button>
+              {selectedDebtorIds.length === 1 && selectedDebtorsList.length === 1 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDebtorForAnalytics(selectedDebtorsList[0])}
+                  className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs active:scale-95"
+                  title="სრული ანალიტიკა და საქმის ბარათი"
+                >
+                  <span className="material-symbols-outlined text-[16px]">badge</span>
+                  <span>საქმის ბარათი</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => openChartStudioForDebtors(selectedDebtorsList)}
@@ -4593,14 +4604,12 @@ export default function AnalystPage() {
                   <th className="py-3 px-4">კრედიტორი</th>
                   <th className="py-3 px-4">სტატუსი</th>
                   <th className="py-3 px-4">რეიტინგი</th>
-                  <th className="py-3 px-4">გადახდის გრაფიკი</th>
-                  <th className="py-3 px-4 text-right">ანალიტიკა / საქმე</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                 {filteredDebtors.length === 0 ? (
                   <tr>
-                    <td colSpan={14} className="py-12 text-center text-text-muted">
+                    <td colSpan={13} className="py-12 text-center text-text-muted">
                       <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">person_off</span>
                       <span>ფიზიკური პირები მითითებული ფილტრებით ვერ მოიძებნა</span>
                       {activeDebtorsFiltersCount > 0 && (
@@ -4729,27 +4738,6 @@ export default function AnalystPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openChartStudioForDebtors([d])}
-                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold flex items-center transition cursor-pointer"
-                            title="ამ დებიტორის გრაფიკის აგება"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">bar_chart</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDebtorForAnalytics(d)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer hover:shadow-xs active:scale-95"
-                            title="სრული ანალიტიკა და საქმის ბარათი"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">badge</span>
-                            <span>საქმის ბარათი</span>
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   ))
                 )}
@@ -4782,14 +4770,12 @@ export default function AnalystPage() {
                   <th className="py-3 px-4">კრედიტორი</th>
                   <th className="py-3 px-4">სტატუსი</th>
                   <th className="py-3 px-4">რეიტინგი</th>
-                  <th className="py-3 px-4">გადახდის გრაფიკი</th>
-                  <th className="py-3 px-4 text-right">ანალიტიკა / საქმე</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                 {filteredDebtors.length === 0 ? (
                   <tr>
-                    <td colSpan={15} className="py-12 text-center text-text-muted">
+                    <td colSpan={14} className="py-12 text-center text-text-muted">
                       <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">domain_disabled</span>
                       <span>იურიდიული პირები მითითებული ფილტრებით ვერ მოიძებნა</span>
                       {activeDebtorsFiltersCount > 0 && (
@@ -4948,27 +4934,6 @@ export default function AnalystPage() {
                             {d.ratingGrade || 'Grade C'}
                           </span>
                         )}
-                      </td>
-                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openChartStudioForDebtors([d])}
-                            className="p-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-semibold flex items-center transition cursor-pointer"
-                            title="ამ დებიტორის გრაფიკის აგება"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">bar_chart</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedDebtorForAnalytics(d)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-all shadow-2xs cursor-pointer hover:shadow-xs active:scale-95"
-                            title="სრული ანალიტიკა და საქმის ბარათი"
-                          >
-                            <span className="material-symbols-outlined text-[15px]">badge</span>
-                            <span>საქმის ბარათი</span>
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))
@@ -8361,14 +8326,6 @@ export default function AnalystPage() {
                           +995 32 2 100 200 (შიდა: 104)
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => alert(`დავალიანების საქმეზე #${caseNumber} იხსნება ოფიციალური საარბიტრაჟო დავის პროცესი.`)}
-                        className="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">gavel</span>
-                        <span>დავის გახსნა</span>
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -8487,23 +8444,6 @@ export default function AnalystPage() {
                       <div className="p-2 rounded-lg bg-slate-800/60">
                         <span className="text-slate-400 block">პროგნოზი:</span>
                         <strong className="text-blue-400 font-mono text-xs">ზრდადი (+45 ქულა)</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Recommendations */}
-                  <div className="p-3.5 rounded-lg bg-slate-800/70 border border-slate-700/60 text-xs space-y-2">
-                    <p className="text-slate-200 leading-relaxed">
-                      თქვენი მიმდინარე გადახდების დისციპლინა დამაკმაყოფილებელია. გრაფიკის დაცვის შემთხვევაში თქვენი რეიტინგი გაიზრდება Grade A-მდე, რაც გაგიხსნით გამარტივებულ საბანკო ლიმიტებს, მისცემს debitinfo.ge-ის საშუალებას გასცეს თქვენზე დადებითი რეკომენდაცია და სრულად მოიხსნას შეზღუდვები საჯარო რეესტრში.
-                    </p>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-700 text-[11px]">
-                      <div className="flex items-center gap-1.5 text-emerald-400">
-                        <span className="material-symbols-outlined text-sm">event_available</span>
-                        <span>მომდევნო 2 შენატანი დროულად: ავტომატურად გაზრდის ქულას +45 ერთეულით Grade A-მდე.</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-blue-300">
-                        <span className="material-symbols-outlined text-sm">verified</span>
-                        <span>სანიმუშო გადამხდელის სტატუსის მინიჭება</span>
                       </div>
                     </div>
                   </div>
