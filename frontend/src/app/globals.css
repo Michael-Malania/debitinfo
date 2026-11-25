@@ -63,6 +63,9 @@
   --spacing-space-lg: 24px;
   --spacing-space-xl: 32px;
   --spacing-space-2xl: 48px;
+
+  --font-sans: 'Noto Sans Georgian', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
 :root {

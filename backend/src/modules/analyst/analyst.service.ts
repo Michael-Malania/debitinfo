@@ -583,8 +583,15 @@ export class AnalystService implements OnModuleInit {
       },
       select: {
         id: true,
+        caseNumber: true,
         debtorId: true,
         creditorId: true,
+        creditor: {
+          select: {
+            personalId: true,
+            companyProfile: { select: { taxId: true } },
+          },
+        },
         agreementNumber: true,
         initialAmount: true,
         remainingAmount: true,
@@ -681,6 +688,11 @@ export class AnalystService implements OnModuleInit {
       return {
         ...d,
         claimId: claim?.id || null,
+        caseNumber: claim?.caseNumber || null,
+        creditorTaxId:
+          claim?.creditor?.companyProfile?.taxId ||
+          claim?.creditor?.personalId ||
+          null,
         firstName,
         lastName,
         initialAmount,
@@ -2801,7 +2813,7 @@ export class AnalystService implements OnModuleInit {
   private getDefaultDepartment(role: UserRole): string {
     switch (role) {
       case UserRole.ADMIN:
-        return 'IT & ადმინისტრაცია';
+        return 'HR & მენეჯმენტი';
       case UserRole.ANALYST:
         return 'რისკ-ანალიტიკა & BI';
       case UserRole.OPERATOR:
@@ -2882,6 +2894,48 @@ export class AnalystService implements OnModuleInit {
             role: true,
           },
         },
+        claim: {
+          select: {
+            id: true,
+            caseNumber: true,
+            agreementNumber: true,
+            status: true,
+            initialAmount: true,
+            remainingAmount: true,
+            daysOverdue: true,
+          },
+        },
+        debtorUser: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            personalId: true,
+            entityType: true,
+            individualProfile: {
+              select: { firstName: true, lastName: true, actualAddress: true, legalAddress: true },
+            },
+            companyProfile: {
+              select: { companyName: true, taxId: true, actualAddress: true, legalAddress: true },
+            },
+          },
+        },
+        stagedItem: {
+          select: {
+            id: true,
+            name: true,
+            personalId: true,
+            taxId: true,
+            phone: true,
+            email: true,
+            legalAddress: true,
+            actualAddress: true,
+            agreementNumber: true,
+            creditorName: true,
+            amount: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -2932,6 +2986,186 @@ export class AnalystService implements OnModuleInit {
   }
 
   /**
+   * Search active debtors across StagedRegistryItem & DebtClaim for Write-off auto-fill
+   */
+  async searchDebtorsForWriteOff(q?: string) {
+    const query = q?.trim() || '';
+
+    const [excelDebtors, claims] = await Promise.all([
+      this.getExcelDebtors(query ? { search: query } : undefined),
+      this.prisma.debtClaim.findMany({
+        where: {
+          status: { not: ClaimStatus.SETTLED },
+          ...(query
+            ? {
+                OR: [
+                  { caseNumber: { contains: query, mode: 'insensitive' } },
+                  { agreementNumber: { contains: query, mode: 'insensitive' } },
+                  { debtor: { personalId: { contains: query, mode: 'insensitive' } } },
+                  {
+                    debtor: {
+                      individualProfile: {
+                        OR: [
+                          { firstName: { contains: query, mode: 'insensitive' } },
+                          { lastName: { contains: query, mode: 'insensitive' } },
+                        ],
+                      },
+                    },
+                  },
+                  {
+                    debtor: {
+                      companyProfile: {
+                        OR: [
+                          { companyName: { contains: query, mode: 'insensitive' } },
+                          { taxId: { contains: query, mode: 'insensitive' } },
+                        ],
+                      },
+                    },
+                  },
+                  {
+                    creditor: {
+                      companyProfile: {
+                        companyName: { contains: query, mode: 'insensitive' },
+                      },
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+        include: {
+          debtor: {
+            select: {
+              id: true,
+              personalId: true,
+              entityType: true,
+              phone: true,
+              email: true,
+              individualProfile: {
+                select: { firstName: true, lastName: true, legalAddress: true, actualAddress: true },
+              },
+              companyProfile: {
+                select: { companyName: true, taxId: true, legalAddress: true, actualAddress: true },
+              },
+            },
+          },
+          creditor: {
+            select: {
+              id: true,
+              personalId: true,
+              companyProfile: { select: { companyName: true, taxId: true } },
+              individualProfile: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      }),
+    ]);
+
+    const candidates: any[] = [];
+    const seenKeys = new Set<string>();
+
+    // 1. Add staged registry items (already enriched with claimId, caseNumber, matchedUser)
+    for (const d of excelDebtors as any[]) {
+      const amt = Number(d.currentAmount ?? d.remainingAmount ?? d.amount ?? 0);
+      if (amt <= 0 && d.status === 'CLOSED') continue;
+      const pin = String(d.taxId || d.personalId || '').trim();
+      if (!pin) continue;
+      const cred = String(d.creditorName || '').trim();
+      const key = d.claimId ? `claim:${d.claimId}` : `pin:${pin}::${cred}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+
+      candidates.push({
+        id: d.claimId || d.id,
+        stagedItemId: d.id,
+        debtorUserId: d.matchedUser?.id || d.matchedUserId || null,
+        claimId: d.claimId || null,
+        caseNumber: d.caseNumber || null,
+        debtorName:
+          d.name ||
+          `${d.firstName || ''} ${d.lastName || ''}`.trim() ||
+          'დებიტორი',
+        firstName: d.firstName || '',
+        lastName: d.lastName || '',
+        personalId: pin,
+        entityType:
+          d.entityType === 'LEGAL' || pin.length === 9 ? 'LEGAL' : 'PHYSICAL',
+        creditorName: cred || 'კრედიტორი ორგანიზაცია',
+        creditorTaxId: d.creditorTaxId || null,
+        originalAmount: Number(d.initialAmount ?? d.amount ?? amt),
+        remainingAmount: amt,
+        phone: d.phone || null,
+        email: d.email || null,
+        legalAddress: d.legalAddress || null,
+        actualAddress: d.actualAddress || null,
+        agreementNumber: d.agreementNumber || null,
+        daysOverdue: Number(d.overdueDays || 0),
+        status: d.claimStatusText || d.status || 'აქტიური',
+      });
+    }
+
+    // 2. Add direct DebtClaim records not already represented
+    for (const c of claims) {
+      const key = `claim:${c.id}`;
+      if (seenKeys.has(key)) continue;
+
+      const pin =
+        c.debtor?.companyProfile?.taxId || c.debtor?.personalId || '';
+      const debtorName = c.debtor?.companyProfile?.companyName
+        ? c.debtor.companyProfile.companyName
+        : `${c.debtor?.individualProfile?.firstName || ''} ${c.debtor?.individualProfile?.lastName || ''}`.trim() ||
+          pin;
+      const creditorName =
+        c.creditor?.companyProfile?.companyName ||
+        `${c.creditor?.individualProfile?.firstName || ''} ${c.creditor?.individualProfile?.lastName || ''}`.trim() ||
+        'კრედიტორი';
+
+      const pinCredKey = `pin:${pin}::${creditorName}`;
+      if (seenKeys.has(pinCredKey)) continue;
+      seenKeys.add(key);
+      seenKeys.add(pinCredKey);
+
+      candidates.push({
+        id: c.id,
+        stagedItemId: null,
+        debtorUserId: c.debtorId,
+        claimId: c.id,
+        caseNumber: c.caseNumber,
+        debtorName,
+        firstName: c.debtor?.individualProfile?.firstName || '',
+        lastName: c.debtor?.individualProfile?.lastName || '',
+        personalId: pin,
+        entityType:
+          c.debtor?.entityType === EntityType.LEGAL || pin.length === 9
+            ? 'LEGAL'
+            : 'PHYSICAL',
+        creditorName,
+        creditorTaxId:
+          c.creditor?.companyProfile?.taxId || c.creditor?.personalId || null,
+        originalAmount: Number(c.initialAmount || c.remainingAmount || 0),
+        remainingAmount: Number(c.remainingAmount || 0),
+        phone: c.debtor?.phone || null,
+        email: c.debtor?.email || null,
+        legalAddress:
+          c.debtor?.companyProfile?.legalAddress ||
+          c.debtor?.individualProfile?.legalAddress ||
+          null,
+        actualAddress:
+          c.debtor?.companyProfile?.actualAddress ||
+          c.debtor?.individualProfile?.actualAddress ||
+          null,
+        agreementNumber: c.agreementNumber || null,
+        daysOverdue: Number(c.daysOverdue || 0),
+        status: c.status,
+      });
+    }
+
+    return candidates.slice(0, 25);
+  }
+
+  /**
    * Create a new Written Off Debt Act
    */
   async createWrittenOffDebt(
@@ -2943,6 +3177,8 @@ export class AnalystService implements OnModuleInit {
       creditorName: string;
       creditorTaxId?: string;
       claimId?: string;
+      debtorUserId?: string;
+      stagedItemId?: string;
       originalAmount: number;
       writtenOffAmount: number;
       currency?: string;
@@ -2965,19 +3201,85 @@ export class AnalystService implements OnModuleInit {
       throw new BadRequestException('ჩამოსაწერი თანხა უნდა აღემატებოდეს 0-ს');
     }
 
+    const cleanPin = dto.personalId.trim();
+
+    // 1. Resolve relational links BEFORE creating WrittenOffDebt
+    let debtorUser = dto.debtorUserId
+      ? await this.prisma.user.findUnique({ where: { id: dto.debtorUserId } })
+      : null;
+
+    if (!debtorUser) {
+      debtorUser = await this.prisma.user.findUnique({
+        where: { personalId: cleanPin },
+      });
+    }
+
+    let claim = dto.claimId
+      ? await this.prisma.debtClaim.findUnique({ where: { id: dto.claimId } })
+      : null;
+
+    if (!claim && dto.caseNumber) {
+      claim = await this.prisma.debtClaim.findUnique({
+        where: { caseNumber: dto.caseNumber.trim() },
+      });
+    }
+
+    if (!claim && debtorUser) {
+      claim = await this.prisma.debtClaim.findFirst({
+        where: {
+          debtorId: debtorUser.id,
+          status: { not: ClaimStatus.SETTLED },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!claim) {
+        claim = await this.prisma.debtClaim.findFirst({
+          where: { debtorId: debtorUser.id },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
+    }
+
+    if (!debtorUser && claim?.debtorId) {
+      debtorUser = await this.prisma.user.findUnique({
+        where: { id: claim.debtorId },
+      });
+    }
+
+    let stagedItem = dto.stagedItemId
+      ? await this.prisma.stagedRegistryItem.findUnique({
+          where: { id: dto.stagedItemId },
+        })
+      : null;
+
+    if (!stagedItem) {
+      stagedItem = await this.prisma.stagedRegistryItem.findFirst({
+        where: {
+          type: 'DEBTOR',
+          OR: [{ personalId: cleanPin }, { taxId: cleanPin }],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
     const currentYear = new Date().getFullYear();
     const actNumber = dto.actNumber || `ACT-WO-${currentYear}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const caseNumber = dto.caseNumber || `WO-${Date.now().toString().slice(-6)}`;
+    const caseNumber =
+      claim?.caseNumber ||
+      dto.caseNumber ||
+      `WO-${Date.now().toString().slice(-6)}`;
 
     const record = await this.prisma.writtenOffDebt.create({
       data: {
         caseNumber,
         debtorName: dto.debtorName.trim(),
-        personalId: dto.personalId.trim(),
-        entityType: dto.entityType || (dto.personalId.length === 9 ? 'LEGAL' : 'PHYSICAL'),
+        personalId: cleanPin,
+        entityType: dto.entityType || (cleanPin.length === 9 ? 'LEGAL' : 'PHYSICAL'),
         creditorName: dto.creditorName.trim(),
         creditorTaxId: dto.creditorTaxId?.trim() || null,
-        claimId: dto.claimId || null,
+        claimId: claim?.id || dto.claimId || null,
+        debtorUserId: debtorUser?.id || dto.debtorUserId || null,
+        stagedItemId: stagedItem?.id || dto.stagedItemId || null,
         originalAmount: Number(dto.originalAmount) || Number(dto.writtenOffAmount),
         writtenOffAmount: Number(dto.writtenOffAmount),
         currency: dto.currency || 'GEL',
@@ -2992,25 +3294,39 @@ export class AnalystService implements OnModuleInit {
         writtenOffByName: dto.writtenOffByName || 'უფროსი ფინანსური ანალიტიკოსი',
         writtenOffDate: dto.writtenOffDate ? new Date(dto.writtenOffDate) : new Date(),
       },
+      include: {
+        claim: {
+          select: {
+            id: true,
+            caseNumber: true,
+            agreementNumber: true,
+            status: true,
+            initialAmount: true,
+            remainingAmount: true,
+          },
+        },
+        debtorUser: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            personalId: true,
+            entityType: true,
+          },
+        },
+        stagedItem: {
+          select: {
+            id: true,
+            name: true,
+            personalId: true,
+            taxId: true,
+            agreementNumber: true,
+          },
+        },
+      },
     });
 
     try {
-      let claim = dto.claimId
-        ? await this.prisma.debtClaim.findUnique({ where: { id: dto.claimId } })
-        : null;
-
-      if (!claim) {
-        const debtorUser = await this.prisma.user.findUnique({
-          where: { personalId: dto.personalId.trim() },
-        });
-        if (debtorUser) {
-          claim = await this.prisma.debtClaim.findFirst({
-            where: { debtorId: debtorUser.id },
-            orderBy: { createdAt: 'desc' },
-          });
-        }
-      }
-
       if (claim) {
         const newRemaining = Math.max(0, Number(claim.remainingAmount) - Number(dto.writtenOffAmount));
         await this.prisma.debtClaim.update({
@@ -3020,19 +3336,20 @@ export class AnalystService implements OnModuleInit {
             status: newRemaining === 0 ? ClaimStatus.SETTLED : claim.status,
           },
         });
-      }
 
-      // Synchronize StagedRegistryItem balance and status
-      const stagedItem = await this.prisma.stagedRegistryItem.findFirst({
-        where: {
-          type: 'DEBTOR',
-          OR: [
-            { personalId: dto.personalId.trim() },
-            { taxId: dto.personalId.trim() },
-          ],
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+        if (userId) {
+          await this.prisma.caseTimelineEvent.create({
+            data: {
+              claimId: claim.id,
+              authorId: userId,
+              department: 'ANALYST',
+              authorRoleTitle: dto.writtenOffByName || 'უფროსი ფინანსური ანალიტიკოსი',
+              actionType: 'STATUS_CHANGE',
+              description: `გაფორმდა ვალის ჩამოწერის აქტი № ${actNumber} (${Number(dto.writtenOffAmount).toLocaleString('ka-GE')} ₾). მიზეზი: ${dto.reasonCategory}`,
+            },
+          });
+        }
+      }
 
       if (stagedItem) {
         const newStagedAmt = claim

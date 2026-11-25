@@ -195,6 +195,11 @@ export class AnalystController {
   // WRITTEN-OFF DEBTS REGISTRY (ჩამოწერილი ვალების რეესტრი)
   // ==========================================================================
 
+  @Get('written-off-debts/search-debtors')
+  async searchDebtorsForWriteOff(@Query('q') q?: string) {
+    return await this.analystService.searchDebtorsForWriteOff(q);
+  }
+
   @Get('written-off-debts')
   async getWrittenOffDebts(
     @Query('search') search?: string,

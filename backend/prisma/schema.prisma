@@ -132,9 +132,10 @@ model User {
   assignedLegalCases LegalCase[]         @relation("LawyerLegalCases")
   timelineEvents     CaseTimelineEvent[] @relation("UserTimelineEvents")
   contactPersons     ContactPerson[]
-  staffRecommendations StaffRecommendation[] @relation("StaffReceivedRecommendations")
-  givenRecommendations StaffRecommendation[] @relation("AnalystGivenRecommendations")
-  writtenOffDebts      WrittenOffDebt[]     @relation("WrittenOffDebtsByUser")
+  staffRecommendations   StaffRecommendation[] @relation("StaffReceivedRecommendations")
+  givenRecommendations   StaffRecommendation[] @relation("AnalystGivenRecommendations")
+  writtenOffDebts        WrittenOffDebt[]      @relation("WrittenOffDebtsByUser")
+  writtenOffDebtsAsDebtor WrittenOffDebt[]     @relation("WrittenOffDebtsDebtorUser")
 
   @@index([personalId])
   @@index([email])
@@ -663,6 +664,7 @@ model StagedRegistryItem {
   sourceFile          String?   // Excel source sheet name (e.g. "debtors_registry.xlsx")
   matchedUserId       String?   // User ID if registered on platform
   supportingDocuments Json?     // Verified proof documents attached by analyst or creditor
+  writtenOffDebts     WrittenOffDebt[]
 
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -698,8 +700,12 @@ model WrittenOffDebt {
   creditorName        String
   creditorTaxId       String?
   claimId             String?
-  claim               DebtClaim? @relation(fields: [claimId], references: [id], onDelete: SetNull)
-  originalAmount      Decimal    @db.Decimal(12, 2)
+  claim               DebtClaim?          @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  debtorUserId        String?
+  debtorUser          User?               @relation("WrittenOffDebtsDebtorUser", fields: [debtorUserId], references: [id], onDelete: SetNull)
+  stagedItemId        String?
+  stagedItem          StagedRegistryItem? @relation(fields: [stagedItemId], references: [id], onDelete: SetNull)
+  originalAmount      Decimal             @db.Decimal(12, 2)
   writtenOffAmount    Decimal    @db.Decimal(12, 2)
   currency            String     @default("GEL")
   reasonCategory      String     // SOCIAL_VULNERABLE, DISABILITY_HEALTH, INSOLVENCY_BANKRUPTCY, STATUTE_EXPIRED, UNCOLLECTIBLE_NAPE, DECEASED, CREDITOR_FORGIVENESS, OTHER
@@ -720,5 +726,8 @@ model WrittenOffDebt {
   @@index([reasonCategory])
   @@index([actNumber])
   @@index([writtenOffDate])
+  @@index([claimId])
+  @@index([debtorUserId])
+  @@index([stagedItemId])
 }
 

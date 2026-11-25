@@ -1013,6 +1013,11 @@ export const analystBackendService = {
   // --------------------------------------------------
   // WRITTEN-OFF DEBTS REGISTRY (ჩამოწერილი ვალების რეესტრი)
   // --------------------------------------------------
+  async searchDebtorsForWriteOff(q?: string): Promise<any[]> {
+    const qs = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : '';
+    return await apiFetch<any[]>(`/api/v1/analyst/written-off-debts/search-debtors${qs}`);
+  },
+
   async getWrittenOffDebts(filters?: {
     search?: string;
     category?: string;
@@ -1038,6 +1043,8 @@ export const analystBackendService = {
     creditorName: string;
     creditorTaxId?: string;
     claimId?: string;
+    debtorUserId?: string;
+    stagedItemId?: string;
     originalAmount: number;
     writtenOffAmount: number;
     currency?: string;

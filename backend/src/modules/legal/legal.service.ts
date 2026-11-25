@@ -353,6 +353,12 @@ export class LegalService {
     const legalAddress = company?.legalAddress || ind?.legalAddress || '';
     const actualAddress = company?.actualAddress || ind?.actualAddress || '';
     const directorName = company ? `${company.directorName} ${company.directorLastName}` : '';
+    const creditor = claim?.creditor;
+    const creditorName =
+      creditor?.companyProfile?.companyName ||
+      (creditor?.individualProfile
+        ? `${creditor.individualProfile.firstName} ${creditor.individualProfile.lastName}`.trim()
+        : creditor?.email || 'სს ლიდერ კრედიტი');
 
     return {
       id: c.id,
@@ -360,6 +366,9 @@ export class LegalService {
       claimId: c.claimId,
       claimCaseNumber: claim?.caseNumber,
       agreementNumber: claim?.agreementNumber,
+      creditorName,
+      debtOriginationDate: claim?.debtOriginationDate || null,
+      claimStatus: claim?.status || 'ACTIVE',
       stage: c.stage,
       priority: c.priority,
       status: c.status,
@@ -384,11 +393,16 @@ export class LegalService {
       debtor: {
         id: debtor?.id,
         name: debtorName,
+        firstName: ind?.firstName || (debtorName.trim().split(/\s+/)[0] || ''),
+        lastName: ind?.lastName || (debtorName.trim().split(/\s+/).slice(1).join(' ') || ''),
         identification,
         isCompany,
         legalAddress,
         actualAddress,
         directorName,
+        directorPin: company?.directorPin || '',
+        directorPhone: company?.directorPhone || '',
+        directorEmail: company?.directorEmail || '',
         phone: debtor?.phone,
         email: debtor?.email,
         hasMortgage: company?.hasMortgage || false,

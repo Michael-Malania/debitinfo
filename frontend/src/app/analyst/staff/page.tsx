@@ -235,8 +235,8 @@ export default function StaffRegistryPage() {
         };
       case 'FIELD_OFFICER':
         return {
-          title: 'საველე მონიტორინგი (ვიზიტორები)',
-          badge: 'Field Inspections',
+          title: 'ვიზიტორები',
+          badge: '',
           color: 'emerald',
           icon: 'directions_walk',
         };
@@ -257,12 +257,20 @@ export default function StaffRegistryPage() {
       case 'ADMIN':
       default:
         return {
-          title: 'ადმინისტრაცია & მენეჯმენტი',
-          badge: 'IT & Security',
+          title: 'HR & ადმინისტრაცია',
+          badge: 'HR & Management',
           color: 'slate',
           icon: 'admin_panel_settings',
         };
     }
+  };
+
+  const getStaffDisplayName = (staff: any) => {
+    if (!staff) return '';
+    if (staff.role === 'ADMIN' && staff.fullName === 'სისტემური ადმინისტრატორი') {
+      return 'HR მენეჯერი (ადმინისტრაცია)';
+    }
+    return staff.fullName || '';
   };
 
   const getRatingBadge = (rating: string) => {
@@ -460,7 +468,9 @@ export default function StaffRegistryPage() {
                               {members.length}
                             </span>
                           </div>
-                          <span className="text-[10px] text-slate-400 block">{meta.badge}</span>
+                          {meta.badge && (
+                            <span className="text-[10px] text-slate-400 block">{meta.badge}</span>
+                          )}
                         </div>
                       </div>
 
@@ -506,7 +516,7 @@ export default function StaffRegistryPage() {
                                   <div className="truncate">
                                     <div className="flex items-center gap-1.5">
                                       <span className={`text-xs font-bold truncate ${isSelected ? 'text-white' : 'text-slate-900'}`}>
-                                        {member.fullName}
+                                        {getStaffDisplayName(member)}
                                       </span>
                                       <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="აქტიური" />
                                     </div>
@@ -851,13 +861,13 @@ export default function StaffRegistryPage() {
                       </div>
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <h2 className="text-lg font-bold text-slate-900">{selectedStaff.fullName}</h2>
+                          <h2 className="text-lg font-bold text-slate-900">{getStaffDisplayName(selectedStaff)}</h2>
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             სტატუსი: აქტიური
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 font-medium">
-                          {selectedStaff.department} • როლი: <strong>{getRoleMeta(selectedStaff.role).title}</strong>
+                          {selectedStaff.role === 'ADMIN' ? 'HR & Management' : selectedStaff.department} • როლი: <strong>{getRoleMeta(selectedStaff.role).title}</strong>
                         </p>
                         <div className="flex items-center gap-3 pt-1 text-[11px] text-slate-400">
                           <span>ელფოსტა: <strong className="text-slate-600">{selectedStaff.email}</strong></span>

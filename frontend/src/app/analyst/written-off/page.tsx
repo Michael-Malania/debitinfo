@@ -15,6 +15,16 @@ export interface WrittenOffDebtItem {
   creditorName: string;
   creditorTaxId?: string;
   claimId?: string;
+  debtorUserId?: string;
+  stagedItemId?: string;
+  claim?: {
+    id: string;
+    caseNumber: string;
+    agreementNumber?: string;
+    status: string;
+    initialAmount: number | string;
+    remainingAmount: number | string;
+  } | null;
   originalAmount: number | string;
   writtenOffAmount: number | string;
   currency: string;
@@ -160,6 +170,13 @@ export default function WrittenOffDebtsPage() {
   const [formProofFile, setFormProofFile] = useState<File | null>(null);
   const [formProofDocName, setFormProofDocName] = useState('');
 
+  // Debtor Search & Auto-fill State
+  const [debtorSearchQuery, setDebtorSearchQuery] = useState('');
+  const [debtorSearchResults, setDebtorSearchResults] = useState<any[]>([]);
+  const [searchingDebtors, setSearchingDebtors] = useState(false);
+  const [isDebtorDropdownOpen, setIsDebtorDropdownOpen] = useState(false);
+  const [selectedDebtorCandidate, setSelectedDebtorCandidate] = useState<any | null>(null);
+
   // Authentication check
   useEffect(() => {
     const user = authService.getCurrentUser();
@@ -254,11 +271,66 @@ export default function WrittenOffDebtsPage() {
     loadData();
   };
 
+  // Debounced Debtor Search for Write-off Modal
+  useEffect(() => {
+    if (!isNewWriteOffOpen) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        setSearchingDebtors(true);
+        const list = await analystBackendService.searchDebtorsForWriteOff(debtorSearchQuery);
+        if (!cancelled) {
+          setDebtorSearchResults(Array.isArray(list) ? list : []);
+        }
+      } catch (err) {
+        console.error('Failed searching debtors for write-off:', err);
+        if (!cancelled) setDebtorSearchResults([]);
+      } finally {
+        if (!cancelled) setSearchingDebtors(false);
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isNewWriteOffOpen, debtorSearchQuery]);
+
+  const handleSelectDebtorCandidate = (candidate: any) => {
+    setSelectedDebtorCandidate(candidate);
+    setFormDebtorName(candidate.debtorName || '');
+    setFormPersonalId(candidate.personalId || '');
+    setFormEntityType(candidate.entityType === 'LEGAL' ? 'LEGAL' : 'PHYSICAL');
+    setFormCreditorName(candidate.creditorName || '');
+    const orig = Number(candidate.originalAmount ?? candidate.remainingAmount ?? 0);
+    const rem = Number(candidate.remainingAmount ?? candidate.originalAmount ?? 0);
+    setFormOriginalAmount(orig > 0 ? String(orig) : '');
+    setFormWrittenOffAmount(rem > 0 ? String(rem) : (orig > 0 ? String(orig) : ''));
+    setDebtorSearchQuery('');
+    setIsDebtorDropdownOpen(false);
+  };
+
+  const handleClearSelectedDebtor = () => {
+    setSelectedDebtorCandidate(null);
+    setFormDebtorName('');
+    setFormPersonalId('');
+    setFormEntityType('PHYSICAL');
+    setFormCreditorName('');
+    setFormOriginalAmount('');
+    setFormWrittenOffAmount('');
+    setDebtorSearchQuery('');
+    setIsDebtorDropdownOpen(true);
+  };
+
   // Open New Write-off modal with auto-generated Act Number
   const openNewWriteOffModal = () => {
     const currentYear = new Date().getFullYear();
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     setFormActNumber(`ACT-WO-${currentYear}-${randomSuffix}`);
+    setSelectedDebtorCandidate(null);
+    setDebtorSearchQuery('');
+    setDebtorSearchResults([]);
+    setIsDebtorDropdownOpen(false);
     setFormDebtorName('');
     setFormPersonalId('');
     setFormEntityType('PHYSICAL');
@@ -275,16 +347,12 @@ export default function WrittenOffDebtsPage() {
   // Submit new Write-off
   const handleSubmitWriteOff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formDebtorName.trim()) {
-      alert('გთხოვთ მიუთითოთ მოვალის სახელი ან კომპანიის დასახელება');
+    if (!selectedDebtorCandidate) {
+      alert('გთხოვთ საძებო ველიდან მოძებნოთ და აირჩიოთ დებიტორი სისტემის ბაზიდან');
       return;
     }
-    if (!formPersonalId.trim()) {
-      alert('გთხოვთ მიუთითოთ პირადი ნომერი (11 ციფრი) ან საიდენტიფიკაციო კოდი (9 ციფრი)');
-      return;
-    }
-    if (!formCreditorName.trim()) {
-      alert('გთხოვთ მიუთითოთ კრედიტორი ორგანიზაციის დასახელება');
+    if (!formDebtorName.trim() || !formPersonalId.trim() || !formCreditorName.trim()) {
+      alert('არჩეული დებიტორის მონაცემები არასრულია');
       return;
     }
     const writtenOffAmt = parseFloat(formWrittenOffAmount);
@@ -296,10 +364,15 @@ export default function WrittenOffDebtsPage() {
     setSubmittingWriteOff(true);
     try {
       const res = await analystBackendService.createWrittenOffDebt({
+        caseNumber: selectedDebtorCandidate.caseNumber || undefined,
         debtorName: formDebtorName.trim(),
         personalId: formPersonalId.trim(),
         entityType: formEntityType,
         creditorName: formCreditorName.trim(),
+        creditorTaxId: selectedDebtorCandidate.creditorTaxId || undefined,
+        claimId: selectedDebtorCandidate.claimId || undefined,
+        debtorUserId: selectedDebtorCandidate.debtorUserId || undefined,
+        stagedItemId: selectedDebtorCandidate.stagedItemId || undefined,
         originalAmount: parseFloat(formOriginalAmount) || writtenOffAmt,
         writtenOffAmount: writtenOffAmt,
         currency: 'GEL',
@@ -308,7 +381,7 @@ export default function WrittenOffDebtsPage() {
         actNumber: formActNumber.trim(),
         proofDocumentName: formProofDocName || (formProofFile ? formProofFile.name : 'proof_document.pdf'),
         proofDocumentType: formProofFile?.type || 'application/pdf',
-        writtenOffByName: currentUser?.name || currentUser?.email || 'უფროსი ფინანსური ანალიტიკოსი',
+        writtenOffByName: (currentUser as any)?.name || currentUser?.email || 'უფროსი ფინანსური ანალიტიკოსი',
       });
 
       setWriteOffSuccessMessage(res.message || 'ვალი წარმატებით ჩამოიწერა!');
@@ -990,6 +1063,147 @@ export default function WrittenOffDebtsPage() {
             </div>
 
             <form onSubmit={handleSubmitWriteOff} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+              {/* Smart Debtor Search & Auto-Fill Box */}
+              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px] text-primary">person_search</span>
+                    <span>დებიტორის ძიება და არჩევა ბაზიდან <span className="text-rose-500">*</span></span>
+                  </label>
+                  {selectedDebtorCandidate && (
+                    <button
+                      type="button"
+                      onClick={handleClearSelectedDebtor}
+                      className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">swap_horiz</span>
+                      <span>შეცვლა</span>
+                    </button>
+                  )}
+                </div>
+
+                {!selectedDebtorCandidate ? (
+                  <div className="relative">
+                    <div className="relative flex items-center">
+                      <span className="material-symbols-outlined absolute left-3 text-slate-400 text-[18px]">
+                        search
+                      </span>
+                      <input
+                        type="text"
+                        value={debtorSearchQuery}
+                        onFocus={() => setIsDebtorDropdownOpen(true)}
+                        onChange={(e) => {
+                          setDebtorSearchQuery(e.target.value);
+                          setIsDebtorDropdownOpen(true);
+                        }}
+                        placeholder="ჩაწერეთ სახელი, გვარი, კომპანიის დასახელება, პ/ნ, ს/კ ან საქმის №..."
+                        className="w-full text-xs bg-white border border-blue-300 rounded-lg pl-9 pr-8 py-2.5 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary shadow-2xs"
+                      />
+                      {searchingDebtors && (
+                        <span className="material-symbols-outlined absolute right-3 text-primary text-[16px] animate-spin">
+                          progress_activity
+                        </span>
+                      )}
+                    </div>
+
+                    {isDebtorDropdownOpen && (
+                      <div className="mt-1.5 max-h-60 overflow-y-auto rounded-xl bg-white border border-slate-200 shadow-xl divide-y divide-slate-100">
+                        {debtorSearchResults.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-slate-500">
+                            {searchingDebtors
+                              ? 'მიმდინარეობს დებიტორების ძიება...'
+                              : 'მითითებული მონაცემებით დებიტორი ბაზაში ვერ მოიძებნა'}
+                          </div>
+                        ) : (
+                          debtorSearchResults.map((cand) => (
+                            <button
+                              key={cand.id}
+                              type="button"
+                              onClick={() => handleSelectDebtorCandidate(cand)}
+                              className="w-full px-3.5 py-2.5 text-left hover:bg-blue-50/80 transition flex items-center justify-between gap-3 cursor-pointer"
+                            >
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-bold text-slate-900 truncate">
+                                    {cand.debtorName}
+                                  </span>
+                                  <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                    {cand.entityType === 'LEGAL' ? 'იურიდიული' : 'ფიზიკური'}
+                                  </span>
+                                  {cand.caseNumber && (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                      {cand.caseNumber}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono">{cand.personalId}</span>
+                                  <span>•</span>
+                                  <span className="truncate">{cand.creditorName}</span>
+                                  {cand.phone && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-mono">{cand.phone}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-xs font-extrabold font-mono text-rose-600">
+                                  {Number(cand.remainingAmount || 0).toLocaleString('ka-GE', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}{' '}
+                                  ₾
+                                </div>
+                                <div className="text-[10px] text-slate-400">
+                                  {cand.daysOverdue > 0 ? `${cand.daysOverdue} დღე ვადაგ.` : cand.status}
+                                </div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-white border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="material-symbols-outlined text-emerald-600 text-[16px]">
+                          verified_user
+                        </span>
+                        <span className="font-bold text-slate-900">
+                          {selectedDebtorCandidate.debtorName}
+                        </span>
+                        <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                          {selectedDebtorCandidate.personalId}
+                        </span>
+                        {selectedDebtorCandidate.caseNumber && (
+                          <span className="font-mono text-[11px] px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                            საქმე: {selectedDebtorCandidate.caseNumber}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        კრედიტორი: <strong className="text-slate-700">{selectedDebtorCandidate.creditorName}</strong>
+                        {selectedDebtorCandidate.agreementNumber ? ` • ხელშეკრულება: ${selectedDebtorCandidate.agreementNumber}` : ''}
+                      </div>
+                    </div>
+                    <div className="text-left sm:text-right shrink-0 font-mono">
+                      <div className="text-[10px] text-slate-400">მიმდინარე ბალანსი</div>
+                      <div className="text-xs font-extrabold text-rose-600">
+                        {Number(selectedDebtorCandidate.remainingAmount || 0).toLocaleString('ka-GE', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}{' '}
+                        ₾
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Act Number */}
                 <div>
@@ -1005,22 +1219,22 @@ export default function WrittenOffDebtsPage() {
                   />
                 </div>
 
-                {/* Entity Type */}
+                {/* Entity Type (Auto-filled & Locked) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     სუბიექტის ტიპი
                   </label>
                   <select
                     value={formEntityType}
-                    onChange={(e) => setFormEntityType(e.target.value as any)}
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary"
+                    disabled
+                    className="w-full text-xs bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 cursor-not-allowed"
                   >
                     <option value="PHYSICAL">ფიზიკური პირი (მოქალაქე)</option>
                     <option value="LEGAL">იურიდიული პირი (კომპანია)</option>
                   </select>
                 </div>
 
-                {/* Debtor Name */}
+                {/* Debtor Name (Auto-filled & Read-Only) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     მოვალის დასახელება / სახელი და გვარი <span className="text-rose-500">*</span>
@@ -1028,14 +1242,14 @@ export default function WrittenOffDebtsPage() {
                   <input
                     type="text"
                     value={formDebtorName}
-                    onChange={(e) => setFormDebtorName(e.target.value)}
+                    readOnly
                     required
-                    placeholder="მაგ: გიორგი ბერიძე ან შპს ორიონი"
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="ავტომატურად შეივსება არჩევისას..."
+                    className="w-full text-xs bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 cursor-not-allowed"
                   />
                 </div>
 
-                {/* Personal ID */}
+                {/* Personal ID (Auto-filled & Read-Only) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     პირადი ნომერი ან ს/კ (9/11 ციფრი) <span className="text-rose-500">*</span>
@@ -1043,15 +1257,14 @@ export default function WrittenOffDebtsPage() {
                   <input
                     type="text"
                     value={formPersonalId}
-                    onChange={(e) => setFormPersonalId(e.target.value.replace(/\D/g, ''))}
+                    readOnly
                     required
-                    maxLength={11}
-                    placeholder="01019012345 ან 405123456"
-                    className="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="ავტომატურად შეივსება..."
+                    className="w-full text-xs font-mono bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 cursor-not-allowed"
                   />
                 </div>
 
-                {/* Creditor Name */}
+                {/* Creditor Name (Auto-filled & Read-Only) */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     კრედიტორი ორგანიზაცია <span className="text-rose-500">*</span>
@@ -1059,14 +1272,14 @@ export default function WrittenOffDebtsPage() {
                   <input
                     type="text"
                     value={formCreditorName}
-                    onChange={(e) => setFormCreditorName(e.target.value)}
+                    readOnly
                     required
-                    placeholder="მაგ: სს თიბისი ბანკი, შპს სილქნეტი, შპს ალფა დისტრიბუცია..."
-                    className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="ავტომატურად შეივსება დებიტორის არჩევისას..."
+                    className="w-full text-xs bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 cursor-not-allowed"
                   />
                 </div>
 
-                {/* Original Amount */}
+                {/* Original Amount (Auto-filled & Read-Only) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     საწყისი ვალი (₾)
@@ -1075,9 +1288,9 @@ export default function WrittenOffDebtsPage() {
                     type="number"
                     step="0.01"
                     value={formOriginalAmount}
-                    onChange={(e) => setFormOriginalAmount(e.target.value)}
-                    placeholder="მაგ: 1500.00"
-                    className="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary"
+                    readOnly
+                    placeholder="0.00"
+                    className="w-full text-xs font-mono bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 cursor-not-allowed"
                   />
                 </div>
 
@@ -1091,9 +1304,10 @@ export default function WrittenOffDebtsPage() {
                     step="0.01"
                     value={formWrittenOffAmount}
                     onChange={(e) => setFormWrittenOffAmount(e.target.value)}
+                    disabled={!selectedDebtorCandidate}
                     required
-                    placeholder="მაგ: 1500.00"
-                    className="w-full text-xs font-mono font-bold text-rose-700 bg-rose-50/50 border border-rose-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    placeholder="0.00"
+                    className="w-full text-xs font-mono font-bold text-rose-700 bg-rose-50/50 border border-rose-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-rose-500 disabled:bg-slate-100 disabled:text-slate-400"
                   />
                 </div>
 
@@ -1179,8 +1393,8 @@ export default function WrittenOffDebtsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submittingWriteOff}
-                  className="px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  disabled={submittingWriteOff || !selectedDebtorCandidate}
+                  className="px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span className="material-symbols-outlined text-[16px]">how_to_reg</span>
                   <span>{submittingWriteOff ? 'მიმდინარეობს ჩამოწერა...' : 'აქტის გაფორმება & ჩამოწერა'}</span>

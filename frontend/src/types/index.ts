@@ -119,6 +119,9 @@ export interface DetailedLegalCase {
   claimId: string;
   claimCaseNumber?: string;
   agreementNumber?: string;
+  creditorName?: string;
+  debtOriginationDate?: string | null;
+  claimStatus?: string;
   stage: string; // OFFICIAL_WARNING, LAWSUIT_PREPARATION, COURT_PROCEEDINGS, SETTLEMENT, ENFORCEMENT, CLOSED
   priority: string; // HIGH, MEDIUM, LOW
   status: string;
@@ -142,11 +145,16 @@ export interface DetailedLegalCase {
   debtor: {
     id?: string;
     name: string;
+    firstName?: string;
+    lastName?: string;
     identification: string;
     isCompany: boolean;
     legalAddress: string;
     actualAddress: string;
     directorName?: string;
+    directorPin?: string;
+    directorPhone?: string;
+    directorEmail?: string;
     phone?: string;
     email?: string;
     hasMortgage?: boolean;

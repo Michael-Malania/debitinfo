@@ -119,7 +119,7 @@ export default function AnalystSidebar({
         });
         const expiredConsignments = debtors.filter((d: any) => {
           const od = Number(d.overdueDays || d.daysOverdue || 0);
-          return od >= 1000;
+          return od >= 1095;
         });
 
         setFetchedCounts({
@@ -127,7 +127,7 @@ export default function AnalystSidebar({
           debtors: debtors.length,
           creditors: cRes.status === 'fulfilled' && Array.isArray(cRes.value) ? cRes.value.length : 0,
           riskZone: Math.max(3, riskItems.length),
-          expiredConsignments: Math.max(8, expiredConsignments.length),
+          expiredConsignments: Math.max(5, expiredConsignments.length),
         });
       } catch {
         // ignore
