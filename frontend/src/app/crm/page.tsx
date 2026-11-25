@@ -1,27 +1,249 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import * as XLSX from 'xlsx';
 import { blogService, authService, crmBackendService } from '@/services';
 import { BlogPost } from '@/types';
-import { downloadDebtorAccountTurnoverXLSX } from '@/utils/excel';
+import CrmCaseModal, { CrmModalTab } from '@/components/crm/CrmCaseModal';
+import CrmChartStudioModal from '@/components/crm/CrmChartStudioModal';
+
+type CrmTab = 'calls' | 'blog';
+type EntityTab = 'ALL' | 'PHYSICAL' | 'LEGAL';
+
+interface CrmFiltersState {
+  search: string;
+  caseNumber: string;
+  personalId: string;
+  debtorName: string;
+  creditorName: string;
+  phone: string;
+  directorName: string;
+  address: string;
+  disposition: string;
+  priority: 'ALL' | 'HIGH' | 'CALLBACK';
+  rating: string;
+  scheduleFilter: 'ALL' | 'HAS_SCHEDULE' | 'NO_SCHEDULE';
+  minAmount: string;
+  maxAmount: string;
+  minOverdue: string;
+  maxOverdue: string;
+}
+
+const INITIAL_CRM_FILTERS: CrmFiltersState = {
+  search: '',
+  caseNumber: '',
+  personalId: '',
+  debtorName: '',
+  creditorName: '',
+  phone: '',
+  directorName: '',
+  address: '',
+  disposition: 'ALL',
+  priority: 'ALL',
+  rating: 'ALL',
+  scheduleFilter: 'ALL',
+  minAmount: '',
+  maxAmount: '',
+  minOverdue: '',
+  maxOverdue: '',
+};
+
+const DISPOSITION_LABELS: Record<string, { label: string; cls: string }> = {
+  PROMISE_TO_PAY: {
+    label: 'დათანხმდა',
+    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  CALLBACK: {
+    label: 'გადარეკვა',
+    cls: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  VOICEMAIL: {
+    label: 'მიუწვდომელი',
+    cls: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+  REFUSED: {
+    label: 'უარი',
+    cls: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  DISPUTE_RAISED: {
+    label: 'სადავო',
+    cls: 'bg-purple-50 text-purple-700 border-purple-200',
+  },
+  WRONG_NUMBER: {
+    label: 'შეცვლილია',
+    cls: 'bg-slate-100 text-slate-600 border-slate-200',
+  },
+};
+
+function getRatingBadgeClass(rating?: string): string {
+  const grade = (rating || 'E').toUpperCase();
+  if (grade === 'A') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (grade === 'B') return 'bg-amber-50 text-amber-700 border-amber-200';
+  if (grade === 'C') return 'bg-orange-50 text-orange-700 border-orange-200';
+  return 'bg-rose-50 text-rose-700 border-rose-200';
+}
+
+function splitPersonName(item: any): { firstName: string; lastName: string } {
+  if (item.firstName || item.lastName) {
+    return { firstName: item.firstName || '—', lastName: item.lastName || '—' };
+  }
+  const parts = String(item.debtorName || '').trim().split(/\s+/);
+  return {
+    firstName: parts[0] || '—',
+    lastName: parts.slice(1).join(' ') || '—',
+  };
+}
+
+function formatShortDate(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toISOString().split('T')[0];
+}
+
+function matchesCrmFilters(item: any, f: CrmFiltersState): boolean {
+  const q = f.search.trim().toLowerCase();
+  if (q) {
+    const haystack = [
+      item.caseNumber,
+      item.agreementNumber,
+      item.debtorName,
+      item.debtorPersonalId,
+      item.debtorPhone,
+      item.debtorEmail,
+      item.creditorName,
+      item.directorName,
+      item.legalAddress,
+      item.actualAddress,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    if (!haystack.includes(q)) return false;
+  }
+
+  if (f.caseNumber.trim()) {
+    const cStr = `${item.caseNumber || ''} ${item.agreementNumber || ''}`.toLowerCase();
+    if (!cStr.includes(f.caseNumber.trim().toLowerCase())) return false;
+  }
+  if (
+    f.personalId.trim() &&
+    !String(item.debtorPersonalId || '').toLowerCase().includes(f.personalId.trim().toLowerCase())
+  ) {
+    return false;
+  }
+  if (
+    f.debtorName.trim() &&
+    !String(item.debtorName || '').toLowerCase().includes(f.debtorName.trim().toLowerCase())
+  ) {
+    return false;
+  }
+  if (
+    f.creditorName.trim() &&
+    !String(item.creditorName || '').toLowerCase().includes(f.creditorName.trim().toLowerCase())
+  ) {
+    return false;
+  }
+  if (
+    f.phone.trim() &&
+    !String(item.debtorPhone || '').toLowerCase().includes(f.phone.trim().toLowerCase())
+  ) {
+    return false;
+  }
+  if (
+    f.directorName.trim() &&
+    !String(item.directorName || '').toLowerCase().includes(f.directorName.trim().toLowerCase())
+  ) {
+    return false;
+  }
+  if (f.address.trim()) {
+    const addr = `${item.legalAddress || ''} ${item.actualAddress || ''}`.toLowerCase();
+    if (!addr.includes(f.address.trim().toLowerCase())) return false;
+  }
+
+  if (f.disposition === 'NEW' && item.lastDisposition) return false;
+  if (f.disposition !== 'ALL' && f.disposition !== 'NEW' && item.lastDisposition !== f.disposition) {
+    return false;
+  }
+
+  if (f.priority === 'HIGH' && Number(item.daysOverdue || 0) < 60 && Number(item.remainingAmount || 0) < 10000) {
+    return false;
+  }
+  if (f.priority === 'CALLBACK' && item.lastDisposition !== 'CALLBACK') {
+    return false;
+  }
+
+  if (f.rating !== 'ALL' && String(item.rating || '').toUpperCase() !== f.rating) {
+    return false;
+  }
+
+  if (f.scheduleFilter === 'HAS_SCHEDULE' && !item.hasActiveSchedule) return false;
+  if (f.scheduleFilter === 'NO_SCHEDULE' && item.hasActiveSchedule) return false;
+
+  const amount = Number(item.remainingAmount || 0);
+  if (f.minAmount.trim() !== '' && !Number.isNaN(Number(f.minAmount)) && amount < Number(f.minAmount)) {
+    return false;
+  }
+  if (f.maxAmount.trim() !== '' && !Number.isNaN(Number(f.maxAmount)) && amount > Number(f.maxAmount)) {
+    return false;
+  }
+
+  const overdue = Number(item.daysOverdue || 0);
+  if (f.minOverdue.trim() !== '' && !Number.isNaN(Number(f.minOverdue)) && overdue < Number(f.minOverdue)) {
+    return false;
+  }
+  if (f.maxOverdue.trim() !== '' && !Number.isNaN(Number(f.maxOverdue)) && overdue > Number(f.maxOverdue)) {
+    return false;
+  }
+
+  return true;
+}
+
+function buildCrmExcelRows(list: any[]) {
+  return list.map((item, idx) => {
+    const disp = item.lastDisposition
+      ? DISPOSITION_LABELS[item.lastDisposition]?.label || item.lastDisposition
+      : 'ახალი კონტაქტი';
+    const { firstName, lastName } = splitPersonName(item);
+    return {
+      '#': idx + 1,
+      'საქმის N': item.caseNumber,
+      'ხელშეკრულება': item.agreementNumber || '—',
+      'ტიპი': item.isCompany ? 'იურიდიული პირი' : 'ფიზიკური პირი',
+      'პ/ნ ან ს/კ': item.debtorPersonalId,
+      'მოვალე / კომპანია': item.debtorName,
+      'სახელი': item.isCompany ? '—' : firstName,
+      'გვარი': item.isCompany ? '—' : lastName,
+      'დირექტორი': item.directorName || '—',
+      'ტელეფონი': item.debtorPhone || '—',
+      'ელ-ფოსტა': item.debtorEmail || '—',
+      'იურიდიული მისამართი': item.legalAddress || '—',
+      'ფაქტობრივი მისამართი': item.actualAddress || '—',
+      'კრედიტორი': item.creditorName || '—',
+      'მიმდინარე დავალიანება (₾)': Number(item.remainingAmount || 0),
+      'ძირი თანხა (₾)': Number(item.initialAmount || 0),
+      'ჯარიმა (₾)': Number(item.penaltyAmount || 0),
+      'ვადაგადაცილება (დღე)': Number(item.daysOverdue || 0),
+      'წარმოქმნის თარიღი': formatShortDate(item.debtOriginationDate),
+      'ბოლო სტატუსი': disp,
+      'გრაფიკი': item.hasActiveSchedule ? 'აქტიური გრაფიკი' : 'გრაფიკის გარეშე',
+      'რეიტინგი': `Grade ${item.rating || 'E'}`,
+      'ბოლო კომენტარი': item.lastCallNotes || '—',
+    };
+  });
+}
 
 export default function CrmPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [authorized, setAuthorized] = useState(false);
-  const [currentTab, setCurrentTab] = useState<'calls' | 'blog' | 'queue'>('calls');
-  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [currentTab, setCurrentTab] = useState<CrmTab>('calls');
+  const [entityTab, setEntityTab] = useState<EntityTab>('ALL');
 
-  // Live CRM State
   const [queue, setQueue] = useState<any[]>([]);
-  const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
-  const [claimDetail, setClaimDetail] = useState<any>(null);
   const [loadingQueue, setLoadingQueue] = useState(false);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('ALL');
   const [crmStats, setCrmStats] = useState<any>({
     callsToday: 0,
     dailyTarget: 60,
@@ -31,255 +253,47 @@ export default function CrmPage() {
     activeQueueCount: 0,
   });
 
-  // Call logging form state
-  const [disposition, setDisposition] = useState<string>('PROMISE_TO_PAY');
-  const [callNotes, setCallNotes] = useState('');
-  const [promisedDate, setPromisedDate] = useState('');
-  const [promisedAmount, setPromisedAmount] = useState('');
-  const [submittingLog, setSubmittingLog] = useState(false);
-  const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+  const [filters, setFilters] = useState<CrmFiltersState>(INITIAL_CRM_FILTERS);
+  const [showFilterDrawer, setShowFilterDrawer] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Splitter & Resizing State
-  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(55);
-  const [isResizing, setIsResizing] = useState(false);
-  const splitContainerRef = React.useRef<HTMLElement | null>(null);
+  // Modal State
+  const [modalClaim, setModalClaim] = useState<any | null>(null);
+  const [modalInitialTab, setModalInitialTab] = useState<CrmModalTab>('call');
+  const [isChartStudioOpen, setIsChartStudioOpen] = useState(false);
 
-  // Debtor Contact Management State (INTERNAL ONLY)
-  const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
-  const [newContactPhone, setNewContactPhone] = useState('+995 ');
-  const [newContactFirstName, setNewContactFirstName] = useState('');
-  const [newContactLastName, setNewContactLastName] = useState('');
-  const [newContactPosition, setNewContactPosition] = useState('მთავარი ბუღალტერი');
-  const [newContactNotes, setNewContactNotes] = useState('');
-  const [isSavingContact, setIsSavingContact] = useState(false);
-  const [copiedContactId, setCopiedContactId] = useState<string | null>(null);
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
 
-  // Repayment Schedule Management State
-  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
-  const [scheduleModalMode, setScheduleModalMode] = useState<'create' | 'edit'>('create');
-  const [scheduleType, setScheduleType] = useState<'STANDARD' | 'NON_STANDARD'>('STANDARD');
-  const [scheduleMonths, setScheduleMonths] = useState<number>(12);
-  const [schedulePaymentDay, setSchedulePaymentDay] = useState<number>(15);
-  const [scheduleCustomIntervalDays, setScheduleCustomIntervalDays] = useState<number>(30);
-  const [scheduleIntervalMode, setScheduleIntervalMode] = useState<'MONTHLY' | 'CUSTOM_DAYS'>('MONTHLY');
-  const [scheduleInstallments, setScheduleInstallments] = useState<Array<{ installmentNo: number; dueDate: string; amount: number }>>([]);
-  const [scheduleNotes, setScheduleNotes] = useState<string>('');
-  const [savingSchedule, setSavingSchedule] = useState(false);
-  const [scheduleSuccessMessage, setScheduleSuccessMessage] = useState<string | null>(null);
-  const [showScheduleDetails, setShowScheduleDetails] = useState(false);
-
-  // Queue Registry Pagination & Scrolling State
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
-  const tableContainerRef = React.useRef<HTMLDivElement | null>(null);
-
-  const generateInstallments = (
-    type: 'STANDARD' | 'NON_STANDARD',
-    months: number,
-    day: number,
-    totalDebt: number,
-    existingList?: Array<{ installmentNo: number; dueDate?: string; amount: number }>,
-    intervalMode: 'MONTHLY' | 'CUSTOM_DAYS' = scheduleIntervalMode,
-    customIntervalDays: number = scheduleCustomIntervalDays
-  ) => {
-    const validMonths = type === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(1, months);
-    const validDay = Math.max(1, Math.min(31, day));
-    const baseAmt = Math.floor((totalDebt / validMonths) * 100) / 100;
-    const remainder = Math.round((totalDebt - baseAmt * validMonths) * 100) / 100;
-
-    const now = new Date();
-    const result: Array<{ installmentNo: number; dueDate: string; amount: number }> = [];
-    for (let i = 0; i < validMonths; i++) {
-      let dateStr = '';
-      if (type === 'NON_STANDARD' && intervalMode === 'CUSTOM_DAYS') {
-        const d = new Date(now.getTime() + (i + 1) * Math.max(1, customIntervalDays) * 24 * 60 * 60 * 1000);
-        dateStr = d.toISOString().split('T')[0];
-      } else {
-        const d = new Date(now.getFullYear(), now.getMonth() + 1 + i, Math.min(validDay, 28));
-        dateStr = d.toISOString().split('T')[0];
-      }
-      const customVal = existingList?.[i]?.amount;
-      const amt = customVal !== undefined ? customVal : (i === 0 ? baseAmt + remainder : baseAmt);
-      result.push({
-        installmentNo: i + 1,
-        dueDate: dateStr,
-        amount: Math.round(amt * 100) / 100,
-      });
-    }
-    return result;
-  };
-
-  const openScheduleModal = (mode: 'create' | 'edit') => {
-    setScheduleModalMode(mode);
-    const existingSched = activeClaim?.schedules?.[0];
-    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-
-    if (mode === 'edit' && existingSched) {
-      const type = existingSched.type === 'NON_STANDARD' ? 'NON_STANDARD' : 'STANDARD';
-      const months = existingSched.totalMonths || (type === 'STANDARD' ? 12 : 18);
-      const day = existingSched.paymentDay || 15;
-      setScheduleType(type);
-      setScheduleMonths(months);
-      setSchedulePaymentDay(day);
-      setScheduleIntervalMode('MONTHLY');
-      setScheduleNotes(existingSched.notes || '');
-
-      if (existingSched.installments && existingSched.installments.length > 0) {
-        setScheduleInstallments(
-          existingSched.installments.map((inst: any, idx: number) => ({
-            installmentNo: inst.installmentNo || idx + 1,
-            dueDate: inst.dueDate ? new Date(inst.dueDate).toISOString().split('T')[0] : '',
-            amount: Number(inst.amount) || 0,
-          }))
-        );
-      } else {
-        setScheduleInstallments(generateInstallments(type, months, day, totalDebt));
-      }
-    } else {
-      setScheduleType('STANDARD');
-      setScheduleMonths(12);
-      setSchedulePaymentDay(15);
-      setScheduleIntervalMode('MONTHLY');
-      setScheduleCustomIntervalDays(30);
-      setScheduleNotes('');
-      setScheduleInstallments(generateInstallments('STANDARD', 12, 15, totalDebt));
-    }
-    setIsScheduleModalOpen(true);
-  };
-
-  const handleScheduleTypeChange = (type: 'STANDARD' | 'NON_STANDARD') => {
-    setScheduleType(type);
-    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    const newMonths = type === 'STANDARD' ? Math.min(12, Math.max(1, scheduleMonths)) : Math.max(1, scheduleMonths);
-    setScheduleMonths(newMonths);
-    setScheduleInstallments(generateInstallments(type, newMonths, schedulePaymentDay, totalDebt, undefined, scheduleIntervalMode, scheduleCustomIntervalDays));
-  };
-
-  const handleScheduleMonthsChange = (months: number) => {
-    const validMonths = scheduleType === 'STANDARD' ? Math.max(1, Math.min(12, months)) : Math.max(1, months);
-    setScheduleMonths(validMonths);
-    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    setScheduleInstallments(generateInstallments(scheduleType, validMonths, schedulePaymentDay, totalDebt, scheduleInstallments, scheduleIntervalMode, scheduleCustomIntervalDays));
-  };
-
-  const handleSchedulePaymentDayChange = (day: number) => {
-    const validDay = Math.max(1, Math.min(31, day));
-    setSchedulePaymentDay(validDay);
-    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, validDay, totalDebt, scheduleInstallments, scheduleIntervalMode, scheduleCustomIntervalDays));
-  };
-
-  const handleScheduleIntervalChange = (mode: 'MONTHLY' | 'CUSTOM_DAYS', days: number) => {
-    setScheduleIntervalMode(mode);
-    setScheduleCustomIntervalDays(days);
-    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, schedulePaymentDay, totalDebt, scheduleInstallments, mode, days));
-  };
-
-  const handleInstallmentAmountChange = (idx: number, newAmount: number) => {
-    const updated = [...scheduleInstallments];
-    updated[idx] = {
-      ...updated[idx],
-      amount: Math.max(0, newAmount),
-    };
-    setScheduleInstallments(updated);
-  };
-
-  const handleAutoDistributeEvenly = () => {
-    const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-    setScheduleInstallments(generateInstallments(scheduleType, scheduleMonths, schedulePaymentDay, totalDebt, undefined, scheduleIntervalMode, scheduleCustomIntervalDays));
-  };
-
-  const handleSaveSchedule = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeClaim?.id) return;
-
-    setSavingSchedule(true);
-    try {
-      await crmBackendService.saveClaimSchedule(activeClaim.id, {
-        type: scheduleType,
-        totalMonths: scheduleMonths,
-        paymentDay: schedulePaymentDay,
-        installments: scheduleInstallments,
-        notes: scheduleNotes || undefined,
-      });
-
-      setScheduleSuccessMessage(
-        `გადახდის გრაფიკი წარმატებით შედგა და გაიგზავნა დებიტორთან დასადასტურებლად!`
-      );
-      setTimeout(() => setScheduleSuccessMessage(null), 5000);
-      setIsScheduleModalOpen(false);
-
-      // Refresh claim detail & queue
-      await Promise.all([loadClaimDetail(activeClaim.id), loadQueueAndStats()]);
-    } catch (err: any) {
-      alert(err?.message || 'გრაფიკის შენახვა ვერ მოხერხდა');
-    } finally {
-      setSavingSchedule(false);
-    }
-  };
-
-
-  // Blog CMS State
+  // Blog CMS State (Admin only)
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [postTitle, setPostTitle] = useState('');
-  const [postCategory, setPostCategory] = useState<'financial_literacy' | 'credit_risks' | 'tax_updates' | 'legal_mediation' | 'news'>('tax_updates');
+  const [postCategory, setPostCategory] = useState<
+    'financial_literacy' | 'credit_risks' | 'tax_updates' | 'legal_mediation' | 'news'
+  >('tax_updates');
   const [postExcerpt, setPostExcerpt] = useState('');
   const [postContent, setPostContent] = useState('');
   const [postCoverImage, setPostCoverImage] = useState('');
   const [postTags, setPostTags] = useState('RS.GE, დებიტორები, რისკები');
   const [publishSuccess, setPublishSuccess] = useState(false);
 
-  const activeClaim = claimDetail || queue.find((q) => q.id === selectedClaimId);
-  const isAdmin = currentUser?.role === 'ADMIN';
-
-  const totalPages = Math.max(1, Math.ceil(queue.length / pageSize));
-  const paginatedQueue = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return queue.slice(start, start + pageSize);
-  }, [queue, currentPage, pageSize]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, priorityFilter]);
-
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [totalPages, currentPage]);
-
-  const loadQueueAndStats = async () => {
+  const loadQueueAndStats = useCallback(async () => {
     setLoadingQueue(true);
     try {
       const [q, stats] = await Promise.all([
-        crmBackendService.getQueue(searchQuery, priorityFilter),
+        crmBackendService.getQueue(),
         crmBackendService.getStats(),
       ]);
       setQueue(q || []);
       setCrmStats(stats || {});
-
-      if (q && q.length > 0 && !selectedClaimId) {
-        setSelectedClaimId(q[0].id);
-      }
     } catch (err) {
       console.warn('Could not load CRM queue/stats:', err);
     } finally {
       setLoadingQueue(false);
     }
-  };
-
-  const loadClaimDetail = async (id: string) => {
-    setLoadingDetail(true);
-    try {
-      const detail = await crmBackendService.getClaimForCall(id);
-      setClaimDetail(detail);
-    } catch (err) {
-      console.warn('Could not load claim detail:', err);
-    } finally {
-      setLoadingDetail(false);
-    }
-  };
+  }, []);
 
   useEffect(() => {
     const u = authService.getCurrentUser();
@@ -288,108 +302,13 @@ export default function CrmPage() {
       return;
     }
     if (u.role !== 'OPERATOR' && u.role !== 'ADMIN') {
-      const dest = authService.getPortalRouteForRole(u.role);
-      router.replace(dest);
+      router.replace(authService.getPortalRouteForRole(u.role));
       return;
     }
     setCurrentUser(u);
     setAuthorized(true);
     loadQueueAndStats();
-  }, [router]);
-
-  useEffect(() => {
-    if (authorized) {
-      loadQueueAndStats();
-    }
-  }, [priorityFilter]);
-
-  useEffect(() => {
-    if (selectedClaimId) {
-      loadClaimDetail(selectedClaimId);
-    }
-  }, [selectedClaimId]);
-
-  // Handle Debtor Selection with Auto-Shrink
-  const handleSelectDebtor = (id: string) => {
-    setSelectedClaimId(id);
-    if (leftPanelWidth > 35) {
-      setLeftPanelWidth(28); // Automatically shrink registry to give room to debtor details
-    }
-  };
-
-  const toggleRegistryWidth = () => {
-    if (leftPanelWidth <= 35) {
-      setLeftPanelWidth(58);
-    } else {
-      setLeftPanelWidth(28);
-    }
-  };
-
-  useEffect(() => {
-    if (!isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!splitContainerRef.current) return;
-      const rect = splitContainerRef.current.getBoundingClientRect();
-      const newWidth = ((e.clientX - rect.left) / rect.width) * 100;
-      setLeftPanelWidth(Math.max(20, Math.min(80, newWidth)));
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const handleAddDebtorContact = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeClaim?.id) return;
-    if (!newContactPhone.trim() || !newContactFirstName.trim()) {
-      alert('გთხოვთ მიუთითოთ ტელეფონის ნომერი და სახელი');
-      return;
-    }
-
-    setIsSavingContact(true);
-    try {
-      await crmBackendService.addDebtorContact(activeClaim.id, {
-        firstName: newContactFirstName.trim(),
-        lastName: newContactLastName.trim(),
-        phone: newContactPhone.trim(),
-        relationType: newContactPosition.trim(),
-        notes: newContactNotes.trim(),
-      });
-      setActionSuccessMessage('ახალი საკონტაქტო ნომერი წარმატებით დაემატა!');
-      setIsAddContactModalOpen(false);
-      setNewContactPhone('+995 ');
-      setNewContactFirstName('');
-      setNewContactLastName('');
-      setNewContactNotes('');
-      setTimeout(() => setActionSuccessMessage(null), 4000);
-      await loadClaimDetail(activeClaim.id);
-    } catch (err: any) {
-      alert(err?.message || 'საკონტაქტო პირის დამატება ვერ მოხერხდა');
-    } finally {
-      setIsSavingContact(false);
-    }
-  };
-
-  const handleDeleteDebtorContact = async (contactId: string) => {
-    if (!activeClaim?.id) return;
-    try {
-      await crmBackendService.deleteDebtorContact(activeClaim.id, contactId);
-      setActionSuccessMessage('საკონტაქტო ნომერი წაიშალა');
-      setTimeout(() => setActionSuccessMessage(null), 3000);
-      await loadClaimDetail(activeClaim.id);
-    } catch (err: any) {
-      alert(err?.message || 'საკონტაქტო პირის წაშლა ვერ მოხერხდა');
-    }
-  };
+  }, [router, loadQueueAndStats]);
 
   useEffect(() => {
     if (currentTab === 'blog' && currentUser?.role !== 'ADMIN') {
@@ -397,97 +316,132 @@ export default function CrmPage() {
     }
   }, [currentTab, currentUser]);
 
-  const handleLogCall = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedClaimId) return;
+  // Clear stale selections if queue reloads
+  useEffect(() => {
+    const valid = new Set(queue.map((item) => item.id));
+    setSelectedIds((prev) => prev.filter((id) => valid.has(id)));
+  }, [queue]);
 
-    setSubmittingLog(true);
-    try {
-      await crmBackendService.logCall({
-        claimId: selectedClaimId,
-        disposition,
-        promisedDate: promisedDate || undefined,
-        promisedAmount: promisedAmount ? parseFloat(promisedAmount) : undefined,
-        notes: callNotes || 'კომუნიკაცია განხორციელდა სტანდარტული სკრიპტით.',
-      });
+  const isAdmin = currentUser?.role === 'ADMIN';
 
-      setActionSuccessMessage(`ინტერაქციის შედეგი წარმატებით დაფიქსირდა CRM ბაზაში!`);
-      setCallNotes('');
-      setPromisedAmount('');
-      setPromisedDate('');
-      setTimeout(() => setActionSuccessMessage(null), 4000);
+  const physicalCount = useMemo(() => queue.filter((i) => !i.isCompany).length, [queue]);
+  const legalCount = useMemo(() => queue.filter((i) => i.isCompany).length, [queue]);
+  const totalQueueDebt = useMemo(
+    () => queue.reduce((sum, i) => sum + Number(i.remainingAmount || 0), 0),
+    [queue],
+  );
 
-      // Refresh claim detail and stats
-      await Promise.all([loadClaimDetail(selectedClaimId), loadQueueAndStats()]);
-    } catch (err: any) {
-      alert(err?.message || 'ჩანაწერის შენახვა ვერ მოხერხდა');
-    } finally {
-      setSubmittingLog(false);
+  const entityBaseList = useMemo(() => {
+    if (entityTab === 'PHYSICAL') return queue.filter((i) => !i.isCompany);
+    if (entityTab === 'LEGAL') return queue.filter((i) => i.isCompany);
+    return queue;
+  }, [queue, entityTab]);
+
+  const filteredQueue = useMemo(
+    () => entityBaseList.filter((item) => matchesCrmFilters(item, filters)),
+    [entityBaseList, filters],
+  );
+
+  const filteredTotalDebt = useMemo(
+    () => filteredQueue.reduce((sum, i) => sum + Number(i.remainingAmount || 0), 0),
+    [filteredQueue],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredQueue.length / pageSize));
+  const paginatedQueue = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredQueue.slice(start, start + pageSize);
+  }, [filteredQueue, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [entityTab, filters]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
+  }, [totalPages, currentPage]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (filters.search.trim()) count++;
+    if (filters.caseNumber.trim()) count++;
+    if (filters.personalId.trim()) count++;
+    if (filters.debtorName.trim()) count++;
+    if (filters.creditorName.trim()) count++;
+    if (filters.phone.trim()) count++;
+    if (filters.directorName.trim()) count++;
+    if (filters.address.trim()) count++;
+    if (filters.disposition !== 'ALL') count++;
+    if (filters.priority !== 'ALL') count++;
+    if (filters.rating !== 'ALL') count++;
+    if (filters.scheduleFilter !== 'ALL') count++;
+    if (filters.minAmount.trim()) count++;
+    if (filters.maxAmount.trim()) count++;
+    if (filters.minOverdue.trim()) count++;
+    if (filters.maxOverdue.trim()) count++;
+    return count;
+  }, [filters]);
+
+  const selectedList = useMemo(() => {
+    if (selectedIds.length === 0) return [];
+    const set = new Set(selectedIds);
+    return filteredQueue.filter((item) => set.has(item.id));
+  }, [filteredQueue, selectedIds]);
+
+  const allFilteredSelected =
+    filteredQueue.length > 0 && filteredQueue.every((item) => selectedIds.includes(item.id));
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    );
   };
 
-  const handleOpenDoc = async (doc: any) => {
-    if (doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx')) {
-      try {
-        await downloadDebtorAccountTurnoverXLSX({
-          debtorName: activeClaim?.debtorName || 'დებიტორი',
-          debtorPersonalId: activeClaim?.debtorPersonalId || '01019012345',
-          creditorName: activeClaim?.creditorName || 'შპს დებიტინფო კრედიტორი',
-          caseNumber: activeClaim?.caseNumber || 'DI-2024-8841',
-          agreementNumber: activeClaim?.agreementNumber || 'AGR-8841',
-          fileName: doc.fileName || `brunviti_barati_${activeClaim?.debtorPersonalId || '8841'}.xlsx`,
-        });
-      } catch (err) {
-        console.error('Failed to download turnover Excel:', err);
-        alert('Excel ბრუნვითი ბარათის გენერირება ვერ მოხერხდა.');
-      }
+  const toggleSelectAllFiltered = () => {
+    const ids = filteredQueue.map((i) => i.id);
+    if (allFilteredSelected) {
+      const drop = new Set(ids);
+      setSelectedIds((prev) => prev.filter((id) => !drop.has(id)));
     } else {
-      const w = window.open('', '_blank');
-      if (!w) return;
-      w.document.write(`
-        <!DOCTYPE html>
-        <html lang="ka">
-        <head>
-          <meta charset="utf-8">
-          <title>${doc.title}</title>
-          <style>
-            body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; color: #1e293b; max-width: 800px; margin: 0 auto; line-height: 1.6; }
-            .header { border-bottom: 2px solid #002984; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
-            .badge { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: bold; }
-            .table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
-            .table th, .table td { border: 1px solid #cbd5e1; padding: 10px; text-align: left; }
-            .table th { background: #f8fafc; font-weight: 600; width: 35%; }
-            .stamp { border: 2px dashed #002984; padding: 12px 20px; border-radius: 8px; color: #002984; font-weight: bold; text-align: center; display: inline-block; margin-top: 30px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div style="font-size: 20px; font-weight: bold; color: #002984;">Debitinfo.GE • კრედიტ მენეჯერის საქმის დოკუმენტი</div>
-            <div class="badge">დამოწმებულია RS.GE</div>
-          </div>
-          <h2 style="margin: 0 0 10px;">${doc.title}</h2>
-          <p style="color: #64748b; font-size: 13px; margin: 0 0 20px;">დებიტორის საქმის დამადასტურებელი ოფიციალური დოკუმენტაცია</p>
-          <table class="table">
-            <tr><th>დოკუმენტის ტიპი</th><td>${doc.docType}</td></tr>
-            <tr><th>ფაილის დასახელება</th><td>${doc.fileName}</td></tr>
-            <tr><th>საქმის ნომერი</th><td><strong>${activeClaim?.caseNumber || 'DI-2024-8841'}</strong></td></tr>
-            <tr><th>დებიტორი</th><td>${activeClaim?.debtorName || 'დებიტორი'} (პ/ნ: ${activeClaim?.debtorPersonalId || '01019012345'})</td></tr>
-            <tr><th>კრედიტორი</th><td>${activeClaim?.creditorName || 'კრედიტორი'}</td></tr>
-            <tr><th>სტატუსი</th><td style="color: #059669; font-weight: bold;">დამოწმებულია / აქტიურია</td></tr>
-            <tr><th>აღწერა</th><td>${doc.description || 'დავალიანების წარმოშობისა და ვალდებულების არსებობის ოფიციალური საფუძველი'}</td></tr>
-          </table>
-          <div class="stamp">
-            RS.GE / DEBITINFO.GE<br>
-            დამოწმებულია კრედიტ მენეჯერისთვის
-          </div>
-        </body>
-        </html>
-      `);
-      w.document.close();
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])));
     }
   };
 
-  const handlePublishPost = async (e: React.FormEvent, isDraft = false) => {
+  const clearSelection = () => setSelectedIds([]);
+  const resetFilters = () => setFilters(INITIAL_CRM_FILTERS);
+
+  const updateFilter = <K extends keyof CrmFiltersState>(key: K, value: CrmFiltersState[K]) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleCopyId = (e: React.MouseEvent, value: string) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(value);
+    setCopiedId(value);
+    setTimeout(() => setCopiedId((prev) => (prev === value ? null : prev)), 1500);
+  };
+
+  const openModalWithTab = (item: any, tab: CrmModalTab) => {
+    setModalInitialTab(tab);
+    setModalClaim(item);
+  };
+
+  const exportToExcel = (targetList: any[], customName?: string) => {
+    if (targetList.length === 0) {
+      alert('ექსპორტისთვის ჩანაწერები არ მოიძებნა.');
+      return;
+    }
+    const rows = buildCrmExcelRows(targetList);
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'CRM სამუშაო რეესტრი');
+    const dateStamp = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, customName || `debitinfo_crm_queue_${dateStamp}.xlsx`);
+  };
+
+  const handlePublishPost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!postTitle.trim() || !postContent.trim()) return;
 
@@ -506,10 +460,12 @@ export default function CrmPage() {
       categoryKa: categoryNamesKa[postCategory] || 'სიახლეები',
       excerpt: postExcerpt || postContent.slice(0, 150) + '...',
       content: postContent,
-      coverImage: postCoverImage || 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=1000',
+      coverImage:
+        postCoverImage ||
+        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=1000',
       authorName: currentUser?.name || 'თამარ გიორგობიანი',
       authorRole: 'კრედიტ მენეჯერი / კონტენტ მენეჯერი',
-      published: !isDraft,
+      published: true,
       tags: postTags.split(',').map((t) => t.trim()).filter(Boolean),
     });
 
@@ -527,377 +483,233 @@ export default function CrmPage() {
     setPosts(posts.filter((p) => p.id !== id));
   };
 
+  const entityLabel =
+    entityTab === 'PHYSICAL'
+      ? 'ფიზიკური პირები'
+      : entityTab === 'LEGAL'
+        ? 'იურიდიული პირები'
+        : 'ყველა ჩანაწერი';
+
   if (!authorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-bg" suppressHydrationWarning>
-        <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" suppressHydrationWarning />
+      <div className="min-h-screen flex items-center justify-center bg-bg-main" suppressHydrationWarning>
+        <div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="bg-surface-bg text-text-primary h-screen max-h-screen flex flex-col font-body-md antialiased overflow-hidden fixed inset-0 z-0" suppressHydrationWarning>
-      {/* TopNavBar */}
-      <header className="w-full px-6 h-16 shrink-0 flex items-center justify-between border-b border-border-subtle bg-surface-card shadow-sm">
+    <div className="bg-bg-main text-text-primary min-h-screen flex flex-col" suppressHydrationWarning>
+      {/* Top Navigation Header */}
+      <header className="sticky top-0 z-30 w-full px-6 py-3 flex items-center justify-between border-b border-border-subtle bg-surface-card shadow-sm">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2 group cursor-pointer">
-            <span className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center text-on-primary group-hover:scale-105 transition-transform">
-              <span className="material-symbols-outlined text-lg">account_balance</span>
-            </span>
-            <span className="text-headline-sm font-headline-sm font-bold text-primary tracking-tight group-hover:underline">
-              Debitinfo.GE კრედიტ მენეჯერი &amp; CRM
-            </span>
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="size-9 rounded-lg bg-primary text-white flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+              <span className="material-symbols-outlined text-[20px]">support_agent</span>
+            </div>
+            <div>
+              <span className="font-bold text-lg tracking-tight block leading-none text-text-primary">
+                Debitinfo.GE
+              </span>
+              <span className="text-[11px] font-medium text-text-muted">
+                კრედიტ მენეჯერი &amp; CRM კონსოლი
+              </span>
+            </div>
           </Link>
-          {/* Navigation Tabs */}
-          <nav className="hidden lg:flex items-center gap-3 ml-4">
+
+          <nav className="hidden lg:flex items-center gap-1 ml-2 bg-slate-100/80 p-1 rounded-lg border border-border-subtle">
             <button
+              type="button"
               onClick={() => setCurrentTab('calls')}
-              className={`font-headline-sm text-body-md pb-1 flex items-center gap-1.5 cursor-pointer transition-all ${
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
                 currentTab === 'calls'
-                  ? 'border-b-2 border-primary text-primary font-bold'
-                  : 'text-text-muted hover:text-on-surface'
+                  ? 'bg-white text-text-primary shadow-sm'
+                  : 'text-text-secondary hover:text-text-primary'
               }`}
             >
-              <span>ინტერაქციის კონსოლი (CRM Console)</span>
-              <span className="w-2 h-2 rounded-full bg-accent-mint animate-pulse" />
+              <span>სამუშაო რეესტრი ({queue.length})</span>
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
             </button>
+
             {isAdmin && (
               <button
+                type="button"
                 onClick={() => setCurrentTab('blog')}
-                className={`font-headline-sm text-body-md pb-1 flex items-center gap-1.5 cursor-pointer transition-all ${
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
                   currentTab === 'blog'
-                    ? 'border-b-2 border-primary text-primary font-bold'
-                    : 'text-text-muted hover:text-on-surface'
+                    ? 'bg-white text-text-primary shadow-sm'
+                    : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
-                <span className="material-symbols-outlined text-base">newspaper</span>
+                <span className="material-symbols-outlined text-[15px]">newspaper</span>
                 <span>ბლოგი &amp; სიახლეები (CMS)</span>
-                <span className="px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">Admin CMS</span>
               </button>
             )}
-            <button
-              onClick={() => {
-                setCurrentTab('calls');
-                loadQueueAndStats();
-              }}
-              className="font-body-md px-2 py-1 rounded text-text-muted hover:text-on-surface hover:bg-slate-100 transition-colors cursor-pointer"
-            >
-              სამუშაო რიგი ({queue.length})
-            </button>
           </nav>
         </div>
 
-        {/* Trailing Actions & Operator Badge */}
-        <div className="flex items-center gap-4">
-          {/* Status Badge */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-bg border border-border-subtle rounded-full">
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-border-subtle rounded-full">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rating-a opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#059669]" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600" />
             </span>
-            <span className="text-label-md font-label-md text-text-primary">ონლაინ / მზადყოფნაში</span>
+            <span className="text-xs font-semibold text-text-primary">ონლაინ / მზადყოფნაში</span>
           </div>
-          <div className="h-6 w-[1px] bg-border-subtle hidden sm:block" />
-          {/* Link to Ops (Admin Only) */}
-          {currentUser?.role === 'ADMIN' && (
+
+          {isAdmin && (
             <Link
               href="/ops"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-primary border border-blue-200 text-xs font-semibold hover:bg-blue-100 transition shadow-2xs"
-              title="საოპერაციო ცენტრში გადასვლა"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-primary border border-blue-200 text-xs font-semibold hover:bg-blue-100 transition"
             >
               <span className="material-symbols-outlined text-base">admin_panel_settings</span>
               <span className="hidden sm:inline">საოპერაციო ცენტრი</span>
             </Link>
           )}
 
-          {/* Operator Profile */}
-          <div className="flex items-center gap-2.5 pl-1">
-            <div className="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary font-bold text-xs ring-2 ring-primary/20">
-              {currentUser?.name ? currentUser.name.substring(0, 2) : (currentUser?.email ? currentUser.email.substring(0, 2).toUpperCase() : 'OP')}
-            </div>
-            <div className="hidden xl:block text-left">
-              <p className="text-body-sm font-label-md leading-none text-text-primary">
+          <div className="flex items-center gap-2.5 pl-3 border-l border-border-subtle">
+            <div className="text-right hidden sm:block">
+              <p className="text-xs font-bold text-text-primary">
                 {currentUser?.name || currentUser?.email || 'თამარ გიორგობიანი'}
               </p>
-              <p className="text-label-sm font-label-sm text-text-muted mt-0.5">
-                {currentUser?.role === 'ADMIN' ? 'სისტემური ადმინისტრატორი' : 'კრედიტ მენეჯერი & CRM'}
+              <p className="text-[11px] text-text-muted">
+                {isAdmin ? 'HR / სისტემური ადმინისტრატორი' : 'კრედიტ მენეჯერი & CRM'}
               </p>
             </div>
+            <div className="size-9 rounded-full bg-blue-50 text-primary border border-blue-200 flex items-center justify-center font-bold text-xs">
+              {currentUser?.name
+                ? currentUser.name.substring(0, 2).toUpperCase()
+                : currentUser?.email
+                  ? currentUser.email.substring(0, 2).toUpperCase()
+                  : 'OP'}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                authService.logout();
+                window.location.href = '/ops';
+              }}
+              className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+              title="სისტემიდან გამოსვლა"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+            </button>
           </div>
-
-          <button
-            onClick={() => {
-              authService.logout();
-              window.location.href = '/ops';
-            }}
-            className="p-1.5 rounded-lg text-text-muted hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-            title="სისტემიდან გამოსვლა"
-          >
-            <span className="material-symbols-outlined text-[20px]">logout</span>
-          </button>
         </div>
       </header>
 
-      {/* KPI Metrics Ribbon (Top Dashboard Strip) */}
-      <section className="w-full bg-surface-card border-b border-border-subtle px-6 py-2.5 shrink-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* KPI 1 */}
-          <div className="flex items-center justify-between p-2.5 bg-surface-bg border border-border-subtle rounded-xl">
-            <div>
-              <span className="text-label-sm font-label-sm text-text-muted uppercase tracking-wider block">
-                დღის ინტერაქციები / გეგმა
-              </span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-data-mono-lg font-data-mono-lg text-text-primary">
-                  {crmStats.callsToday}{' '}
-                  <span className="text-text-muted font-normal text-sm">/ {crmStats.dailyTarget}</span>
-                </span>
-                <span className="text-label-sm font-label-sm text-secondary bg-surface-container px-1.5 py-0.5 rounded">
-                  {Math.round((crmStats.callsToday / crmStats.dailyTarget) * 100)}%
-                </span>
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined text-lg">support_agent</span>
-            </div>
-          </div>
-          {/* KPI 2 */}
-          <div className="flex items-center justify-between p-2.5 bg-surface-bg border border-border-subtle rounded-xl">
-            <div>
-              <span className="text-label-sm font-label-sm text-text-muted uppercase tracking-wider block">
-                შედეგიანი მოლაპარაკება
-              </span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-data-mono-lg font-data-mono-lg text-[#047857]">
-                  {crmStats.promisesCount}
-                </span>
-                <span className="text-label-sm font-label-sm text-[#047857] bg-accent-mint/20 px-1.5 py-0.5 rounded font-medium">
-                  დათანხმდა დაფარვას
-                </span>
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-accent-mint/15 flex items-center justify-center text-[#047857]">
-              <span className="material-symbols-outlined text-lg">task_alt</span>
-            </div>
-          </div>
-          {/* KPI 3 */}
-          <div className="flex items-center justify-between p-2.5 bg-surface-bg border border-border-subtle rounded-xl">
-            <div>
-              <span className="text-label-sm font-label-sm text-text-muted uppercase tracking-wider block">
-                შეუმდგარი კავშირი
-              </span>
-              <div className="flex items-baseline gap-2 mt-0.5">
-                <span className="text-data-mono-lg font-data-mono-lg text-text-primary">
-                  {crmStats.unreachableCount}
-                </span>
-                <span className="text-label-sm font-label-sm text-text-muted bg-border-subtle/60 px-1.5 py-0.5 rounded">
-                  მიუწვდომელი
-                </span>
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-outline">
-              <span className="material-symbols-outlined text-lg">phone_missed</span>
-            </div>
-          </div>
-          {/* KPI 4 */}
-          <div className="flex items-center justify-between p-2.5 bg-surface-bg border border-border-subtle rounded-xl ring-1 ring-accent-mint/50">
-            <div>
-              <span className="text-label-sm font-label-sm text-text-muted uppercase tracking-wider block">
-                შეთანხმებული თანხა დღეს
-              </span>
-              <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-data-mono-lg font-data-mono-lg text-primary font-bold">
-                  {Number(crmStats.promisedAmountTotal || 0).toLocaleString('ka-GE')} ₾
-                </span>
-                <span className="w-2 h-2 rounded-full bg-accent-mint ml-1 inline-block" />
-              </div>
-            </div>
-            <div className="w-8 h-8 rounded-lg bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
-              <span className="material-symbols-outlined text-lg">payments</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Content: Switches between Call Console and Blog/News Studio */}
+      {/* Main Content */}
       {currentTab === 'blog' ? (
-        <main className="flex-1 overflow-y-auto p-6 max-w-7xl w-full mx-auto space-y-6">
-          {/* Studio Header & Stats */}
+        <main className="flex-1 p-6 max-w-7xl w-full mx-auto space-y-6">
           <div className="bg-surface-card rounded-2xl p-6 border border-border-subtle shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="p-2 rounded-lg bg-primary/10 text-primary">
-                  <span className="material-symbols-outlined text-2xl">post_add</span>
-                </span>
-                <div>
-                  <h1 className="text-headline-md font-headline-md font-bold text-text-primary">
-                    ბლოგისა &amp; სიახლეების მართვის სტუდია
-                  </h1>
-                  <p className="text-body-sm text-text-muted mt-0.5">
-                    კრედიტ მენეჯერისა და ადმინისტრაციის პანელი — გამოაქვეყნეთ სტატიები და სიახლეები Debitinfo.GE-ის მთავარ პორტალზე
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-center gap-3">
-              <div className="px-4 py-2 bg-surface-bg rounded-xl border border-border-subtle text-center">
-                <span className="text-xs text-text-muted block">გამოქვეყნებული</span>
-                <span className="text-headline-sm font-bold text-primary font-data-mono-md">{posts.length}</span>
+              <span className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                <span className="material-symbols-outlined text-2xl">post_add</span>
+              </span>
+              <div>
+                <h1 className="text-headline-sm font-headline-sm font-bold text-text-primary">
+                  ბლოგისა &amp; სიახლეების მართვის სტუდია
+                </h1>
+                <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
+                  გამოაქვეყნეთ სტატიები და სიახლეები Debitinfo.GE-ის მთავარ პორტალზე
+                </p>
               </div>
-              <div className="px-4 py-2 bg-surface-bg rounded-xl border border-border-subtle text-center">
-                <span className="text-xs text-text-muted block">მკითხველი</span>
-                <span className="text-headline-sm font-bold text-emerald-700 font-data-mono-md">
-                  {posts.reduce((acc, p) => acc + p.viewsCount, 0).toLocaleString()}
-                </span>
-              </div>
-              <Link
-                href="/#blog"
-                target="_blank"
-                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-text-primary text-body-sm font-medium transition-all flex items-center gap-1.5"
-              >
-                <span className="material-symbols-outlined text-base">visibility</span>
-                <span>საიტზე ნახვა</span>
-              </Link>
             </div>
+            <Link
+              href="/#blog"
+              target="_blank"
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-text-primary text-xs font-semibold flex items-center gap-1.5 self-start"
+            >
+              <span className="material-symbols-outlined text-base">visibility</span>
+              <span>საიტზე ნახვა</span>
+            </Link>
           </div>
 
           {publishSuccess && (
-            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium flex items-center gap-2 animate-fadeIn">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
               <span className="material-symbols-outlined text-emerald-600">check_circle</span>
-              <span>სტატია წარმატებით გამოქვეყნდა საიტზე!</span>
+              <span>სტატია წარმატებით გამოქვეყნდა!</span>
             </div>
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: Post Creation Form (7 Cols) */}
             <div className="lg:col-span-7 bg-surface-card rounded-2xl border border-border-subtle p-6 shadow-sm space-y-4">
-              <h3 className="font-headline-sm font-bold text-text-primary flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary text-lg">edit_document</span>
-                ახალი სტატიის დამატება
-              </h3>
-
+              <h3 className="text-sm font-bold text-text-primary">ახალი სტატიის დამატება</h3>
               <form onSubmit={handlePublishPost} className="space-y-4">
-                <div>
-                  <label className="block text-body-sm font-semibold text-text-primary mb-1">
-                    სათაური <span className="text-rose-500">*</span>
-                  </label>
+                <input
+                  type="text"
+                  required
+                  value={postTitle}
+                  onChange={(e) => setPostTitle(e.target.value)}
+                  placeholder="სათაური *"
+                  className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-xs focus:border-primary outline-none"
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <select
+                    value={postCategory}
+                    onChange={(e: any) => setPostCategory(e.target.value)}
+                    className="px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-xs focus:border-primary outline-none"
+                  >
+                    <option value="tax_updates">საგადასახადო სიახლეები</option>
+                    <option value="credit_risks">საკრედიტო რისკები</option>
+                    <option value="financial_literacy">ფინანსური განათლება</option>
+                    <option value="legal_mediation">მედიაცია &amp; კანონმდებლობა</option>
+                    <option value="news">პლატფორმის სიახლეები</option>
+                  </select>
                   <input
                     type="text"
-                    required
-                    value={postTitle}
-                    onChange={(e) => setPostTitle(e.target.value)}
-                    placeholder="მაგ: როგორ დავიცვათ თავი ვადაგადაცილებული დებიტორული რისკებისგან"
-                    className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-body-md focus:border-primary focus:outline-none"
+                    value={postTags}
+                    onChange={(e) => setPostTags(e.target.value)}
+                    placeholder="თეგები (მძიმით)"
+                    className="px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-xs focus:border-primary outline-none"
                   />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-body-sm font-semibold text-text-primary mb-1">კატეგორია</label>
-                    <select
-                      value={postCategory}
-                      onChange={(e: any) => setPostCategory(e.target.value)}
-                      className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-body-md focus:border-primary focus:outline-none"
-                    >
-                      <option value="tax_updates">საგადასახადო სიახლეები</option>
-                      <option value="credit_risks">საკრედიტო რისკები</option>
-                      <option value="financial_literacy">ფინანსური განათლება</option>
-                      <option value="legal_mediation">მედიაცია &amp; კანონმდებლობა</option>
-                      <option value="news">პლატფორმის სიახლეები</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-body-sm font-semibold text-text-primary mb-1">თეგები (მძიმით)</label>
-                    <input
-                      type="text"
-                      value={postTags}
-                      onChange={(e) => setPostTags(e.target.value)}
-                      className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-body-md focus:border-primary focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-body-sm font-semibold text-text-primary mb-1">მოკლე ანოტაცია (Excerpt)</label>
-                  <textarea
-                    rows={2}
-                    value={postExcerpt}
-                    onChange={(e) => setPostExcerpt(e.target.value)}
-                    placeholder="1-2 წინადადება მთავარ გვერდზე საჩვენებლად..."
-                    className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-body-sm focus:border-primary focus:outline-none resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-body-sm font-semibold text-text-primary mb-1">სტატიის სრული ტექსტი</label>
-                  <textarea
-                    rows={6}
-                    required
-                    value={postContent}
-                    onChange={(e) => setPostContent(e.target.value)}
-                    placeholder="დაწერეთ სტატიის დეტალური შინაარსი..."
-                    className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-body-sm focus:border-primary focus:outline-none resize-y"
-                  />
-                </div>
-
-                <div className="flex items-center justify-end gap-3 pt-2">
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-primary-container hover:bg-primary text-white font-semibold text-body-md shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-base">send</span>
-                    <span>სტატიის გამოქვეყნება საიტზე</span>
-                  </button>
-                </div>
+                <textarea
+                  rows={2}
+                  value={postExcerpt}
+                  onChange={(e) => setPostExcerpt(e.target.value)}
+                  placeholder="მოკლე ანოტაცია..."
+                  className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-xs focus:border-primary outline-none"
+                />
+                <textarea
+                  rows={6}
+                  required
+                  value={postContent}
+                  onChange={(e) => setPostContent(e.target.value)}
+                  placeholder="სტატიის სრული ტექსტი *"
+                  className="w-full px-3.5 py-2 bg-surface-bg border border-border-subtle rounded-xl text-xs focus:border-primary outline-none"
+                />
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">send</span>
+                  <span>გამოქვეყნება</span>
+                </button>
               </form>
             </div>
 
-            {/* Right Column: Published Posts List (5 Cols) */}
-            <div className="lg:col-span-5 bg-surface-card rounded-2xl border border-border-subtle p-6 shadow-sm space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-                <h3 className="font-headline-sm font-bold text-text-primary flex items-center gap-2">
-                  <span className="material-symbols-outlined text-secondary text-lg">library_books</span>
-                  გამოქვეყნებული სტატიები ({posts.length})
-                </h3>
-                <span className="text-xs text-text-muted">Live Database</span>
-              </div>
-
-              <div className="space-y-3 max-h-[700px] overflow-y-auto pr-1">
+            <div className="lg:col-span-5 bg-surface-card rounded-2xl border border-border-subtle p-6 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-text-primary">
+                გამოქვეყნებული სტატიები ({posts.length})
+              </h3>
+              <div className="space-y-3 max-h-[600px] overflow-y-auto">
                 {posts.map((post) => (
-                  <div
-                    key={post.id}
-                    className="p-4 rounded-xl border border-border-subtle bg-surface-bg hover:border-slate-300 transition-all space-y-2 group"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+                  <div key={post.id} className="p-3.5 rounded-xl border border-border-subtle bg-surface-bg space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="px-2 py-0.5 rounded bg-blue-50 text-primary text-[10px] font-bold">
                         {post.categoryKa}
                       </span>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[11px] text-text-muted flex items-center gap-1 font-mono">
-                          <span className="material-symbols-outlined text-[13px]">visibility</span>
-                          {post.viewsCount}
-                        </span>
-                        <button
-                          onClick={() => handleDeletePost(post.id)}
-                          className="p-1 rounded text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                          title="სტატიის წაშლა"
-                        >
-                          <span className="material-symbols-outlined text-sm">delete</span>
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePost(post.id)}
+                        className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                      </button>
                     </div>
-                    <h4 className="font-semibold text-text-primary text-body-md group-hover:text-primary transition-colors leading-snug">
-                      {post.title}
-                    </h4>
-                    <p className="text-xs text-text-muted line-clamp-2 leading-relaxed">{post.excerpt}</p>
-                    <div className="flex items-center justify-between text-[11px] text-text-muted pt-2 border-t border-border-subtle/60">
-                      <span>{post.publishedAt} • {post.authorName}</span>
-                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        {post.published ? 'საიტზეა' : 'დრაფტი'}
-                      </span>
-                    </div>
+                    <h4 className="font-bold text-xs text-text-primary">{post.title}</h4>
+                    <p className="text-[11px] text-text-muted line-clamp-2">{post.excerpt}</p>
                   </div>
                 ))}
               </div>
@@ -905,233 +717,934 @@ export default function CrmPage() {
           </div>
         </main>
       ) : (
-        /* Main Split Layout: Telephony Active Call Console */
-        <main ref={splitContainerRef} className="flex-1 min-h-0 flex overflow-hidden relative">
-          {/* LEFT SECTION: Queue Registry & Filters */}
-          <section
-            style={{ width: `${leftPanelWidth}%` }}
-            className="border-r border-border-subtle flex flex-col h-full min-h-0 bg-surface-card overflow-hidden shrink-0 transition-[width] duration-100"
-          >
-            {/* Section Header & Filter Cluster */}
-            <div className="px-5 sm:px-6 py-4 border-b border-border-subtle bg-surface-card shrink-0 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary text-xl">format_list_bulleted</span>
-                  <h2 className="text-headline-sm font-headline-sm text-text-primary">სამუშაო რეესტრი (Queue Registry)</h2>
-                  <span className="px-2 py-0.5 bg-surface-container text-primary rounded-full text-label-sm font-label-sm">
-                    {queue.length} საქმე
+        <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-6 py-6 space-y-6">
+          {/* Compact 4-Card KPI Strip */}
+          <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                  დღის ინტერაქციები / გეგმა
+                </p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-2xl font-extrabold font-mono text-text-primary">
+                    {crmStats.callsToday || 0}
+                    <span className="text-sm font-normal text-text-muted"> / {crmStats.dailyTarget || 60}</span>
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-blue-50 text-primary text-[11px] font-bold font-mono">
+                    {Math.round(((crmStats.callsToday || 0) / Math.max(1, crmStats.dailyTarget || 60)) * 100)}%
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={toggleRegistryWidth}
-                    className="px-2.5 py-1 text-label-md font-label-md text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                    title={leftPanelWidth <= 35 ? 'რეესტრის გაფართოება (58%)' : 'რეესტრის შეკუმშვა (28%)'}
-                  >
-                    <span className="material-symbols-outlined text-sm">
-                      {leftPanelWidth <= 35 ? 'dock_to_right' : 'vertical_split'}
-                    </span>
-                    <span className="hidden sm:inline">
-                      {leftPanelWidth <= 35 ? 'გაფართოება' : 'შეკუმშვა'}
-                    </span>
-                  </button>
-                  <button
-                    onClick={loadQueueAndStats}
-                    className="px-2.5 py-1 text-label-md font-label-md text-primary bg-primary/10 hover:bg-primary/15 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-sm">refresh</span>
-                    <span>განახლება</span>
-                  </button>
-                </div>
               </div>
-
-              {/* Segmented Filters */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 text-body-sm">
-                <button
-                  onClick={() => setPriorityFilter('ALL')}
-                  className={`px-3 py-1.5 font-medium rounded-lg shadow-sm whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-                    priorityFilter === 'ALL'
-                      ? 'bg-primary text-on-primary'
-                      : 'bg-surface-bg border border-border-subtle text-text-muted hover:text-text-primary'
-                  }`}
-                >
-                  <span>ყველა</span>
-                  <span className="bg-white/20 text-xs px-1.5 py-0.2 rounded-full">{queue.length}</span>
-                </button>
-                <button
-                  onClick={() => setPriorityFilter('HIGH')}
-                  className={`px-3 py-1.5 rounded-lg whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-                    priorityFilter === 'HIGH'
-                      ? 'bg-rating-c text-white'
-                      : 'bg-surface-bg border border-border-subtle text-text-muted hover:text-text-primary'
-                  }`}
-                >
-                  <span>მაღალი პრიორიტეტი</span>
-                  <span className="bg-rating-c/15 text-rating-c text-xs font-bold px-1.5 py-0.2 rounded-full">ვადაგადაცილებული</span>
-                </button>
-                <button
-                  onClick={() => setPriorityFilter('CALLBACK')}
-                  className={`px-3 py-1.5 rounded-lg whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
-                    priorityFilter === 'CALLBACK'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-surface-bg border border-border-subtle text-text-muted hover:text-text-primary'
-                  }`}
-                >
-                  <span>დანიშნული გადარეკვა</span>
-                </button>
-              </div>
-
-              {/* Search Input */}
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-3 top-2.5 text-text-muted text-lg">search</span>
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') loadQueueAndStats();
-                  }}
-                  className="w-full pl-9 pr-4 py-2 bg-white border border-border-subtle rounded-lg text-body-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 transition-all font-body-md"
-                  placeholder="ძებნა: სახელი, გვარი, პირადი ნომერი ან ტელეფონი..."
-                  type="text"
-                />
+              <div className="size-10 rounded-xl bg-blue-50 border border-blue-100 text-primary flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px]">support_agent</span>
               </div>
             </div>
 
-            {/* Interactive Registry Table */}
-            <div ref={tableContainerRef} className="flex-1 min-h-0 overflow-auto custom-scrollbar bg-surface-card">
-              <table className="w-full border-collapse text-left">
-                <thead className="sticky top-0 bg-[#F1F5F9] border-b border-border-subtle text-text-muted text-label-sm font-label-sm uppercase tracking-wider z-10">
-                  <tr>
-                    <th className="py-2.5 px-4 font-semibold">მოვალე / პ/ნ</th>
-                    <th className="py-2.5 px-3 font-semibold">ტელეფონი</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">ვალის თანხა</th>
-                    <th className="py-2.5 px-3 font-semibold">ვადაგადაცილება</th>
-                    <th className="py-2.5 px-3 font-semibold text-center">ბოლო სტატუსი</th>
-                    <th className="py-2.5 px-4 font-semibold text-right">მოქმედება</th>
+            <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                  შედეგიანი მოლაპარაკება
+                </p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-2xl font-extrabold font-mono text-emerald-600">
+                    {crmStats.promisesCount || 0}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                    დათანხმდა დაფარვას
+                  </span>
+                </div>
+              </div>
+              <div className="size-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px]">task_alt</span>
+              </div>
+            </div>
+
+            <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                  შეუმდგარი კავშირი
+                </p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-2xl font-extrabold font-mono text-text-primary">
+                    {crmStats.unreachableCount || 0}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">
+                    მიუწვდომელი
+                  </span>
+                </div>
+              </div>
+              <div className="size-10 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px]">phone_missed</span>
+              </div>
+            </div>
+
+            <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                  შეთანხმებული თანხა დღეს
+                </p>
+                <p className="text-2xl font-extrabold font-mono text-primary mt-1">
+                  {Number(crmStats.promisedAmountTotal || 0).toLocaleString('ka-GE')} ₾
+                </p>
+              </div>
+              <div className="size-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px]">payments</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Standardized Full-Width CRM Queue Registry Card */}
+          <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm space-y-5">
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="size-11 rounded-xl bg-primary text-white flex items-center justify-center shadow-sm shrink-0">
+                  <span className="material-symbols-outlined text-[22px]">format_list_bulleted</span>
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h1 className="text-headline-sm font-headline-sm font-bold text-text-primary">
+                      ქოლ-ცენტრის სამუშაო რეესტრი
+                    </h1>
+                    <span className="px-2.5 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-800 text-xs font-bold font-mono">
+                      {queue.length} სულ საქმე
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold font-mono">
+                      პორტფელის ჯამი: {totalQueueDebt.toLocaleString('ka-GE')} ₾
+                    </span>
+                  </div>
+                  <p className="text-body-sm font-body-sm text-text-muted mt-0.5">
+                    ზარების რიგი, მოვალეთა საკონტაქტო ბაზა, გადახდის გრაფიკები და კომუნიკაციების აღრიცხვა
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-border-subtle text-xs font-semibold text-text-secondary">
+                  <span className="material-symbols-outlined text-[15px] text-primary">person</span>
+                  ფიზიკური: <strong className="font-mono text-text-primary">{physicalCount}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 border border-border-subtle text-xs font-semibold text-text-secondary">
+                  <span className="material-symbols-outlined text-[15px] text-indigo-600">business</span>
+                  იურიდიული: <strong className="font-mono text-text-primary">{legalCount}</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Standardized Toolbar */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-1.5 bg-slate-100/80 rounded-2xl border border-slate-200">
+              {/* Entity Switcher */}
+              <div className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-xl border border-border-subtle shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEntityTab('ALL');
+                    clearSelection();
+                  }}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                    entityTab === 'ALL'
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">layers</span>
+                  <span>ყველა</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                      entityTab === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {queue.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEntityTab('PHYSICAL');
+                    clearSelection();
+                  }}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                    entityTab === 'PHYSICAL'
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">person</span>
+                  <span>ფიზიკური პირები</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                      entityTab === 'PHYSICAL'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {physicalCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEntityTab('LEGAL');
+                    clearSelection();
+                  }}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                    entityTab === 'LEGAL'
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[16px]">domain</span>
+                  <span>იურიდიული პირები</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                      entityTab === 'LEGAL' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {legalCount}
+                  </span>
+                </button>
+              </div>
+
+              {/* Right Controls */}
+              <div className="flex flex-wrap items-center gap-2 px-1">
+                <div className="relative flex-1 sm:flex-initial sm:w-64">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[17px]">
+                    search
+                  </span>
+                  <input
+                    type="text"
+                    value={filters.search}
+                    onChange={(e) => updateFilter('search', e.target.value)}
+                    placeholder="ძიება (სახელი, პ/ნ, ტელეფონი, საქმე)..."
+                    className="w-full h-9 pl-9 pr-3 bg-white border border-border-subtle rounded-xl text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition placeholder:text-text-muted"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowFilterDrawer((prev) => !prev)}
+                  className={`h-9 px-3.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
+                    showFilterDrawer || activeFiltersCount > 0
+                      ? 'bg-blue-50 text-primary border-blue-200 shadow-2xs'
+                      : 'bg-white text-text-secondary border-border-subtle hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[17px]">tune</span>
+                  <span>ფილტრები</span>
+                  {activeFiltersCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-primary text-white text-[10px] font-mono">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                </button>
+
+                {activeFiltersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="h-9 px-3 rounded-xl bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                    <span>გასუფთავება</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={loadQueueAndStats}
+                  disabled={loadingQueue}
+                  className="h-9 px-3.5 rounded-xl bg-white border border-border-subtle text-text-secondary hover:bg-slate-50 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                >
+                  <span className={`material-symbols-outlined text-[17px] ${loadingQueue ? 'animate-spin' : ''}`}>
+                    refresh
+                  </span>
+                  <span>განახლება</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsChartStudioOpen(true)}
+                  className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[17px]">bar_chart</span>
+                  <span>
+                    {selectedList.length > 0
+                      ? `გრაფიკის აგება (${selectedList.length})`
+                      : 'გრაფიკების სტუდია'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => exportToExcel(selectedList.length > 0 ? selectedList : filteredQueue)}
+                  className="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[17px]">download</span>
+                  <span>
+                    {selectedList.length > 0
+                      ? `მონიშნულის ექსპორტი (${selectedList.length})`
+                      : 'Excel ექსპორტი (.xlsx)'}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Priority & Callback Pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              {([
+                { id: 'ALL', label: 'ყველა საქმე', cls: 'bg-primary text-white border-primary' },
+                { id: 'HIGH', label: 'მაღალი პრიორიტეტი (ვადაგადაცილებული)', cls: 'bg-rose-600 text-white border-rose-600' },
+                { id: 'CALLBACK', label: 'დანიშნული გადარეკვა', cls: 'bg-amber-600 text-white border-amber-600' },
+              ] as const).map((pill) => (
+                <button
+                  key={pill.id}
+                  type="button"
+                  onClick={() => updateFilter('priority', pill.id)}
+                  className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition cursor-pointer ${
+                    filters.priority === pill.id
+                      ? `${pill.cls} shadow-2xs`
+                      : 'bg-slate-50 border-border-subtle text-text-secondary hover:bg-slate-100'
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Expandable Multi-Parameter Filter Panel */}
+            {showFilterDrawer && (
+              <div className="p-5 rounded-2xl bg-slate-50/90 border border-slate-200 space-y-4 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-primary">manage_search</span>
+                    <h3 className="text-xs font-bold text-text-primary uppercase tracking-wider">
+                      მრავალპარამეტრიანი CRM ფილტრაცია
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">restart_alt</span>
+                    ყველას გასუფთავება
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      საქმის N / ხელშეკრულება
+                    </label>
+                    <input
+                      type="text"
+                      value={filters.caseNumber}
+                      onChange={(e) => updateFilter('caseNumber', e.target.value)}
+                      placeholder="#DI-2025..."
+                      className="w-full h-9 px-3 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      პ/ნ ან ს/კ
+                    </label>
+                    <input
+                      type="text"
+                      value={filters.personalId}
+                      onChange={(e) => updateFilter('personalId', e.target.value)}
+                      placeholder="010... / 405..."
+                      className="w-full h-9 px-3 rounded-lg bg-white border border-border-subtle text-xs font-mono outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      მოვალე / კომპანია
+                    </label>
+                    <input
+                      type="text"
+                      value={filters.debtorName}
+                      onChange={(e) => updateFilter('debtorName', e.target.value)}
+                      placeholder="სახელი ან შპს..."
+                      className="w-full h-9 px-3 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      ტელეფონი
+                    </label>
+                    <input
+                      type="text"
+                      value={filters.phone}
+                      onChange={(e) => updateFilter('phone', e.target.value)}
+                      placeholder="+995..."
+                      className="w-full h-9 px-3 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      კრედიტორი
+                    </label>
+                    <input
+                      type="text"
+                      value={filters.creditorName}
+                      onChange={(e) => updateFilter('creditorName', e.target.value)}
+                      placeholder="კრედიტორი..."
+                      className="w-full h-9 px-3 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      ბოლო სტატუსი (Disposition)
+                    </label>
+                    <select
+                      value={filters.disposition}
+                      onChange={(e) => updateFilter('disposition', e.target.value)}
+                      className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="ALL">ყველა სტატუსი</option>
+                      <option value="NEW">ახალი კონტაქტი</option>
+                      <option value="PROMISE_TO_PAY">დათანხმდა გადახდას</option>
+                      <option value="CALLBACK">დაინიშნა გადარეკვა</option>
+                      <option value="VOICEMAIL">მიუწვდომელი / არ პასუხობს</option>
+                      <option value="REFUSED">კატეგორიული უარი</option>
+                      <option value="DISPUTE_RAISED">სადავო</option>
+                      <option value="WRONG_NUMBER">არასწორი ნომერი</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      რეიტინგი
+                    </label>
+                    <select
+                      value={filters.rating}
+                      onChange={(e) => updateFilter('rating', e.target.value)}
+                      className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="ALL">ყველა რეიტინგი</option>
+                      {['A', 'B', 'C', 'D', 'E'].map((g) => (
+                        <option key={g} value={g}>
+                          Grade {g}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      გადახდის გრაფიკი
+                    </label>
+                    <select
+                      value={filters.scheduleFilter}
+                      onChange={(e) => updateFilter('scheduleFilter', e.target.value as any)}
+                      className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="ALL">ყველა</option>
+                      <option value="HAS_SCHEDULE">აქტიური გრაფიკით</option>
+                      <option value="NO_SCHEDULE">გრაფიკის გარეშე</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      დავალიანება (₾ -დან / -მდე)
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input
+                        type="number"
+                        value={filters.minAmount}
+                        onChange={(e) => updateFilter('minAmount', e.target.value)}
+                        placeholder="მინ"
+                        className="w-full h-9 px-2 rounded-lg bg-white border border-border-subtle text-xs font-mono outline-none focus:border-primary"
+                      />
+                      <input
+                        type="number"
+                        value={filters.maxAmount}
+                        onChange={(e) => updateFilter('maxAmount', e.target.value)}
+                        placeholder="მაქს"
+                        className="w-full h-9 px-2 rounded-lg bg-white border border-border-subtle text-xs font-mono outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                      ვადაგადაცილება (დღე -დან / -მდე)
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input
+                        type="number"
+                        value={filters.minOverdue}
+                        onChange={(e) => updateFilter('minOverdue', e.target.value)}
+                        placeholder="მინ"
+                        className="w-full h-9 px-2 rounded-lg bg-white border border-border-subtle text-xs font-mono outline-none focus:border-primary"
+                      />
+                      <input
+                        type="number"
+                        value={filters.maxOverdue}
+                        onChange={(e) => updateFilter('maxOverdue', e.target.value)}
+                        placeholder="მაქს"
+                        className="w-full h-9 px-2 rounded-lg bg-white border border-border-subtle text-xs font-mono outline-none focus:border-primary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Active Selection Action Banner — houses controls migrated from the old right panel */}
+            {selectedIds.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-950 text-xs font-medium animate-fadeIn">
+                <div className="flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-[18px] text-primary">check_circle</span>
+                  <span>
+                    მონიშნულია <strong className="font-mono">{selectedList.length}</strong> ჩანაწერი ({entityLabel}) — სულ {filteredQueue.length}-დან
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {!allFilteredSelected && (
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllFiltered}
+                      className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 hover:bg-blue-100 text-primary font-bold text-[11px] transition cursor-pointer"
+                    >
+                      ყველას მონიშვნა ({filteredQueue.length})
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="px-3 py-1.5 rounded-lg bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-[11px] transition cursor-pointer"
+                  >
+                    მონიშვნის მოხსნა
+                  </button>
+
+                  {/* Single-Record CRM Action Buttons (replacing the old right panel sections) */}
+                  {selectedIds.length === 1 && selectedList.length === 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => openModalWithTab(selectedList[0], 'call')}
+                        className="px-3.5 py-1.5 rounded-lg bg-primary hover:bg-primary-hover text-white font-bold text-[11px] flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">call</span>
+                        <span>ზარის აღრიცხვა &amp; კონტაქტები</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openModalWithTab(selectedList[0], 'schedule')}
+                        className="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold text-[11px] flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">calendar_month</span>
+                        <span>გადახდის გრაფიკი</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openModalWithTab(selectedList[0], 'documents')}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 hover:bg-blue-100 text-primary font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">folder_shared</span>
+                        <span>დოკუმენტები</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => openModalWithTab(selectedList[0], 'history')}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-blue-200 hover:bg-blue-100 text-slate-700 font-bold text-[11px] flex items-center gap-1 transition cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">history</span>
+                        <span>ისტორია</span>
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setIsChartStudioOpen(true)}
+                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">bar_chart</span>
+                    <span>გრაფიკის აგება ({selectedList.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => exportToExcel(selectedList)}
+                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">download</span>
+                    <span>მონიშნულის ექსპორტი ({selectedList.length})</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Summary Row */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-text-muted px-1">
+              <div className="flex items-center gap-2">
+                <span>
+                  ნაჩვენებია <strong className="text-text-primary">{filteredQueue.length}</strong> ჩანაწერი {entityBaseList.length}-დან
+                </span>
+                {activeFiltersCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-blue-50 text-primary text-[11px] font-semibold">
+                    ფილტრი აქტიურია ({activeFiltersCount})
+                  </span>
+                )}
+                <span className="hidden md:inline text-[11px] text-text-muted/80">
+                  • ჩანაწერის მონიშვნისას გამოჩნდება მოქმედებები • ორმაგი კლიკით იხსნება კონსოლი
+                </span>
+              </div>
+              <div>
+                ნაჩვენები დავალიანების ჯამი:{' '}
+                <span className="font-mono font-bold text-rose-600 text-sm">
+                  {filteredTotalDebt.toLocaleString('ka-GE')} ₾
+                </span>
+              </div>
+            </div>
+
+            {/* Standardized Table */}
+            <div className="overflow-x-auto rounded-xl border border-border-subtle shadow-2xs">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-border-subtle text-label-md font-label-md text-text-muted uppercase tracking-wider whitespace-nowrap">
+                    <th className="py-3 px-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={toggleSelectAllFiltered}
+                        title="ყველას მონიშვნა"
+                        className="size-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                    </th>
+
+                    {entityTab === 'ALL' && (
+                      <>
+                        <th className="py-3 px-4">პ/ნ ან ს/კ</th>
+                        <th className="py-3 px-4">მოვალე / კომპანია</th>
+                        <th className="py-3 px-4">ტელეფონი</th>
+                        <th className="py-3 px-4">ელ-ფოსტა</th>
+                        <th className="py-3 px-4">კრედიტორი</th>
+                        <th className="py-3 px-4">მიმდინარე დავალიანება</th>
+                        <th className="py-3 px-4">ვადაგადაცილება</th>
+                        <th className="py-3 px-4">საქმის N</th>
+                        <th className="py-3 px-4">ბოლო სტატუსი</th>
+                        <th className="py-3 px-4">გრაფიკი</th>
+                        <th className="py-3 px-4">რეიტინგი</th>
+                      </>
+                    )}
+
+                    {entityTab === 'PHYSICAL' && (
+                      <>
+                        <th className="py-3 px-4">პირადი ნომერი (პ/ნ)</th>
+                        <th className="py-3 px-4">სახელი</th>
+                        <th className="py-3 px-4">გვარი</th>
+                        <th className="py-3 px-4">ტელეფონი</th>
+                        <th className="py-3 px-4">ელ-ფოსტა</th>
+                        <th className="py-3 px-4">იურიდიული მისამართი</th>
+                        <th className="py-3 px-4">მიმდინარე დავალიანება</th>
+                        <th className="py-3 px-4">ვადაგადაცილება</th>
+                        <th className="py-3 px-4">კრედიტორი</th>
+                        <th className="py-3 px-4">ბოლო სტატუსი</th>
+                        <th className="py-3 px-4">რეიტინგი</th>
+                      </>
+                    )}
+
+                    {entityTab === 'LEGAL' && (
+                      <>
+                        <th className="py-3 px-4">საიდენტიფიკაციო კოდი (ს/კ)</th>
+                        <th className="py-3 px-4">დასახელება</th>
+                        <th className="py-3 px-4">ტელეფონი</th>
+                        <th className="py-3 px-4">დირექტორი</th>
+                        <th className="py-3 px-4">იურიდიული მისამართი</th>
+                        <th className="py-3 px-4">მიმდინარე დავალიანება</th>
+                        <th className="py-3 px-4">ვადაგადაცილება</th>
+                        <th className="py-3 px-4">კრედიტორი</th>
+                        <th className="py-3 px-4">ბოლო სტატუსი</th>
+                        <th className="py-3 px-4">რეიტინგი</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border-subtle text-body-sm">
+
+                <tbody className="divide-y divide-border-subtle bg-white text-text-primary">
                   {loadingQueue && (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-text-muted">
-                        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                        <span>მონაცემები იტვირთება PostgreSQL ბაზიდან...</span>
+                      <td colSpan={12} className="py-12 text-center text-text-muted">
+                        <span className="material-symbols-outlined text-2xl animate-spin text-primary block mx-auto mb-2">
+                          sync
+                        </span>
+                        CRM სამუშაო რეესტრი იტვირთება...
                       </td>
                     </tr>
                   )}
-                  {!loadingQueue && queue.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-text-muted">
-                        სამუშაო რიგში საქმეები არ მოიძებნა
-                      </td>
-                    </tr>
-                  )}
-                  {paginatedQueue.map((item: any) => {
-                    const isSelected = selectedClaimId === item.id;
-                    const dispKa: Record<string, string> = {
-                      PROMISE_TO_PAY: 'დათანხმდა',
-                      REFUSED: 'უარი',
-                      CALLBACK: 'გადარეკვა',
-                      VOICEMAIL: 'მიუწვდომელი',
-                      WRONG_NUMBER: 'შეცვლილია',
-                      DISPUTE_RAISED: 'სადავო',
-                    };
 
-                    return (
-                      <tr
-                        key={item.id}
-                        onClick={() => handleSelectDebtor(item.id)}
-                        className={`cursor-pointer transition-colors ${
-                          isSelected
-                            ? 'bg-surface-container/60 border-l-4 border-l-primary'
-                            : 'bg-surface-card hover:bg-surface-bg'
-                        }`}
-                      >
-                        <td className="py-3 px-4">
-                          <div className="font-semibold text-text-primary flex items-center gap-1.5">
-                            <span>{item.debtorName}</span>
-                            {isSelected && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-accent-mint animate-pulse" title="არჩეული საქმე" />
+                  {!loadingQueue && paginatedQueue.length === 0 && (
+                    <tr>
+                      <td colSpan={12} className="py-12 text-center text-text-muted">
+                        <span className="material-symbols-outlined text-3xl text-slate-300 block mx-auto mb-2">
+                          call_end
+                        </span>
+                        მითითებული ფილტრებით სამუშაო რიგში საქმეები არ მოიძებნა
+                      </td>
+                    </tr>
+                  )}
+
+                  {!loadingQueue &&
+                    paginatedQueue.map((item) => {
+                      const isSelected = selectedIds.includes(item.id);
+                      const dispInfo = item.lastDisposition
+                        ? DISPOSITION_LABELS[item.lastDisposition]
+                        : null;
+                      const ratingCls = getRatingBadgeClass(item.rating);
+                      const { firstName, lastName } = splitPersonName(item);
+
+                      const idCell = (
+                        <td className="py-3 px-4 font-mono font-bold text-text-primary text-[13px]">
+                          <div className="flex items-center gap-1.5">
+                            <span>{item.debtorPersonalId}</span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyId(e, item.debtorPersonalId)}
+                              title="კოპირება"
+                              className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-primary transition cursor-pointer"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">
+                                {copiedId === item.debtorPersonalId ? 'check' : 'content_copy'}
+                              </span>
+                            </button>
+                          </div>
+                        </td>
+                      );
+
+                      const phoneCell = (
+                        <td className="py-3 px-4 font-mono text-slate-700">
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-[14px] text-slate-400">
+                              call
+                            </span>
+                            <span>{item.debtorPhone}</span>
+                            {Number(item.contactsCount || 0) > 0 && (
+                              <span
+                                className="px-1.5 py-0.5 rounded bg-blue-50 text-primary text-[10px] font-bold"
+                                title="დამატებითი მოძიებული ნომრები"
+                              >
+                                +{item.contactsCount}
+                              </span>
                             )}
                           </div>
-                          <div className="text-data-mono-md font-data-mono-md text-text-muted text-xs">
-                            {item.debtorPersonalId} • #{item.caseNumber}
-                          </div>
                         </td>
-                        <td className="py-3 px-3">
-                          <span className="text-data-mono-md font-data-mono-md text-text-primary font-medium">
-                            {item.debtorPhone}
+                      );
+
+                      const emailCell = (
+                        <td className="py-3 px-4 text-slate-600">
+                          {item.debtorEmail ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[14px] text-slate-400">
+                                mail
+                              </span>
+                              {item.debtorEmail}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      );
+
+                      const creditorCell = (
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-50 border border-slate-200 text-slate-800 font-medium">
+                            <span className="material-symbols-outlined text-[14px] text-slate-500">
+                              account_balance
+                            </span>
+                            {item.creditorName || '—'}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-right">
-                          <span className="text-data-mono-md font-data-mono-md font-semibold text-text-primary">
-                            {item.remainingAmount.toLocaleString('ka-GE')} ₾
+                      );
+
+                      const debtCell = (
+                        <td className="py-3 px-4">
+                          <span className="font-mono font-bold text-rose-600 text-[13px]">
+                            {Number(item.remainingAmount || 0).toLocaleString('ka-GE')} ₾
                           </span>
-                          <span className="block text-label-sm text-text-muted">
-                            ძირი: {item.initialAmount.toLocaleString('ka-GE')} ₾
+                          <span className="block text-[10px] text-text-muted font-mono">
+                            ძირი: {Number(item.initialAmount || 0).toLocaleString('ka-GE')} ₾
                           </span>
                         </td>
-                        <td className="py-3 px-3">
+                      );
+
+                      const overdueCell = (
+                        <td className="py-3 px-4">
                           <span
-                            className={`inline-block px-1.5 py-0.2 text-[11px] font-bold rounded ${
-                              item.daysOverdue > 60
-                                ? 'bg-rating-c/10 text-rating-c'
-                                : 'bg-rating-b/15 text-amber-800'
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-bold font-mono ${
+                              Number(item.daysOverdue || 0) >= 60
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-amber-50 text-amber-800 border border-amber-200'
                             }`}
                           >
                             {item.daysOverdue} დღე
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-center">
-                          {item.lastDisposition ? (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-primary border border-blue-200">
-                              {dispKa[item.lastDisposition] || item.lastDisposition}
+                      );
+
+                      const dispositionCell = (
+                        <td className="py-3 px-4">
+                          {dispInfo ? (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${dispInfo.cls}`}
+                            >
+                              {dispInfo.label}
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               ახალი კონტაქტი
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectDebtor(item.id);
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-body-sm font-medium transition-colors flex items-center gap-1 ml-auto shadow-sm cursor-pointer ${
-                              isSelected
-                                ? 'bg-primary text-on-primary hover:bg-[#0A37CA]'
-                                : 'bg-surface-card border border-border-subtle text-primary hover:bg-slate-100'
-                            }`}
+                      );
+
+                      const ratingCell = (
+                        <td className="py-3 px-4">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border font-mono ${ratingCls}`}
                           >
-                            <span className="material-symbols-outlined text-sm">{isSelected ? 'check_circle' : 'edit_note'}</span>
-                            <span>{isSelected ? 'არჩეულია' : 'აღრიცხვა'}</span>
-                          </button>
+                            • Grade {item.rating || 'E'}
+                          </span>
                         </td>
-                      </tr>
-                    );
-                  })}
+                      );
+
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={() => toggleSelect(item.id)}
+                          onDoubleClick={() => openModalWithTab(item, 'call')}
+                          className={`cursor-pointer transition-colors whitespace-nowrap ${
+                            isSelected
+                              ? 'bg-blue-50/80 hover:bg-blue-100/70 font-medium'
+                              : 'hover:bg-slate-50/70'
+                          }`}
+                        >
+                          <td
+                            className="py-3 px-3 text-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(item.id)}
+                              className="size-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer"
+                            />
+                          </td>
+
+                          {entityTab === 'ALL' && (
+                            <>
+                              {idCell}
+                              <td className="py-3 px-4 font-medium text-text-primary">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className={`size-6 rounded-md flex items-center justify-center shrink-0 ${
+                                      item.isCompany
+                                        ? 'bg-indigo-50 text-indigo-600'
+                                        : 'bg-blue-50 text-primary'
+                                    }`}
+                                  >
+                                    <span className="material-symbols-outlined text-[14px]">
+                                      {item.isCompany ? 'domain' : 'person'}
+                                    </span>
+                                  </span>
+                                  <span>{item.debtorName}</span>
+                                </div>
+                              </td>
+                              {phoneCell}
+                              {emailCell}
+                              {creditorCell}
+                              {debtCell}
+                              {overdueCell}
+                              <td className="py-3 px-4 font-mono font-bold text-primary">
+                                #{item.caseNumber}
+                              </td>
+                              {dispositionCell}
+                              <td className="py-3 px-4">
+                                {item.hasActiveSchedule ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-semibold">
+                                    <span className="material-symbols-outlined text-[13px]">event_available</span>
+                                    გრაფიკი
+                                  </span>
+                                ) : (
+                                  <span className="text-text-muted text-[11px]">—</span>
+                                )}
+                              </td>
+                              {ratingCell}
+                            </>
+                          )}
+
+                          {entityTab === 'PHYSICAL' && (
+                            <>
+                              {idCell}
+                              <td className="py-3 px-4 font-medium text-text-primary">{firstName}</td>
+                              <td className="py-3 px-4 font-medium text-text-primary">{lastName}</td>
+                              {phoneCell}
+                              {emailCell}
+                              <td
+                                className="py-3 px-4 text-slate-600 max-w-xs truncate"
+                                title={item.legalAddress || ''}
+                              >
+                                {item.legalAddress || '—'}
+                              </td>
+                              {debtCell}
+                              {overdueCell}
+                              {creditorCell}
+                              {dispositionCell}
+                              {ratingCell}
+                            </>
+                          )}
+
+                          {entityTab === 'LEGAL' && (
+                            <>
+                              {idCell}
+                              <td className="py-3 px-4 font-semibold text-text-primary">
+                                {item.debtorName}
+                              </td>
+                              {phoneCell}
+                              <td className="py-3 px-4 text-slate-700">
+                                {item.directorName || '—'}
+                              </td>
+                              <td
+                                className="py-3 px-4 text-slate-600 max-w-xs truncate"
+                                title={item.legalAddress || ''}
+                              >
+                                {item.legalAddress || '—'}
+                              </td>
+                              {debtCell}
+                              {overdueCell}
+                              {creditorCell}
+                              {dispositionCell}
+                              {ratingCell}
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination Bar Footer (Docked at bottom of left panel) */}
-            <div className="px-4 sm:px-5 py-3 bg-white border-t border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 select-none">
-              <div className="flex items-center gap-3 text-xs text-text-muted">
+            {/* Pagination Footer */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-text-muted">
+              <div className="flex items-center gap-3">
                 <span>
-                  ნაჩვენებია <strong className="text-text-primary font-mono">{queue.length === 0 ? 0 : (currentPage - 1) * pageSize + 1} - {Math.min(currentPage * pageSize, queue.length)}</strong> / {queue.length} საქმე
+                  გვერდი <strong className="text-text-primary font-mono">{currentPage}</strong> / {totalPages}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px]">გვერდზე:</span>
+                  <span>ჩანაწერი გვერდზე:</span>
                   <select
                     value={pageSize}
                     onChange={(e) => {
                       setPageSize(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="px-2 py-0.5 rounded border border-slate-300 text-xs font-semibold bg-white text-slate-800 focus:outline-none cursor-pointer"
+                    className="px-2 py-1 rounded-lg border border-border-subtle bg-white text-xs font-semibold text-text-primary cursor-pointer"
                   >
                     <option value={10}>10</option>
                     <option value={15}>15</option>
@@ -1141,1180 +1654,44 @@ export default function CrmPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1">
-                {/* Prev Button */}
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-slate-700 flex items-center gap-1 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-slate-50 disabled:opacity-40 font-semibold text-text-secondary cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-sm">chevron_left</span>
-                  <span>წინა</span>
+                  წინა
                 </button>
-
-                {/* Page numbers */}
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                    .map((p, idx, arr) => (
-                      <React.Fragment key={p}>
-                        {idx > 0 && arr[idx - 1] !== p - 1 && (
-                          <span className="px-1 text-slate-400 text-xs">...</span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setCurrentPage(p)}
-                          className={`w-7 h-7 rounded-lg text-xs font-bold transition cursor-pointer flex items-center justify-center ${
-                            currentPage === p
-                              ? 'bg-primary text-white shadow-xs'
-                              : 'text-slate-600 hover:bg-slate-100 border border-transparent'
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      </React.Fragment>
-                    ))}
-                </div>
-
-                {/* Next Button */}
                 <button
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-slate-700 flex items-center gap-1 transition cursor-pointer"
+                  className="px-3 py-1.5 rounded-lg border border-border-subtle bg-white hover:bg-slate-50 disabled:opacity-40 font-semibold text-text-secondary cursor-pointer"
                 >
-                  <span>შემდეგი</span>
-                  <span className="material-symbols-outlined text-sm">chevron_right</span>
+                  შემდეგი
                 </button>
               </div>
             </div>
-          </section>
-
-          {/* Vertical Resizable Splitter Divider */}
-          <div
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsResizing(true);
-            }}
-            onDoubleClick={() => setLeftPanelWidth(50)}
-            className={`relative w-2.5 -mx-1 z-30 cursor-col-resize select-none flex items-center justify-center transition-colors group shrink-0 ${
-              isResizing ? 'bg-primary/20' : 'hover:bg-primary/10'
-            }`}
-            title="გაწიეთ მარცხნივ/მარჯვნივ რეესტრის ზომის შესაცვლელად (ორმაგი კლიკი: 50/50)"
-          >
-            {/* Divider central line */}
-            <div
-              className={`w-[2px] h-full transition-colors ${
-                isResizing ? 'bg-primary' : 'bg-slate-300 group-hover:bg-primary'
-              }`}
-            />
-
-            {/* Grab handle indicator */}
-            <div
-              className={`absolute top-1/2 -translate-y-1/2 w-4 h-12 rounded-full border bg-white shadow-xs flex items-center justify-center transition-all ${
-                isResizing
-                  ? 'border-primary text-primary scale-110 shadow-md ring-2 ring-primary/20'
-                  : 'border-slate-300 text-slate-400 group-hover:border-primary group-hover:text-primary'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[13px]">drag_indicator</span>
-            </div>
-          </div>
-
-          {/* RIGHT SECTION: Active Debtor Case & Call Logging */}
-          <section
-            style={{ width: `${100 - leftPanelWidth}%` }}
-            className="flex flex-col h-full min-h-0 bg-surface-bg overflow-hidden shrink-0 transition-[width] duration-100"
-          >
-            {activeClaim ? (
-              <>
-                {/* Debtor Case Header */}
-                <div className="px-6 py-4 bg-surface-card border-b border-border-subtle shrink-0">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 bg-primary/10 text-primary font-bold text-xs rounded uppercase font-data-mono-md">
-                          საქმე #{activeClaim.caseNumber}
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rating-b/20 text-[#B45309]">
-                          Grade {activeClaim.rating} (სკორი {activeClaim.riskScore})
-                        </span>
-                      </div>
-                      <h1 className="text-headline-md font-headline-md font-bold text-text-primary mt-1">
-                        {activeClaim.debtorName}
-                      </h1>
-                      <p className="text-body-sm text-text-muted flex items-center gap-2 mt-0.5">
-                        <span>
-                          პ/ნ: <strong className="text-data-mono-md font-semibold text-text-primary">{activeClaim.debtorPersonalId}</strong>
-                        </span>
-                        <span>•</span>
-                        <span>
-                          კრედიტორი: <strong className="text-text-primary font-medium">{activeClaim.creditorName}</strong>
-                        </span>
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-label-sm font-label-sm text-text-muted uppercase">ჯამური დავალიანება</span>
-                      <div className="text-headline-sm font-data-mono-lg font-bold text-primary mt-0.5">
-                        {activeClaim.remainingAmount.toLocaleString('ka-GE')} ₾
-                      </div>
-                      <span className="text-xs text-text-muted">ხელშეკრულება #{activeClaim.agreementNumber}</span>
-                    </div>
-                  </div>
-
-                  {/* Debtor Phone Contact & Outbound Coordinates */}
-                  <div className="mt-3.5 p-3.5 bg-surface-container/40 border border-border-subtle rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
-                        <span className="material-symbols-outlined text-xl">contact_phone</span>
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-body-md font-data-mono-lg font-bold text-text-primary tracking-wide">
-                            {activeClaim.debtorPhone}
-                          </span>
-                          <span className="px-2 py-0.5 bg-blue-50 border border-blue-200 text-primary text-[11px] font-semibold rounded-md">
-                            გარე სატელეფონო კავშირი
-                          </span>
-                        </div>
-                        <p className="text-xs text-text-muted mt-0.5 flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-xs text-slate-400">record_voice_over</span>
-                          <span>განახორციელეთ ზარი სატელეფონო მოწყობილობით და შედეგი აღრიცხეთ ქვემოთ</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Actions: Fast Copy & Dial Link */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (activeClaim.debtorPhone) {
-                            navigator.clipboard.writeText(activeClaim.debtorPhone);
-                            setCopiedPhone(true);
-                            setTimeout(() => setCopiedPhone(false), 2000);
-                          }
-                        }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 cursor-pointer ${
-                          copiedPhone
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                            : 'bg-white text-text-primary border-border-subtle hover:bg-slate-50'
-                        }`}
-                        title="ტელეფონის ნომრის კოპირება"
-                      >
-                        <span className="material-symbols-outlined text-sm">{copiedPhone ? 'check' : 'content_copy'}</span>
-                        <span>{copiedPhone ? 'დაკოპირდა!' : 'ნომრის კოპირება'}</span>
-                      </button>
-
-                      <a
-                        href={`tel:${activeClaim.debtorPhone}`}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-on-primary hover:bg-[#0A37CA] transition-all flex items-center gap-1.5 shadow-2xs"
-                        title="ტელეფონის აპლიკაციით დაკავშირება"
-                      >
-                        <span className="material-symbols-outlined text-sm">phone_forwarded</span>
-                        <span>დაკავშირება</span>
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Discovered / Additional Contacts & Phone Numbers (INTERNAL ONLY) */}
-                  <div className="mt-3 bg-white border border-border-subtle rounded-xl p-3 shadow-2xs space-y-2.5">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary text-[18px]">phone_in_talk</span>
-                        <h4 className="font-bold text-xs text-text-primary">
-                          დამატებითი საკონტაქტო ნომრები & მოძიებული პირები
-                        </h4>
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200"
-                          title="ეს მონაცემები დებიტორისთვის დამალულია და მხოლოდ თანამშრომლებს (კრედიტ მენეჯერსა და ანალიტიკოსს) უჩანთ"
-                        >
-                          <span className="material-symbols-outlined text-[11px]">lock</span>
-                          შიდა მონაცემი (კრედიტ მენეჯერი / ანალიტიკოსი)
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsAddContactModalOpen(true)}
-                        className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary-container text-white hover:bg-primary transition flex items-center gap-1 shadow-2xs cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">add_call</span>
-                        <span>+ ახალი ნომრის დამატება</span>
-                      </button>
-                    </div>
-
-                    {/* Contact items list */}
-                    <div className="space-y-1.5 pt-1">
-                      {/* 1. Primary Default Debtor Phone */}
-                      <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-6 h-6 rounded-md bg-blue-100 text-blue-800 flex items-center justify-center font-bold text-[10px] shrink-0">
-                            №1
-                          </span>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-slate-900 text-xs tracking-wider">
-                                {activeClaim.debtorPhone}
-                              </span>
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                ძირითადი / მოვალე
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-slate-500 block">
-                              {activeClaim.debtorName}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(activeClaim.debtorPhone);
-                              setCopiedPhone(true);
-                              setTimeout(() => setCopiedPhone(false), 2000);
-                            }}
-                            className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-slate-200/60 cursor-pointer"
-                            title="კოპირება"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">{copiedPhone ? 'check' : 'content_copy'}</span>
-                          </button>
-                          <a
-                            href={`tel:${activeClaim.debtorPhone}`}
-                            className="px-2.5 py-1 rounded bg-primary text-white text-[11px] font-semibold hover:bg-[#0A37CA] transition flex items-center gap-1 shadow-2xs"
-                            title="დაკავშირება"
-                          >
-                            <span className="material-symbols-outlined text-[14px]">call</span>
-                            <span>დაკავშირება</span>
-                          </a>
-                        </div>
-                      </div>
-
-                      {/* 2. Discovered / Additional Contacts */}
-                      {activeClaim.contactPersons && activeClaim.contactPersons.length > 0 ? (
-                        activeClaim.contactPersons.map((contact: any, idx: number) => {
-                          const isCopied = copiedContactId === contact.id;
-                          return (
-                            <div
-                              key={contact.id}
-                              className="flex items-center justify-between p-2 rounded-lg bg-blue-50/40 hover:bg-blue-50/70 border border-blue-200/80 transition text-xs"
-                            >
-                              <div className="flex items-center gap-2.5">
-                                <span className="w-6 h-6 rounded-md bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-[10px] shrink-0">
-                                  №{idx + 2}
-                                </span>
-                                <div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-mono font-bold text-slate-900 text-xs tracking-wider">
-                                      {contact.phone}
-                                    </span>
-                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">
-                                      {contact.relationType || 'საკონტაქტო პირი'}
-                                    </span>
-                                    <span className="text-slate-800 font-semibold text-xs">
-                                      {contact.firstName} {contact.lastName}
-                                    </span>
-                                  </div>
-                                  {contact.notes && (
-                                    <p className="text-[11px] text-slate-600 mt-0.5">
-                                      {contact.notes}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(contact.phone);
-                                    setCopiedContactId(contact.id);
-                                    setTimeout(() => setCopiedContactId(null), 2000);
-                                  }}
-                                  className="p-1 rounded text-slate-500 hover:text-slate-900 hover:bg-white cursor-pointer"
-                                  title="კოპირება"
-                                >
-                                  <span className="material-symbols-outlined text-[16px]">{isCopied ? 'check' : 'content_copy'}</span>
-                                </button>
-                                <a
-                                  href={`tel:${contact.phone}`}
-                                  className="px-2.5 py-1 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 transition flex items-center gap-1 shadow-2xs"
-                                  title={`${contact.firstName} ${contact.lastName}-თან დაკავშირება`}
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">call</span>
-                                  <span>დაკავშირება</span>
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteDebtorContact(contact.id)}
-                                  className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
-                                  title="საკონტაქტოს წაშლა"
-                                >
-                                  <span className="material-symbols-outlined text-[16px]">delete</span>
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="text-[11px] text-slate-400 italic py-1 px-1">
-                          დამატებითი მოძიებული ნომრები ჯერ არ არის შეყვანილი. ახალი ნომრის გამოვლენისას დააჭირეთ „+ ახალი ნომრის დამატება“-ს.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Success Message Banner */}
-                {actionSuccessMessage && (
-                  <div className="p-3 mx-4 mt-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-medium flex items-center gap-2 animate-fadeIn">
-                    <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
-                    <span>{actionSuccessMessage}</span>
-                  </div>
-                )}
-
-                {/* Scrollable CRM Entry & Timeline Area */}
-                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-6 py-5 space-y-5">
-                  {/* Supporting Documents & Proofs Inspector */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
-                    <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle mb-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-primary text-lg">folder_shared</span>
-                        <h3 className="text-headline-sm font-headline-sm text-sm font-bold text-text-primary">
-                          საქმის დამადასტურებელი დოკუმენტაცია &amp; ქვითრები
-                        </h3>
-                      </div>
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        RS.GE / ბუღალტერია
-                      </span>
-                    </div>
-
-                    {/* Documents List */}
-                    <div className="space-y-2">
-                      {Array.isArray(activeClaim.supportingDocuments) && activeClaim.supportingDocuments.length > 0 ? (
-                        activeClaim.supportingDocuments.map((doc: any, idx: number) => {
-                          const isExcel = doc.docType === 'ACCOUNT_TURNOVER' || doc.fileName?.endsWith('.xlsx') || doc.fileName?.endsWith('.csv');
-                          return (
-                            <div
-                              key={doc.id || idx}
-                              className="flex items-center justify-between p-2.5 rounded-lg border border-border-subtle bg-surface-bg hover:border-slate-300 transition-colors"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                  isExcel ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                                }`}>
-                                  <span className="material-symbols-outlined text-base">
-                                    {isExcel ? 'table_view' : 'picture_as_pdf'}
-                                  </span>
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-xs font-semibold text-text-primary truncate">
-                                    {doc.title}
-                                  </p>
-                                  <p className="text-[11px] text-text-muted truncate">
-                                    {doc.fileName} • {doc.description || 'დამოწმებული ფაილი'}
-                                  </p>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleOpenDoc(doc)}
-                                className={`px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 shrink-0 transition-colors cursor-pointer ${
-                                  isExcel
-                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                                    : 'bg-blue-50 text-primary border border-blue-200 hover:bg-blue-100'
-                                }`}
-                              >
-                                <span className="material-symbols-outlined text-sm">
-                                  {isExcel ? 'download' : 'visibility'}
-                                </span>
-                                <span>{isExcel ? 'XLSX ექსპორტი' : 'დათვალიერება'}</span>
-                              </button>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="p-3 rounded-lg border border-dashed border-border-subtle bg-surface-bg text-center text-xs text-text-muted">
-                          დამადასტურებელი დოკუმენტები ამ საქმეზე ატვირთული არ არის.
-                        </div>
-                      )}
-
-                      {/* Debtor Uploaded Payment Receipts */}
-                      {activeClaim.paymentReceipts && activeClaim.paymentReceipts.length > 0 && (
-                        <div className="mt-3 pt-2.5 border-t border-border-subtle">
-                          <span className="text-[11px] font-bold text-text-muted uppercase tracking-wider block mb-1.5">
-                            დებიტორის მიერ ატვირთული გადახდის ქვითრები ({activeClaim.paymentReceipts.length})
-                          </span>
-                          <div className="space-y-1.5">
-                            {activeClaim.paymentReceipts.map((rcpt: any) => (
-                              <div
-                                key={rcpt.id}
-                                className="flex items-center justify-between p-2 rounded-lg bg-emerald-50/60 border border-emerald-200/80 text-xs"
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="material-symbols-outlined text-emerald-700 text-base">receipt_long</span>
-                                  <div>
-                                    <span className="font-semibold text-text-primary">ქვითარი #{rcpt.id?.substring(0, 8)}</span>
-                                    <span className="text-text-muted ml-2">{Number(rcpt.amount).toLocaleString('ka-GE')} ₾</span>
-                                  </div>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenDoc({
-                                    title: `გადახდის ქვითარი #${rcpt.id?.substring(0, 8)}`,
-                                    docType: 'RECEIPT',
-                                    fileName: rcpt.fileName || `receipt_${rcpt.id?.substring(0, 8)}.pdf`,
-                                    description: `გადახდილი თანხა: ${rcpt.amount} ₾, თარიღი: ${new Date(rcpt.createdAt).toLocaleDateString('ka-GE')}`,
-                                  })}
-                                  className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition cursor-pointer"
-                                >
-                                  ქვითრის ნახვა
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* ================= REPAYMENT SCHEDULE MANAGEMENT CARD ================= */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
-                    <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle mb-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-primary text-lg">calendar_month</span>
-                        <h3 className="text-headline-sm font-headline-sm text-sm font-bold text-text-primary">
-                          გადახდის გრაფიკის მართვა &amp; მიბმა
-                        </h3>
-                      </div>
-                      <span className="text-[11px] font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
-                        კრედიტ მენეჯერი
-                      </span>
-                    </div>
-
-                    {scheduleSuccessMessage && (
-                      <div className="p-3 mb-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-medium flex items-center gap-2">
-                        <span className="material-symbols-outlined text-base text-emerald-600">check_circle</span>
-                        <span>{scheduleSuccessMessage}</span>
-                      </div>
-                    )}
-
-                    {activeClaim.schedules && activeClaim.schedules.length > 0 ? (
-                      (() => {
-                        const sched = activeClaim.schedules[0];
-                        const isApproved = sched.approvalStatus === 'APPROVED';
-                        const isPending = sched.approvalStatus === 'PENDING_DEBTOR_APPROVAL' || !sched.approvalStatus;
-                        const isRejected = sched.approvalStatus === 'REJECTED';
-
-                        return (
-                          <div className="space-y-3">
-                            {/* Schedule Status & Type Banner */}
-                            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                                    sched.type === 'NON_STANDARD' ? 'bg-purple-100 text-purple-800 border border-purple-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
-                                  }`}>
-                                    {sched.type === 'NON_STANDARD' ? 'არასტანდარტული გრაფიკი' : 'სტანდარტული გრაფიკი'}
-                                  </span>
-                                  {isApproved && (
-                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-xs">verified</span> დადასტურებულია დებიტორის მიერ
-                                    </span>
-                                  )}
-                                  {isPending && (
-                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                                      მოლოდინში (დებიტორის დასადასტურებელი)
-                                    </span>
-                                  )}
-                                  {isRejected && (
-                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-200 flex items-center gap-1">
-                                      <span className="material-symbols-outlined text-xs">cancel</span> უარყოფილია დებიტორის მიერ
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-slate-600 mt-1.5">
-                                  ვადა: <strong>{sched.totalMonths} თვე</strong> • ყოველი თვის <strong>{sched.paymentDay || 15} რიცხვი</strong> • საშუალო: <strong>~{Number(sched.monthlyAmount || 0).toFixed(2)} ₾ / თვე</strong>
-                                </p>
-                                {sched.debtorRespondedAt && (
-                                  <p className="text-[11px] text-slate-400 mt-0.5">
-                                    დებიტორის გადაწყვეტილების თარიღი: {new Date(sched.debtorRespondedAt).toLocaleString('ka-GE')}
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => openScheduleModal('edit')}
-                                  className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-[#0A37CA] transition flex items-center gap-1 cursor-pointer shadow-xs"
-                                >
-                                  <span className="material-symbols-outlined text-sm">edit</span>
-                                  <span>გრაფიკის რედაქტირება</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Toggle breakdown table */}
-                            <div>
-                              <button
-                                type="button"
-                                onClick={() => setShowScheduleDetails(!showScheduleDetails)}
-                                className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-sm">
-                                  {showScheduleDetails ? 'expand_less' : 'expand_more'}
-                                </span>
-                                <span>{showScheduleDetails ? 'გრაფიკის ცხრილის დამალვა' : `გრაფიკის პერიოდების ნახვა (${sched.installments?.length || sched.totalMonths} თვე)`}</span>
-                              </button>
-
-                              {showScheduleDetails && sched.installments && (
-                                <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200 max-h-56">
-                                  <table className="w-full text-left text-xs">
-                                    <thead className="bg-slate-100 text-slate-600 font-semibold uppercase text-[10px] sticky top-0">
-                                      <tr>
-                                        <th className="py-1.5 px-2.5 text-center">№</th>
-                                        <th className="py-1.5 px-3">გადახდის ვადა</th>
-                                        <th className="py-1.5 px-3 text-right">შენატანი</th>
-                                        <th className="py-1.5 px-3 text-center">სტატუსი</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 bg-white">
-                                      {sched.installments.map((inst: any, idx: number) => (
-                                        <tr key={inst.id || idx} className="hover:bg-slate-50">
-                                          <td className="py-1.5 px-2.5 text-center font-mono text-slate-500">{inst.installmentNo || idx + 1}</td>
-                                          <td className="py-1.5 px-3 font-mono text-slate-700">
-                                            {inst.dueDate ? new Date(inst.dueDate).toLocaleDateString('ka-GE') : '—'}
-                                          </td>
-                                          <td className="py-1.5 px-3 text-right font-mono font-semibold text-slate-900">
-                                            {Number(inst.amount || 0).toFixed(2)} ₾
-                                          </td>
-                                          <td className="py-1.5 px-3 text-center">
-                                            {inst.isPaid ? (
-                                              <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-bold">გადახდილი</span>
-                                            ) : (
-                                              <span className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">დაგეგმილი</span>
-                                            )}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <div className="p-4 rounded-xl border border-dashed border-border-subtle bg-surface-bg text-center space-y-2">
-                        <span className="material-symbols-outlined text-3xl text-slate-300">event_busy</span>
-                        <p className="text-xs text-text-muted">
-                          ამ მოვალეზე გადახდის გრაფიკი ჯერ არ არის შედგენილი.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => openScheduleModal('create')}
-                          className="px-3.5 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-[#0A37CA] transition inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-                        >
-                          <span className="material-symbols-outlined text-sm">add_circle</span>
-                          <span>ახალი გადახდის გრაფიკის შედგენა</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  
-                  {/* Communication Result Entry Form */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
-                    <div className="flex items-center justify-between pb-2.5 border-b border-border-subtle">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-primary text-lg">edit_note</span>
-                        <h3 className="text-headline-sm font-headline-sm text-sm font-bold text-text-primary">
-                          კომუნიკაციის შედეგის დაფიქსირება &amp; CRM ჩანაწერი
-                        </h3>
-                      </div>
-                      <span className="text-label-sm text-text-muted">PostgreSQL Sync</span>
-                    </div>
-
-                    <form className="mt-3 space-y-3" onSubmit={handleLogCall}>
-                      {/* Disposition Selection */}
-                      <div>
-                        <label className="block text-label-sm font-label-md text-text-muted mb-1.5">
-                          ინტერაქციის სტატუსი / შედეგი *
-                        </label>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {[
-                            { value: 'PROMISE_TO_PAY', label: 'დათანხმდა გადახდას', color: 'text-emerald-700 border-emerald-400 bg-emerald-50' },
-                            { value: 'CALLBACK', label: 'დაინიშნა გადარეკვა', color: 'text-amber-700 border-amber-400 bg-amber-50' },
-                            { value: 'VOICEMAIL', label: 'არ იღებს ყურმილს', color: 'text-slate-700 border-slate-300 bg-slate-50' },
-                            { value: 'REFUSED', label: 'კატეგორიული უარი', color: 'text-rose-700 border-rose-400 bg-rose-50' },
-                            { value: 'DISPUTE_RAISED', label: 'სადავო მოთხოვნა', color: 'text-purple-700 border-purple-400 bg-purple-50' },
-                            { value: 'WRONG_NUMBER', label: 'არასწორი ნომერი', color: 'text-slate-600 border-slate-300 bg-slate-50' },
-                          ].map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              onClick={() => setDisposition(opt.value)}
-                              className={`py-2 px-2.5 rounded-lg text-xs font-semibold text-left flex items-center gap-1.5 transition-all cursor-pointer ${
-                                disposition === opt.value
-                                  ? `${opt.color} border-2 shadow-xs`
-                                  : 'bg-surface-bg border border-border-subtle text-text-muted hover:text-text-primary'
-                              }`}
-                            >
-                              <span className="w-2 h-2 rounded-full bg-current" />
-                              <span>{opt.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Promised Terms */}
-                      <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg border border-border-subtle">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-text-muted mb-1">
-                            შეთანხმებული თანხა (₾)
-                          </label>
-                          <input
-                            type="number"
-                            placeholder="0.00"
-                            value={promisedAmount}
-                            onChange={(e) => setPromisedAmount(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-white border border-border-subtle rounded text-xs font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-text-muted mb-1">
-                            დაფარვის თარიღი
-                          </label>
-                          <input
-                            type="date"
-                            value={promisedDate}
-                            onChange={(e) => setPromisedDate(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-white border border-border-subtle rounded text-xs"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Negotiated Terms / Notes */}
-                      <div>
-                        <label className="block text-label-sm font-label-md text-text-muted mb-1">
-                          მოლაპარაკების დეტალური კომენტარი *
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={callNotes}
-                          onChange={(e) => setCallNotes(e.target.value)}
-                          placeholder="ჩაწერეთ მოვალის პასუხი, შეთანხმებული პირობა ან მიზეზი..."
-                          className="w-full p-2.5 bg-white border border-border-subtle rounded-lg text-body-sm text-text-primary focus:outline-none focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/20 font-body-md"
-                        />
-                      </div>
-
-                      {/* Save Action Button */}
-                      <div className="pt-1">
-                        <button
-                          type="submit"
-                          disabled={submittingLog}
-                          className="w-full py-2.5 bg-primary hover:bg-[#0A37CA] disabled:opacity-50 text-on-primary font-medium text-body-md rounded-lg shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-lg">check_circle</span>
-                          <span>{submittingLog ? 'იგზავნება...' : 'შედეგის შენახვა და რეესტრში დაფიქსირება'}</span>
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* CRM History / Interaction Timeline */}
-                  <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-xs">
-                    <div className="flex items-center justify-between pb-3 border-b border-border-subtle mb-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-text-muted text-lg">history</span>
-                        <h3 className="text-headline-sm font-headline-sm text-sm font-bold text-text-primary">
-                          საქმის ისტორია &amp; CRM ქრონოლოგია
-                        </h3>
-                      </div>
-                      <span className="text-label-sm text-text-muted">
-                        {(claimDetail?.crmLogs?.length || 0) + (claimDetail?.timelineEvents?.length || 0)} ჩანაწერი
-                      </span>
-                    </div>
-
-                    {/* Timeline items */}
-                    <div className="relative pl-6 space-y-4 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-border-subtle">
-                      {claimDetail?.crmLogs && claimDetail.crmLogs.length > 0 ? (
-                        claimDetail.crmLogs.map((log: any) => (
-                          <div key={log.id} className="relative">
-                            <div className="absolute -left-6 top-1 w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-white" />
-                            <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="font-data-mono-md text-text-muted">
-                                {new Date(log.createdAt).toLocaleString('ka-GE')}
-                              </span>
-                              <span className="px-1.5 py-0.2 bg-blue-50 text-primary border border-blue-200 text-[11px] font-semibold rounded">
-                                {log.disposition}
-                              </span>
-                            </div>
-                            <p className="text-body-sm text-text-primary font-medium">{log.notes}</p>
-                            {log.promisedAmount && (
-                              <p className="text-xs text-emerald-700 font-semibold mt-0.5">
-                                შეპირებული თანხა: {log.promisedAmount} ₾ (ვადა: {log.promisedDate ? new Date(log.promisedDate).toLocaleDateString('ka-GE') : 'მითითებული არაა'})
-                              </p>
-                            )}
-                            <div className="flex items-center gap-1.5 text-xs text-text-muted mt-1">
-                              <span className="material-symbols-outlined text-xs">person</span>
-                              <span>კრედიტ მენეჯერი: {log.operatorName}</span>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="text-xs text-text-muted py-2">ამ საქმეზე კომუნიკაციის ისტორია ჯერ არ არის დაფიქსირებული.</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="p-12 text-center text-text-muted m-auto">
-                <span className="material-symbols-outlined text-4xl text-slate-300 mb-2">contact_phone</span>
-                <p className="text-base font-medium">აირჩიეთ საქმე მარცხენა სიიდან კომუნიკაციისა და შედეგის აღსარიცხად</p>
-              </div>
-            )}
           </section>
         </main>
       )}
-    
-      {/* ================= PAYMENT SCHEDULE CONFIGURATION MODAL ================= */}
-      {isScheduleModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center">
-                    <span className="material-symbols-outlined text-base">calendar_month</span>
-                  </span>
-                  <h3 className="text-base font-bold text-slate-900">
-                    {scheduleModalMode === 'edit' ? 'გადახდის გრაფიკის რედაქტირება' : 'ახალი გადახდის გრაფიკის შედგენა'}
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  მოვალე: <strong>{activeClaim?.debtorName}</strong> (საქმე #{activeClaim?.caseNumber}) • ვალის თანხა: <strong>{Number(activeClaim?.remainingAmount || 0).toLocaleString('ka-GE')} ₾</strong>
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsScheduleModalOpen(false)}
-                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition flex items-center justify-center cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-            </div>
 
-            {/* Modal Body */}
-            <form onSubmit={handleSaveSchedule} className="p-6 overflow-y-auto space-y-5 flex-1">
-              {/* Type Switcher */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2">
-                  გრაფიკის ტიპი *
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => handleScheduleTypeChange('STANDARD')}
-                    className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                      scheduleType === 'STANDARD'
-                        ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-primary text-base">check_circle</span>
-                        სტანდარტული გრაფიკი
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-semibold">1-12 თვე</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                      ვადა 1-დან 12 თვემდე. თანხა ავტომატურად თანაბრად ნაწილდება თვეებზე.
-                    </p>
-                  </button>
+      {/* Case File & Control Console Modal (opened via selection action bar buttons or double-click) */}
+      <CrmCaseModal
+        claimSummary={modalClaim}
+        initialTab={modalInitialTab}
+        onClose={() => setModalClaim(null)}
+        onUpdated={loadQueueAndStats}
+        onExportSingle={(item) => exportToExcel([item], `crm_case_${item.caseNumber}.xlsx`)}
+      />
 
-                  <button
-                    type="button"
-                    onClick={() => handleScheduleTypeChange('NON_STANDARD')}
-                    className={`p-3 rounded-xl border text-left transition cursor-pointer ${
-                      scheduleType === 'NON_STANDARD'
-                        ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-200 shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300 bg-white'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-purple-600 text-base">tune</span>
-                        არასტანდარტული გრაფიკი
-                      </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 font-semibold">სპეციფიური დღეები / ≥13 თვე</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                      სპეციფიური დღეების ინტერვალები (ყოველ X დღეში) ან ინდივიდუალური თვეები თანხის ხელით რედაქტირებით.
-                    </p>
-                  </button>
-                </div>
-              </div>
-
-              {/* Timing & Interval Controls */}
-              {scheduleType === 'NON_STANDARD' && (
-                <div className="p-3 rounded-xl bg-purple-50/70 border border-purple-200 space-y-2.5">
-                  <span className="text-xs font-bold text-purple-900 block">
-                    არასტანდარტული გრაფიკის ინტერვალის ტიპი:
-                  </span>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => handleScheduleIntervalChange('MONTHLY', scheduleCustomIntervalDays)}
-                      className={`p-2 rounded-lg border text-left font-semibold transition cursor-pointer ${
-                        scheduleIntervalMode === 'MONTHLY'
-                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      📅 ყოველთვიური (რიცხვით)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleScheduleIntervalChange('CUSTOM_DAYS', scheduleCustomIntervalDays)}
-                      className={`p-2 rounded-lg border text-left font-semibold transition cursor-pointer ${
-                        scheduleIntervalMode === 'CUSTOM_DAYS'
-                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      ⚡ სპეციფიური დღეების ინტერვალი
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Month Count & Payment Day Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {scheduleIntervalMode === 'CUSTOM_DAYS' && scheduleType === 'NON_STANDARD'
-                      ? 'შენატანების რაოდენობა *'
-                      : `გადახდის თვეების რაოდენობა ${scheduleType === 'STANDARD' ? '(1 - 12)' : '(მინ. 13)'} *`}
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      required
-                      min={scheduleType === 'STANDARD' ? 1 : 1}
-                      max={120}
-                      value={scheduleMonths}
-                      onChange={(e) => handleScheduleMonthsChange(parseInt(e.target.value) || (scheduleType === 'STANDARD' ? 12 : 13))}
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:border-primary focus:outline-none"
-                    />
-                    <span className="text-xs font-medium text-slate-500 shrink-0">
-                      {scheduleIntervalMode === 'CUSTOM_DAYS' && scheduleType === 'NON_STANDARD' ? 'შენატანი' : 'თვე'}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    {scheduleType === 'STANDARD' ? 'მაქსიმუმ 12 თვე' : 'შეუზღუდავი მაქსიმალური ვადა'}
-                  </span>
-                </div>
-
-                <div>
-                  {scheduleIntervalMode === 'CUSTOM_DAYS' && scheduleType === 'NON_STANDARD' ? (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        სპეციფიური ინტერვალი (ყოველ X დღეში) *
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          required
-                          min={1}
-                          max={365}
-                          value={scheduleCustomIntervalDays}
-                          onChange={(e) => handleScheduleIntervalChange('CUSTOM_DAYS', parseInt(e.target.value) || 30)}
-                          className="w-full px-3 py-2 bg-white border border-purple-300 rounded-lg text-sm font-bold text-purple-900 focus:border-purple-600 focus:outline-none"
-                        />
-                        <span className="text-xs font-medium text-slate-500 shrink-0">დღე</span>
-                      </div>
-                      <span className="text-[10px] text-purple-600 mt-0.5 block">
-                        მაგ: ყოველ 15, 30 ან 45 დღეში
-                      </span>
-                    </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">
-                        გადახდის დღე (ყოველი თვის რიცხვი) *
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          required
-                          min={1}
-                          max={31}
-                          value={schedulePaymentDay}
-                          onChange={(e) => handleSchedulePaymentDayChange(parseInt(e.target.value) || 15)}
-                          className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm font-bold text-slate-900 focus:border-primary focus:outline-none"
-                        />
-                        <span className="text-xs font-medium text-slate-500 shrink-0">რიცხვი</span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 mt-0.5 block">
-                        მაგ: 15 (ყოველთვიურად ამ რიცხვში)
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Installments Table / Preview with Editable Amounts */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <span>ყოველთვიური შენატანების განაწილება</span>
-                    {scheduleType === 'NON_STANDARD' && (
-                      <span className="text-[10px] font-normal text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded">
-                        თითოეული თვის თანხა რედაქტირებადია
-                      </span>
-                    )}
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleAutoDistributeEvenly}
-                    className="text-xs text-primary font-semibold hover:underline flex items-center gap-1 cursor-pointer"
-                    title="თანაბარი განაწილების აღდგენა"
-                  >
-                    <span className="material-symbols-outlined text-xs">restart_alt</span>
-                    <span>თანაბრად გადანაწილება</span>
-                  </button>
-                </div>
-
-                <div className="border border-slate-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-100 text-slate-600 font-semibold uppercase text-[10px] sticky top-0 z-10 border-b border-slate-200">
-                      <tr>
-                        <th className="py-2 px-3 text-center w-12">№</th>
-                        <th className="py-2 px-3">გადახდის თარიღი</th>
-                        <th className="py-2 px-3 text-right">შენატანი (₾)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white">
-                      {scheduleInstallments.map((inst, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/80">
-                          <td className="py-1.5 px-3 text-center font-mono text-slate-500">{inst.installmentNo}</td>
-                          <td className="py-1.5 px-3 font-mono text-slate-700">{inst.dueDate}</td>
-                          <td className="py-1.5 px-3 text-right">
-                            {scheduleType === 'NON_STANDARD' ? (
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={inst.amount}
-                                onChange={(e) => handleInstallmentAmountChange(idx, parseFloat(e.target.value) || 0)}
-                                className="w-28 px-2 py-1 bg-purple-50/50 border border-purple-200 rounded font-mono font-bold text-right text-xs focus:outline-none focus:border-purple-600"
-                              />
-                            ) : (
-                              <span className="font-mono font-bold text-slate-900">{inst.amount.toFixed(2)} ₾</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Live Sum Calculation */}
-                {(() => {
-                  const totalDistributed = scheduleInstallments.reduce((s, i) => s + (Number(i.amount) || 0), 0);
-                  const totalDebt = Number(activeClaim?.remainingAmount || activeClaim?.initialAmount || 0);
-                  const diff = Math.round((totalDistributed - totalDebt) * 100) / 100;
-
-                  return (
-                    <div className="flex items-center justify-between p-2.5 mt-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
-                      <span className="text-slate-600">
-                        გადანაწილებული ჯამი: <strong className="text-slate-900">{totalDistributed.toFixed(2)} ₾</strong> / ვალის თანხა: <strong className="text-slate-900">{totalDebt.toFixed(2)} ₾</strong>
-                      </span>
-                      {diff === 0 ? (
-                        <span className="text-emerald-700 font-bold flex items-center gap-1">
-                          <span className="material-symbols-outlined text-sm">check_circle</span>
-                          ზუსტად ემთხვევა
-                        </span>
-                      ) : (
-                        <span className="text-amber-700 font-bold flex items-center gap-1">
-                          <span className="material-symbols-outlined text-sm">warning</span>
-                          სხვაობა: {diff > 0 ? `+${diff}` : diff} ₾
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  კომენტარი ან დამატებითი შეთანხმება (არასავალდებულო)
-                </label>
-                <textarea
-                  rows={2}
-                  value={scheduleNotes}
-                  onChange={(e) => setScheduleNotes(e.target.value)}
-                  placeholder="მაგ: შეთანხმებულია სატელეფონო საუბრის შედეგად, მოვალე იღებს ვალდებულებას დაიცვას გრაფიკი..."
-                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:border-primary focus:outline-none resize-none"
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsScheduleModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 transition cursor-pointer"
-                >
-                  გაუქმება
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingSchedule}
-                  className="px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-[#0A37CA] transition flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-base">send</span>
-                  <span>{savingSchedule ? 'ინახება...' : 'გრაფიკის შენახვა & დებიტორისთვის გაგზავნა'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ADD DEBTOR CONTACT MODAL (INTERNAL ONLY) */}
-      {isAddContactModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-border-subtle space-y-4 animate-scaleUp">
-            <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
-                  <span className="material-symbols-outlined text-[18px]">add_call</span>
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900">
-                    ახალი საკონტაქტო ნომრის დამატება
-                  </h3>
-                  <span className="text-[11px] text-amber-700 font-medium flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[12px]">lock</span>
-                    შიდა ჩანაწერი — დებიტორს არ გამოუჩნდება
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddContactModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            <form onSubmit={handleAddDebtorContact} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  ტელეფონის ნომერი <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={newContactPhone}
-                  onChange={(e) => setNewContactPhone(e.target.value)}
-                  placeholder="+995 599 00 00 00"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    სახელი <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newContactFirstName}
-                    onChange={(e) => setNewContactFirstName(e.target.value)}
-                    placeholder="მაგ: ნინო"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    გვარი
-                  </label>
-                  <input
-                    type="text"
-                    value={newContactLastName}
-                    onChange={(e) => setNewContactLastName(e.target.value)}
-                    placeholder="მაგ: გელაშვილი"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  თანამდებობა / როლი <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={newContactPosition}
-                  onChange={(e) => setNewContactPosition(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none"
-                >
-                  <option value="მთავარი ბუღალტერი">მთავარი ბუღალტერი</option>
-                  <option value="დირექტორი">დირექტორი / ხელმძღვანელი</option>
-                  <option value="დამფუძნებელი">დამფუძნებელი / მეწილე</option>
-                  <option value="ფინანსური მენეჯერი">ფინანსური მენეჯერი</option>
-                  <option value="იურისტი / ადვოკატი">იურისტი / ადვოკატი</option>
-                  <option value="ოჯახის წევრი">ოჯახის წევრი (თავდები / ახლობელი)</option>
-                  <option value="მენეჯერი / თანამშრომელი">მენეჯერი / თანამშრომელი</option>
-                  <option value="სხვა საკონტაქტო პირი">სხვა საკონტაქტო პირი</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  შიდა შენიშვნა / კომენტარი
-                </label>
-                <textarea
-                  rows={2}
-                  value={newContactNotes}
-                  onChange={(e) => setNewContactNotes(e.target.value)}
-                  placeholder="მაგ: მოძიებულია საჯარო რეესტრიდან / თანახმაა ინვოისის გადამოწმებაზე..."
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary focus:outline-none resize-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setIsAddContactModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-                >
-                  გაუქმება
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSavingContact}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-[#0A37CA] transition flex items-center gap-1 shadow-sm cursor-pointer disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-[16px]">save</span>
-                  <span>{isSavingContact ? 'ინახება...' : 'შენახვა'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
+      {/* Analytics Chart Studio Modal */}
+      <CrmChartStudioModal
+        isOpen={isChartStudioOpen}
+        items={selectedList.length > 0 ? selectedList : filteredQueue}
+        onClose={() => setIsChartStudioOpen(false)}
+      />
     </div>
   );
 }

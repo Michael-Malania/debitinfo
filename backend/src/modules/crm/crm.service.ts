@@ -160,9 +160,10 @@ export class CrmService implements OnModuleInit {
       formatted = formatted.filter(
         (i) =>
           i.debtorName.toLowerCase().includes(q) ||
-          i.debtorPersonalId.includes(q) ||
-          i.debtorPhone.includes(q) ||
-          i.caseNumber.toLowerCase().includes(q),
+          i.debtorPersonalId.toLowerCase().includes(q) ||
+          i.debtorPhone.toLowerCase().includes(q) ||
+          i.caseNumber.toLowerCase().includes(q) ||
+          (i.creditorName || '').toLowerCase().includes(q),
       );
     }
 
@@ -357,22 +358,40 @@ export class CrmService implements OnModuleInit {
           ? `${c.debtor.individualProfile.firstName} ${c.debtor.individualProfile.lastName}`.trim()
           : c.debtor.email);
 
+    const legalAddress = isLegal
+      ? (c.debtor.companyProfile?.legalAddress || '')
+      : (c.debtor.individualProfile?.legalAddress || '');
+    const actualAddress = isLegal
+      ? (c.debtor.companyProfile?.actualAddress || '')
+      : (c.debtor.individualProfile?.actualAddress || '');
+
     const creditorName = c.creditor?.companyProfile?.companyName || c.creditor?.email || 'კრედიტორი';
     const lastLog = c.crmLogs && c.crmLogs.length > 0 ? c.crmLogs[0] : null;
+    const activeSchedule = Array.isArray(c.schedules) && c.schedules.length > 0 ? c.schedules[0] : null;
 
     return {
       id: c.id,
       caseNumber: c.caseNumber,
       agreementNumber: c.agreementNumber,
+      entityType: c.debtor.entityType,
+      isCompany: isLegal,
+      firstName: isLegal ? null : (c.debtor.individualProfile?.firstName || null),
+      lastName: isLegal ? null : (c.debtor.individualProfile?.lastName || null),
       debtorName,
       debtorPersonalId: c.debtor.personalId,
       debtorPhone: c.debtor.phone || '+995 599 00 00 00',
+      debtorEmail: c.debtor.email || null,
+      legalAddress,
+      actualAddress,
+      directorName: isLegal ? (c.debtor.companyProfile?.directorName || null) : null,
+      directorPin: isLegal ? (c.debtor.companyProfile?.directorPin || null) : null,
       creditorName,
       initialAmount: Number(c.initialAmount),
       remainingAmount: Number(c.remainingAmount),
       penaltyAmount: Number(c.penaltyAmount),
       currency: c.currency,
       daysOverdue: c.daysOverdue,
+      debtOriginationDate: c.debtOriginationDate || c.createdAt,
       status: c.status,
       rating: c.rating,
       riskScore: c.riskScore,
@@ -380,6 +399,9 @@ export class CrmService implements OnModuleInit {
       lastDisposition: lastLog?.disposition || null,
       lastCallDate: lastLog?.createdAt || null,
       lastCallNotes: lastLog?.notes || null,
+      contactsCount: Array.isArray(c.debtor.contactPersons) ? c.debtor.contactPersons.length : 0,
+      hasActiveSchedule: Boolean(activeSchedule),
+      scheduleApprovalStatus: activeSchedule?.approvalStatus || null,
     };
   }
 
