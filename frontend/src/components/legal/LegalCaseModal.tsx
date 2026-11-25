@@ -28,11 +28,23 @@ export default function LegalCaseModal({
   const [currentStage, setCurrentStage] = useState<string>('LAWSUIT_PREPARATION');
   const [priority, setPriority] = useState<string>('HIGH');
   const [nextHearingDate, setNextHearingDate] = useState<string>('');
+  const [penaltyAmountInput, setPenaltyAmountInput] = useState<string>('0');
+  const [courtDutyFeeInput, setCourtDutyFeeInput] = useState<string>('');
+  const [courtInstanceInput, setCourtInstanceInput] = useState<string>('');
+  const [courtCaseNumberInput, setCourtCaseNumberInput] = useState<string>('');
+  const [judgeNameInput, setJudgeNameInput] = useState<string>('');
   const [opinionText, setOpinionText] = useState<string>('');
   const [warningSent, setWarningSent] = useState(false);
   const [lawsuitDrafted, setLawsuitDrafted] = useState(false);
   const [dutyPaid, setDutyPaid] = useState(false);
   const [savingAction, setSavingAction] = useState(false);
+
+  // Add Legal Document Form State
+  const [showAddDocForm, setShowAddDocForm] = useState(false);
+  const [docTitle, setDocTitle] = useState('');
+  const [docType, setDocType] = useState('LAWSUIT');
+  const [docUrl, setDocUrl] = useState('');
+  const [savingDoc, setSavingDoc] = useState(false);
 
   // Timeline Note State
   const [newNoteText, setNewNoteText] = useState('');
@@ -46,10 +58,22 @@ export default function LegalCaseModal({
     setNextHearingDate(
       legalCase.nextHearingDate ? String(legalCase.nextHearingDate).slice(0, 10) : ''
     );
+    setPenaltyAmountInput(
+      legalCase.amounts?.penaltyAmount !== undefined ? String(legalCase.amounts.penaltyAmount) : '0'
+    );
+    setCourtDutyFeeInput(
+      legalCase.courtDutyFee !== null && legalCase.courtDutyFee !== undefined
+        ? String(legalCase.courtDutyFee)
+        : ''
+    );
+    setCourtInstanceInput(legalCase.courtInstance || '');
+    setCourtCaseNumberInput(legalCase.courtCaseNumber || '');
+    setJudgeNameInput(legalCase.judgeName || '');
     setOpinionText(legalCase.legalOpinion || '');
     setWarningSent(Boolean(legalCase.checklistWarningSent));
     setLawsuitDrafted(Boolean(legalCase.checklistLawsuitDrafted));
     setDutyPaid(Boolean(legalCase.checklistDutyPaid));
+    setShowAddDocForm(false);
     setActiveTab('dossier');
     setLocalToast(null);
   }, [legalCase]);
@@ -64,10 +88,24 @@ export default function LegalCaseModal({
   const handleSaveControlCenter = async () => {
     try {
       setSavingAction(true);
+      const parsedPenalty = penaltyAmountInput.trim() === '' ? 0 : Number(penaltyAmountInput);
+      const parsedDuty =
+        courtDutyFeeInput.trim() === '' ? null : Number(courtDutyFeeInput);
+
       const updated = await legalService.updateCase(legalCase.id, {
         stage: currentStage,
         priority,
-        nextHearingDate: nextHearingDate || undefined,
+        nextHearingDate: nextHearingDate || null,
+        penaltyAmount: Number.isNaN(parsedPenalty) ? undefined : Math.max(0, parsedPenalty),
+        courtDutyFee:
+          parsedDuty === null
+            ? null
+            : Number.isNaN(parsedDuty)
+              ? undefined
+              : Math.max(0, parsedDuty),
+        courtInstance: courtInstanceInput.trim() || undefined,
+        courtCaseNumber: courtCaseNumberInput.trim() || undefined,
+        judgeName: judgeNameInput.trim() || undefined,
         legalOpinion: opinionText,
         checklistWarningSent: warningSent,
         checklistLawsuitDrafted: lawsuitDrafted,
@@ -76,12 +114,41 @@ export default function LegalCaseModal({
 
       if (updated) {
         onCaseUpdated(updated);
-        showToast('საქმის სტატუსი და საკონტროლო ეტაპები წარმატებით შეინახა ბაზაში!');
+        showToast('საქმის ფინანსური და საპროცესო მონაცემები წარმატებით შეინახა ბაზაში!');
       }
     } catch (err) {
       console.error('Update failed:', err);
     } finally {
       setSavingAction(false);
+    }
+  };
+
+  const handleAddDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!docTitle.trim()) return;
+    try {
+      setSavingDoc(true);
+      const cleanName = docTitle.trim();
+      const created = await legalService.addDocument(legalCase.id, {
+        title: cleanName,
+        documentType: docType,
+        fileUrl: docUrl.trim() || `/docs/legal/${encodeURIComponent(cleanName)}`,
+        isVerified: true,
+      });
+      if (created) {
+        const refreshed = await legalService.getCaseById(legalCase.id);
+        if (refreshed) {
+          onCaseUpdated(refreshed);
+        }
+        setDocTitle('');
+        setDocUrl('');
+        setShowAddDocForm(false);
+        showToast('დოკუმენტი წარმატებით დაემატა საქმეს!');
+      }
+    } catch (err) {
+      console.error('Add document failed:', err);
+    } finally {
+      setSavingDoc(false);
     }
   };
 
@@ -251,12 +318,24 @@ export default function LegalCaseModal({
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <div className="text-slate-500 text-xs font-semibold">ჯარიმა / პირგასამტეხლო</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-slate-500 text-xs font-semibold">ჯარიმა / პირგასამტეხლო</span>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('control')}
+                      className="text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                    >
+                      რედაქტირება
+                    </button>
+                  </div>
                   <div className="text-xl font-bold font-mono text-slate-900 mt-1">
                     {legalCase.amounts.penaltyAmount.toLocaleString('ka-GE')} ₾
                   </div>
                   <div className="text-[11px] text-slate-500 mt-1">
-                    ბაჟი (3%): {legalCase.courtDutyFee ? `${legalCase.courtDutyFee} ₾` : '—'}
+                    სახელმწიფო ბაჟი:{' '}
+                    {legalCase.courtDutyFee !== null && legalCase.courtDutyFee !== undefined
+                      ? `${legalCase.courtDutyFee.toLocaleString('ka-GE')} ₾`
+                      : 'მითითებული არაა'}
                   </div>
                 </div>
 
@@ -341,12 +420,67 @@ export default function LegalCaseModal({
 
                 {/* Verified Documents */}
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3 text-xs">
-                  <div className="font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-emerald-600 text-base">
-                      verified_user
-                    </span>
-                    <span>დამოწმებული დოკუმენტაცია &amp; რეესტრები</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-emerald-600 text-base">
+                        verified_user
+                      </span>
+                      <span>დამოწმებული დოკუმენტაცია &amp; რეესტრები</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddDocForm((p) => !p)}
+                      className="px-2.5 py-1 rounded-lg bg-primary text-white text-[11px] font-bold hover:bg-primary-hover transition cursor-pointer"
+                    >
+                      {showAddDocForm ? 'გაუქმება' : '+ დოკუმენტის დამატება'}
+                    </button>
                   </div>
+
+                  {showAddDocForm && (
+                    <form
+                      onSubmit={handleAddDocument}
+                      className="p-3 rounded-lg bg-white border border-blue-200 space-y-2.5"
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          required
+                          value={docTitle}
+                          onChange={(e) => setDocTitle(e.target.value)}
+                          placeholder="დოკუმენტის დასახელება (მაგ. ბაჟის ქვითარი.pdf)"
+                          className="px-2.5 py-1.5 rounded border border-slate-300 text-xs outline-none focus:border-primary"
+                        />
+                        <select
+                          value={docType}
+                          onChange={(e) => setDocType(e.target.value)}
+                          className="px-2.5 py-1.5 rounded border border-slate-300 text-xs bg-white outline-none focus:border-primary"
+                        >
+                          <option value="LAWSUIT">სასამართლო სარჩელი</option>
+                          <option value="PAYMENT_RECEIPT">ბაჟის გადახდის ქვითარი</option>
+                          <option value="COURT_RULING">სასამართლო განჩინება / გადაწყვეტილება</option>
+                          <option value="ENFORCEMENT_WRIT">სააღსრულებო ფურცელი</option>
+                          <option value="WARNING_LETTER">ოფიციალური გაფრთხილება</option>
+                          <option value="OTHER">სხვა დოკუმენტი</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={docUrl}
+                          onChange={(e) => setDocUrl(e.target.value)}
+                          placeholder="ფაილის ბმული / URL (არასავალდებულო)"
+                          className="flex-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs outline-none focus:border-primary"
+                        />
+                        <button
+                          type="submit"
+                          disabled={savingDoc}
+                          className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                        >
+                          {savingDoc ? 'ინახება...' : 'დამატება'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                   <div className="flex flex-wrap gap-2 pt-1">
                     {legalCase.documents && legalCase.documents.length > 0 ? (
                       legalCase.documents.map((doc) => (
@@ -509,32 +643,130 @@ export default function LegalCaseModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    საქმის პრიორიტეტი:
-                  </label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-primary"
-                  >
-                    <option value="HIGH">მაღალი პრიორიტეტი</option>
-                    <option value="MEDIUM">საშუალო პრიორიტეტი</option>
-                    <option value="LOW">დაბალი პრიორიტეტი</option>
-                  </select>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-800">
+                    პირგასამტეხლო, სახელმწიფო ბაჟი და სასამართლო რეკვიზიტები (ხელით მართვა)
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-600">
+                    ძირი: {legalCase.amounts.principalAmount.toLocaleString('ka-GE')} ₾ •{' '}
+                    განახლებული მოთხოვნა:{' '}
+                    <strong className="text-rose-700">
+                      {Math.max(
+                        0,
+                        legalCase.amounts.totalClaim -
+                          legalCase.amounts.penaltyAmount +
+                          (Number(penaltyAmountInput) || 0),
+                      ).toLocaleString('ka-GE')}{' '}
+                      ₾
+                    </strong>
+                  </span>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    მომდევნო სასამართლო სხდომა:
-                  </label>
-                  <input
-                    type="date"
-                    value={nextHearingDate}
-                    onChange={(e) => setNextHearingDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:outline-none focus:border-primary"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      პირგასამტეხლო / ჯარიმა (₾):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={penaltyAmountInput}
+                      onChange={(e) => setPenaltyAmountInput(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      სახელმწიფო ბაჟი (₾):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={courtDutyFeeInput}
+                      onChange={(e) => setCourtDutyFeeInput(e.target.value)}
+                      placeholder="შეიყვანეთ ბაჟის თანხა"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      მომდევნო სასამართლო სხდომა:
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="date"
+                        value={nextHearingDate}
+                        onChange={(e) => setNextHearingDate(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:outline-none focus:border-primary"
+                      />
+                      {nextHearingDate && (
+                        <button
+                          type="button"
+                          onClick={() => setNextHearingDate('')}
+                          title="თარიღის გასუფთავება"
+                          className="px-2 py-2 rounded-lg border border-slate-300 bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      სასამართლო ინსტანცია:
+                    </label>
+                    <input
+                      type="text"
+                      value={courtInstanceInput}
+                      onChange={(e) => setCourtInstanceInput(e.target.value)}
+                      placeholder="მაგ: თბილისის საქალაქო სასამართლო"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      სასამართლოს საქმის N:
+                    </label>
+                    <input
+                      type="text"
+                      value={courtCaseNumberInput}
+                      onChange={(e) => setCourtCaseNumberInput(e.target.value)}
+                      placeholder="მაგ: #3/1142-24"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      მოსამართლე / პრიორიტეტი:
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input
+                        type="text"
+                        value={judgeNameInput}
+                        onChange={(e) => setJudgeNameInput(e.target.value)}
+                        placeholder="მოსამართლე"
+                        className="w-full px-2.5 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-primary"
+                      />
+                      <select
+                        value={priority}
+                        onChange={(e) => setPriority(e.target.value)}
+                        className="w-full px-2 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-primary"
+                      >
+                        <option value="HIGH">მაღალი</option>
+                        <option value="MEDIUM">საშუალო</option>
+                        <option value="LOW">დაბალი</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -570,7 +802,11 @@ export default function LegalCaseModal({
                     className="w-4 h-4 rounded text-primary border-slate-300 focus:ring-primary cursor-pointer"
                   />
                   <span className="font-semibold">
-                    სახელმწიფო ბაჟი (3% — ₾{legalCase.courtDutyFee || '744'}) გადახდილია
+                    სახელმწიფო ბაჟი (
+                    {courtDutyFeeInput.trim() !== '' && !Number.isNaN(Number(courtDutyFeeInput))
+                      ? `${Number(courtDutyFeeInput).toLocaleString('ka-GE')} ₾`
+                      : 'თანხა მითითებული არაა'}
+                    ) გადახდილია
                   </span>
                 </label>
               </div>

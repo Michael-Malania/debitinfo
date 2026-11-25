@@ -206,11 +206,17 @@ export const legalService = {
       checklistWarningSent?: boolean;
       checklistLawsuitDrafted?: boolean;
       checklistDutyPaid?: boolean;
-      courtDutyFee?: number;
+      courtDutyFee?: number | null;
+      penaltyAmount?: number;
+      courtInstance?: string;
+      courtCaseNumber?: string;
+      judgeName?: string;
+      enforcementOfficer?: string;
+      executionSheetNumber?: string;
       hasSequestration?: boolean;
       settlementTerms?: string;
-      nextHearingDate?: string;
-      deadlineDate?: string;
+      nextHearingDate?: string | null;
+      deadlineDate?: string | null;
       priority?: string;
     }
   ): Promise<DetailedLegalCase | null> {

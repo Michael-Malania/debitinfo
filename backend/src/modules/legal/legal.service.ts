@@ -7,11 +7,17 @@ export interface UpdateLegalCaseDto {
   checklistWarningSent?: boolean;
   checklistLawsuitDrafted?: boolean;
   checklistDutyPaid?: boolean;
-  courtDutyFee?: number;
+  courtDutyFee?: number | null;
+  penaltyAmount?: number;
+  courtInstance?: string;
+  courtCaseNumber?: string;
+  judgeName?: string;
+  enforcementOfficer?: string;
+  executionSheetNumber?: string;
   hasSequestration?: boolean;
   settlementTerms?: string;
-  nextHearingDate?: string;
-  deadlineDate?: string;
+  nextHearingDate?: string | null;
+  deadlineDate?: string | null;
   priority?: string;
 }
 
@@ -213,13 +219,67 @@ export class LegalService {
         checklistLawsuitDrafted: dto.checklistLawsuitDrafted !== undefined ? dto.checklistLawsuitDrafted : undefined,
         checklistDutyPaid: dto.checklistDutyPaid !== undefined ? dto.checklistDutyPaid : undefined,
         courtDutyFee: dto.courtDutyFee !== undefined ? dto.courtDutyFee : undefined,
+        courtInstance: dto.courtInstance !== undefined ? dto.courtInstance : undefined,
+        courtCaseNumber: dto.courtCaseNumber !== undefined ? dto.courtCaseNumber : undefined,
+        judgeName: dto.judgeName !== undefined ? dto.judgeName : undefined,
+        enforcementOfficer: dto.enforcementOfficer !== undefined ? dto.enforcementOfficer : undefined,
+        executionSheetNumber: dto.executionSheetNumber !== undefined ? dto.executionSheetNumber : undefined,
         hasSequestration: dto.hasSequestration !== undefined ? dto.hasSequestration : undefined,
         settlementTerms: dto.settlementTerms !== undefined ? dto.settlementTerms : undefined,
-        nextHearingDate: dto.nextHearingDate ? new Date(dto.nextHearingDate) : undefined,
-        deadlineDate: dto.deadlineDate ? new Date(dto.deadlineDate) : undefined,
+        nextHearingDate:
+          dto.nextHearingDate === null || dto.nextHearingDate === ''
+            ? null
+            : dto.nextHearingDate
+              ? new Date(dto.nextHearingDate)
+              : undefined,
+        deadlineDate:
+          dto.deadlineDate === null || dto.deadlineDate === ''
+            ? null
+            : dto.deadlineDate
+              ? new Date(dto.deadlineDate)
+              : undefined,
         priority: dto.priority !== undefined ? dto.priority : undefined,
       },
     });
+
+    const changeNotes: string[] = [];
+
+    if (
+      dto.penaltyAmount !== undefined &&
+      !Number.isNaN(Number(dto.penaltyAmount)) &&
+      Number(dto.penaltyAmount) >= 0 &&
+      legalCase.claim
+    ) {
+      const oldPenalty = Number(legalCase.claim.penaltyAmount || 0);
+      const newPenalty = Math.round(Number(dto.penaltyAmount) * 100) / 100;
+      if (newPenalty !== oldPenalty) {
+        const delta = newPenalty - oldPenalty;
+        const nextRemaining = Math.max(0, Number(legalCase.claim.remainingAmount || 0) + delta);
+        await this.prisma.debtClaim.update({
+          where: { id: legalCase.claimId },
+          data: {
+            penaltyAmount: newPenalty,
+            remainingAmount: nextRemaining,
+            lastActivityAt: new Date(),
+          },
+        });
+        changeNotes.push(
+          `პირგასამტეხლო / ჯარიმა განახლდა: ${oldPenalty.toLocaleString('ka-GE')} ₾ → ${newPenalty.toLocaleString('ka-GE')} ₾`,
+        );
+      }
+    }
+
+    if (dto.courtDutyFee !== undefined) {
+      const oldDuty = legalCase.courtDutyFee !== null ? Number(legalCase.courtDutyFee) : null;
+      const newDuty = dto.courtDutyFee !== null ? Number(dto.courtDutyFee) : null;
+      if (newDuty !== oldDuty) {
+        changeNotes.push(
+          newDuty !== null
+            ? `სახელმწიფო ბაჟი განისაზღვრა: ${newDuty.toLocaleString('ka-GE')} ₾`
+            : 'სახელმწიფო ბაჟის ველი გაიწმინდა',
+        );
+      }
+    }
 
     if (dto.stage && dto.stage !== legalCase.stage && user?.id) {
       const stageKa: Record<string, string> = {
@@ -230,6 +290,10 @@ export class LegalService {
         ENFORCEMENT: 'სააღსრულებო წარმოება',
         CLOSED: 'დასრულებული',
       };
+      changeNotes.unshift(`სამართლებრივი ეტაპი შეიცვალა: ${stageKa[dto.stage] || dto.stage}`);
+    }
+
+    if (changeNotes.length > 0 && user?.id) {
       await this.prisma.caseTimelineEvent.create({
         data: {
           legalCaseId: legalCase.id,
@@ -237,8 +301,8 @@ export class LegalService {
           authorId: user.id,
           department: 'LEGAL',
           authorRoleTitle: `[იურისტი - ${user.name || user.email}]`,
-          actionType: 'STATUS_CHANGED',
-          description: `სამართლებრივი ეტაპი შეიცვალა: ${stageKa[dto.stage] || dto.stage}`,
+          actionType: dto.stage && dto.stage !== legalCase.stage ? 'STATUS_CHANGED' : 'AMOUNTS_UPDATED',
+          description: changeNotes.join(' • '),
         },
       });
     }
@@ -328,7 +392,7 @@ export class LegalService {
       activeCases: activeCasesCount,
       totalDisputedAmount: totalAmount,
       successfulSettlementRate: settlementRate,
-      urgentDeadlinesCount: urgentDeadlines || 3,
+      urgentDeadlinesCount: urgentDeadlines,
       countsByStage: {
         all: cases.length,
         court: cases.filter((c) => c.stage === 'COURT_PROCEEDINGS').length,
