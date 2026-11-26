@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -70,5 +71,13 @@ export class LegalController {
     @Body() dto: AddDocumentDto,
   ) {
     return await this.legalService.addDocument(id, dto);
+  }
+
+  @Post('cases/:id/documents/upload')
+  async uploadDocument(
+    @Param('id') id: string,
+    @Req() req: any,
+  ) {
+    return await this.legalService.uploadDocument(id, req);
   }
 }

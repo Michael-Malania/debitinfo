@@ -270,6 +270,39 @@ export const legalService = {
       return null;
     }
   },
+
+  async uploadDocument(
+    id: string,
+    file: File,
+    opts: { title?: string; documentType: string }
+  ): Promise<any> {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (opts.title?.trim()) formData.append('title', opts.title.trim());
+      formData.append('documentType', opts.documentType || 'OTHER');
+
+      const token = authService.getToken();
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const res = await fetch(`${baseUrl}/api/v1/legal/cases/${id}/documents/upload`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Upload failed (${res.status})`);
+      }
+      const json = await res.json();
+      return json?.data || json;
+    } catch (err) {
+      console.error(`[legalService.uploadDocument] Failed:`, err);
+      return null;
+    }
+  },
 };
 
 // ==========================================

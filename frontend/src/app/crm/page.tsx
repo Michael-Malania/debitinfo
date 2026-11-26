@@ -1123,7 +1123,7 @@ export default function CrmPage() {
                       className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary cursor-pointer"
                     >
                       <option value="ALL">ყველა რეიტინგი</option>
-                      {['A', 'B', 'C', 'D', 'E'].map((g) => (
+                      {['A', 'B', 'C'].map((g) => (
                         <option key={g} value={g}>
                           Grade {g}
                         </option>

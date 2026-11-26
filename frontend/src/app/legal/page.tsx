@@ -5,11 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { authService, legalService } from '@/services';
-import { DetailedLegalCase, LegalStats } from '@/types';
+import { DetailedLegalCase } from '@/types';
 import LegalCaseModal from '@/components/legal/LegalCaseModal';
 import LegalChartStudioModal from '@/components/legal/LegalChartStudioModal';
 
-type WorkflowTab = 'all' | 'court' | 'lawsuit' | 'completed';
 type EntityTab = 'ALL' | 'PHYSICAL' | 'LEGAL';
 
 interface LegalFiltersState {
@@ -69,7 +68,7 @@ const PRIORITY_OPTIONS = [
   { value: 'LOW', label: 'დაბალი (LOW)' },
 ];
 
-const RATING_OPTIONS = ['ALL', 'A', 'B', 'C', 'D', 'E'];
+const RATING_OPTIONS = ['ALL', 'A', 'B', 'C'];
 
 function getStageBadge(stage: string) {
   switch (stage) {
@@ -307,11 +306,9 @@ export default function LegalPortalPage() {
   const [authChecking, setAuthChecking] = useState(true);
   const [user, setUser] = useState<{ name?: string; email?: string; role?: string } | null>(null);
 
-  const [workflowTab, setWorkflowTab] = useState<WorkflowTab>('all');
   const [entityTab, setEntityTab] = useState<EntityTab>('ALL');
   const [loading, setLoading] = useState(true);
   const [cases, setCases] = useState<DetailedLegalCase[]>([]);
-  const [stats, setStats] = useState<LegalStats | null>(null);
 
   const [filters, setFilters] = useState<LegalFiltersState>(INITIAL_FILTERS);
   const [showFilterDrawer, setShowFilterDrawer] = useState(false);
@@ -347,18 +344,14 @@ export default function LegalPortalPage() {
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsRes, casesRes] = await Promise.all([
-        legalService.getStats(),
-        legalService.getCases({ tab: workflowTab }),
-      ]);
-      setStats(statsRes);
+      const casesRes = await legalService.getCases({ tab: 'all' });
       setCases(casesRes);
     } catch (err) {
       console.error('Failed to fetch legal portal data', err);
     } finally {
       setLoading(false);
     }
-  }, [workflowTab]);
+  }, []);
 
   useEffect(() => {
     if (!authChecking) {
@@ -480,7 +473,6 @@ export default function LegalPortalPage() {
   const handleCaseUpdated = (updated: DetailedLegalCase) => {
     setCases((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
     setModalCase(updated);
-    legalService.getStats().then(setStats).catch(() => {});
   };
 
   const entityLabel =
@@ -507,163 +499,44 @@ export default function LegalPortalPage() {
     <div className="bg-bg-main text-text-primary min-h-screen flex flex-col">
       {/* Top Navigation Header */}
       <header className="sticky top-0 z-30 bg-surface-card border-b border-border-subtle px-6 py-3 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="size-9 bg-primary text-white rounded-lg flex items-center justify-center shadow-sm group-hover:bg-primary-hover transition-colors">
-              <span className="material-symbols-outlined text-[20px]">gavel</span>
-            </div>
-            <div>
-              <span className="font-bold text-lg tracking-tight block leading-none text-text-primary">
-                Debitinfo.GE
-              </span>
-              <span className="text-[11px] font-medium text-text-muted">
-                იურიდიული დეპარტამენტის პორტალი
-              </span>
-            </div>
-          </Link>
-
-          <nav className="hidden xl:flex items-center gap-1 ml-2 bg-slate-100/80 p-1 rounded-lg border border-border-subtle">
-            <button
-              onClick={() => setWorkflowTab('all')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                workflowTab === 'all'
-                  ? 'bg-white text-text-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              ყველა საქმე ({stats?.countsByStage?.all ?? cases.length})
-            </button>
-            <button
-              onClick={() => setWorkflowTab('court')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                workflowTab === 'court'
-                  ? 'bg-white text-text-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              სასამართლო ({stats?.countsByStage?.court ?? 0})
-            </button>
-            <button
-              onClick={() => setWorkflowTab('lawsuit')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                workflowTab === 'lawsuit'
-                  ? 'bg-white text-text-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              სარჩელის მომზადება ({stats?.countsByStage?.lawsuit ?? 0})
-            </button>
-            <button
-              onClick={() => setWorkflowTab('completed')}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                workflowTab === 'completed'
-                  ? 'bg-white text-text-primary shadow-sm'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              დასრულებული ({stats?.countsByStage?.closed ?? 0})
-            </button>
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="relative hidden md:block w-72">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-[18px]">
-              search
+        <Link href="/" className="flex items-center gap-3 group">
+          <div className="size-9 bg-primary text-white rounded-lg flex items-center justify-center shadow-sm group-hover:bg-primary-hover transition-colors">
+            <span className="material-symbols-outlined text-[20px]">gavel</span>
+          </div>
+          <div>
+            <span className="font-bold text-lg tracking-tight block leading-none text-text-primary">
+              Debitinfo.GE
             </span>
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => updateFilter('search', e.target.value)}
-              placeholder="სწრაფი ძიება: საქმე, პ/ნ, ს/კ, მოვალე..."
-              className="w-full h-9 pl-9 pr-3 bg-slate-50 border border-border-subtle rounded-lg text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-text-muted"
-            />
+            <span className="text-[11px] font-medium text-text-muted">
+              იურიდიული დეპარტამენტის პორტალი
+            </span>
           </div>
+        </Link>
 
-          <div className="flex items-center gap-3 pl-4 border-l border-border-subtle">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-text-primary">
-                {user?.name || 'მთავარი იურისტი'}
-              </p>
-              <p className="text-[11px] text-text-muted">
-                {user?.role === 'ADMIN' ? 'HR / სისტემური ადმინისტრატორი' : 'სასამართლო წარმომადგენლობა'}
-              </p>
-            </div>
-            <div className="size-9 rounded-full bg-blue-50 text-primary flex items-center justify-center font-bold text-xs border border-blue-200">
-              {user?.name ? user.name.substring(0, 2).toUpperCase() : 'იუ'}
-            </div>
-            <button
-              onClick={handleLogout}
-              title="სისტემიდან გასვლა"
-              className="p-1.5 text-text-muted hover:text-rose-600 rounded-md hover:bg-rose-50 transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-            </button>
+        <div className="flex items-center gap-3">
+          <div className="text-right hidden sm:block">
+            <p className="text-xs font-bold text-text-primary">
+              {user?.name || 'მთავარი იურისტი'}
+            </p>
+            <p className="text-[11px] text-text-muted">
+              {user?.role === 'ADMIN' ? 'HR / სისტემური ადმინისტრატორი' : 'სასამართლო წარმომადგენლობა'}
+            </p>
           </div>
+          <div className="size-9 rounded-full bg-blue-50 text-primary flex items-center justify-center font-bold text-xs border border-blue-200">
+            {user?.name ? user.name.substring(0, 2).toUpperCase() : 'იუ'}
+          </div>
+          <button
+            onClick={handleLogout}
+            title="სისტემიდან გასვლა"
+            className="p-1.5 text-text-muted hover:text-rose-600 rounded-md hover:bg-rose-50 transition-colors cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">logout</span>
+          </button>
         </div>
       </header>
 
       {/* Main Content Container */}
       <main className="flex-1 w-full max-w-[1680px] mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Compact Workflow KPI Strip */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                აქტიური იურიდიული საქმეები
-              </p>
-              <p className="text-2xl font-extrabold text-text-primary mt-1 font-mono">
-                {stats?.activeCases ?? cases.length}
-              </p>
-            </div>
-            <div className="size-10 rounded-xl bg-blue-50 border border-blue-100 text-primary flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">folder_open</span>
-            </div>
-          </div>
-
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                ჯამური სადავო პორტფელი
-              </p>
-              <p className="text-2xl font-extrabold text-rose-600 mt-1 font-mono">
-                {(stats?.totalDisputedAmount ?? totalRegistryDebt).toLocaleString('ka-GE')} ₾
-              </p>
-            </div>
-            <div className="size-10 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">payments</span>
-            </div>
-          </div>
-
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                წარმატებული მორიგება
-              </p>
-              <p className="text-2xl font-extrabold text-emerald-600 mt-1 font-mono">
-                {stats?.successfulSettlementRate ?? 0}%
-              </p>
-            </div>
-            <div className="size-10 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">handshake</span>
-            </div>
-          </div>
-
-          <div className="bg-surface-card rounded-xl border border-border-subtle p-4 shadow-2xs flex items-center justify-between">
-            <div>
-              <p className="text-[11px] font-semibold text-text-muted uppercase tracking-wider">
-                გადაუდებელი ვადები / სხდომები
-              </p>
-              <p className="text-2xl font-extrabold text-amber-600 mt-1 font-mono">
-                {stats?.urgentDeadlinesCount ?? 0}
-              </p>
-            </div>
-            <div className="size-10 rounded-xl bg-amber-50 border border-amber-100 text-amber-600 flex items-center justify-center">
-              <span className="material-symbols-outlined text-[20px]">event_upcoming</span>
-            </div>
-          </div>
-        </section>
-
         {/* Debtors-Registry-Aligned Legal Cases Registry Card */}
         <section className="bg-surface-card rounded-xl border border-border-subtle p-6 shadow-sm space-y-5">
           {/* Card Header */}
@@ -700,28 +573,6 @@ export default function LegalPortalPage() {
                 იურიდიული: <strong className="font-mono text-text-primary">{legalCount}</strong>
               </span>
             </div>
-          </div>
-
-          {/* Mobile/Tablet Workflow Switch */}
-          <div className="flex xl:hidden flex-wrap items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-border-subtle">
-            {([
-              { id: 'all', label: `ყველა (${stats?.countsByStage?.all ?? cases.length})` },
-              { id: 'court', label: `სასამართლო (${stats?.countsByStage?.court ?? 0})` },
-              { id: 'lawsuit', label: `სარჩელი (${stats?.countsByStage?.lawsuit ?? 0})` },
-              { id: 'completed', label: `დასრულებული (${stats?.countsByStage?.closed ?? 0})` },
-            ] as Array<{ id: WorkflowTab; label: string }>).map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setWorkflowTab(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  workflowTab === tab.id
-                    ? 'bg-primary text-white shadow-xs'
-                    : 'text-text-secondary hover:bg-white'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
           </div>
 
           {/* Debtors-Registry Style Controls Toolbar */}
@@ -904,6 +755,59 @@ export default function LegalPortalPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {/* Select Dropdowns Grouped Together First */}
+                <div>
+                  <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                    სამართლებრივი ეტაპი
+                  </label>
+                  <select
+                    value={filters.stage}
+                    onChange={(e) => updateFilter('stage', e.target.value)}
+                    className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs font-medium outline-none focus:border-primary cursor-pointer"
+                  >
+                    {STAGE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                    პრიორიტეტი
+                  </label>
+                  <select
+                    value={filters.priority}
+                    onChange={(e) => updateFilter('priority', e.target.value)}
+                    className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs font-medium outline-none focus:border-primary cursor-pointer"
+                  >
+                    {PRIORITY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
+                    რეიტინგი
+                  </label>
+                  <select
+                    value={filters.rating}
+                    onChange={(e) => updateFilter('rating', e.target.value)}
+                    className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs font-medium outline-none focus:border-primary cursor-pointer"
+                  >
+                    {RATING_OPTIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r === 'ALL' ? 'ყველა რეიტინგი' : `Grade ${r}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Text / Number / Date Filters */}
                 <div>
                   <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
                     საქმის N / სასამართლოს N
@@ -954,57 +858,6 @@ export default function LegalPortalPage() {
                     placeholder="კრედიტორის სახელი..."
                     className="w-full h-9 px-3 rounded-lg bg-white border border-border-subtle text-xs outline-none focus:border-primary"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
-                    სამართლებრივი ეტაპი
-                  </label>
-                  <select
-                    value={filters.stage}
-                    onChange={(e) => updateFilter('stage', e.target.value)}
-                    className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs font-medium outline-none focus:border-primary cursor-pointer"
-                  >
-                    {STAGE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
-                    პრიორიტეტი
-                  </label>
-                  <select
-                    value={filters.priority}
-                    onChange={(e) => updateFilter('priority', e.target.value)}
-                    className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs font-medium outline-none focus:border-primary cursor-pointer"
-                  >
-                    {PRIORITY_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-text-muted uppercase mb-1">
-                    რეიტინგი
-                  </label>
-                  <select
-                    value={filters.rating}
-                    onChange={(e) => updateFilter('rating', e.target.value)}
-                    className="w-full h-9 px-2.5 rounded-lg bg-white border border-border-subtle text-xs font-medium outline-none focus:border-primary cursor-pointer"
-                  >
-                    {RATING_OPTIONS.map((r) => (
-                      <option key={r} value={r}>
-                        {r === 'ALL' ? 'ყველა რეიტინგი' : `Grade ${r}`}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div>

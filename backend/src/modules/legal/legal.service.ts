@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import * as path from 'path';
+import * as fs from 'fs';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface UpdateLegalCaseDto {
@@ -356,6 +358,80 @@ export class LegalService {
         fileUrl: dto.fileUrl,
         fileSize: dto.fileSize || '1.0 MB',
         isVerified: dto.isVerified ?? false,
+      },
+    });
+
+    await this.prisma.legalCase.update({
+      where: { id: legalCase.id },
+      data: { documentsCount: { increment: 1 } },
+    });
+
+    return doc;
+  }
+
+  async uploadDocument(id: string, req: any) {
+    const legalCase = await this.prisma.legalCase.findFirst({
+      where: { OR: [{ id }, { caseNumber: id }] },
+    });
+
+    if (!legalCase) {
+      throw new NotFoundException(`Legal case ${id} not found`);
+    }
+
+    if (typeof req.isMultipart !== 'function' || !req.isMultipart()) {
+      throw new BadRequestException('მოთხოვნა უნდა იყოს multipart/form-data ფორმატში');
+    }
+
+    let originalName = '';
+    let buffer: Buffer | null = null;
+    let customTitle = '';
+    let documentType = 'OTHER';
+
+    for await (const part of req.parts()) {
+      if (part.type === 'file') {
+        originalName = part.filename || 'document.pdf';
+        buffer = await part.toBuffer();
+      } else if (part.fieldname === 'title') {
+        customTitle = String(part.value || '').trim();
+      } else if (part.fieldname === 'documentType') {
+        documentType = String(part.value || 'OTHER').trim() || 'OTHER';
+      }
+    }
+
+    if (!buffer || buffer.length === 0) {
+      throw new BadRequestException('ფაილი არ არის არჩეული');
+    }
+
+    const uploadsDir = path.resolve(process.cwd(), 'backend', 'uploads', 'documents');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const ext = path.extname(originalName) || '.bin';
+    const safeBase = path
+      .basename(originalName, ext)
+      .replace(/[^a-zA-Z0-9_\u10A0-\u10FF-]/g, '_');
+    const uniqueFileName = `legal_${Date.now()}_${safeBase}${ext}`;
+    const filePath = path.join(uploadsDir, uniqueFileName);
+
+    await fs.promises.writeFile(filePath, buffer);
+
+    const sizeBytes = buffer.length;
+    let fileSize = `${sizeBytes} B`;
+    if (sizeBytes >= 1024 * 1024) {
+      fileSize = `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+    } else if (sizeBytes >= 1024) {
+      fileSize = `${(sizeBytes / 1024).toFixed(1)} KB`;
+    }
+
+    const doc = await this.prisma.legalDocument.create({
+      data: {
+        legalCaseId: legalCase.id,
+        title: customTitle || originalName,
+        documentType,
+        fileUrl: `/uploads/documents/${uniqueFileName}`,
+        fileSize,
+        isVerified: true,
       },
     });
 

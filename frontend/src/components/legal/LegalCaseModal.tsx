@@ -4,6 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { DetailedLegalCase } from '@/types';
 import { legalService } from '@/services';
 
+const COURT_INSTANCE_OPTIONS = [
+  'პირველი ინსტანცია',
+  'მეორე ინსტანცია',
+  'მესამე ინსტანცია',
+  'არბიტრაჟი',
+];
+
 interface LegalCaseModalProps {
   legalCase: DetailedLegalCase | null;
   onClose: () => void;
@@ -41,6 +48,8 @@ export default function LegalCaseModal({
 
   // Add Legal Document Form State
   const [showAddDocForm, setShowAddDocForm] = useState(false);
+  const [docAddMode, setDocAddMode] = useState<'file' | 'url'>('file');
+  const [docFile, setDocFile] = useState<File | null>(null);
   const [docTitle, setDocTitle] = useState('');
   const [docType, setDocType] = useState('LAWSUIT');
   const [docUrl, setDocUrl] = useState('');
@@ -125,25 +134,50 @@ export default function LegalCaseModal({
 
   const handleAddDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!docTitle.trim()) return;
     try {
       setSavingDoc(true);
-      const cleanName = docTitle.trim();
-      const created = await legalService.addDocument(legalCase.id, {
-        title: cleanName,
-        documentType: docType,
-        fileUrl: docUrl.trim() || `/docs/legal/${encodeURIComponent(cleanName)}`,
-        isVerified: true,
-      });
+      let created: any = null;
+
+      if (docAddMode === 'file') {
+        if (!docFile) {
+          alert('გთხოვთ აირჩიოთ ლოკალური ფაილი ასატვირთად');
+          setSavingDoc(false);
+          return;
+        }
+        created = await legalService.uploadDocument(legalCase.id, docFile, {
+          title: docTitle.trim() || docFile.name,
+          documentType: docType,
+        });
+      } else {
+        if (!docTitle.trim() || !docUrl.trim()) {
+          alert('გთხოვთ მიუთითოთ დოკუმენტის დასახელება და გარე ბმული (URL)');
+          setSavingDoc(false);
+          return;
+        }
+        created = await legalService.addDocument(legalCase.id, {
+          title: docTitle.trim(),
+          documentType: docType,
+          fileUrl: docUrl.trim(),
+          isVerified: true,
+        });
+      }
+
       if (created) {
         const refreshed = await legalService.getCaseById(legalCase.id);
         if (refreshed) {
           onCaseUpdated(refreshed);
         }
+        setDocFile(null);
         setDocTitle('');
         setDocUrl('');
         setShowAddDocForm(false);
-        showToast('დოკუმენტი წარმატებით დაემატა საქმეს!');
+        showToast(
+          docAddMode === 'file'
+            ? 'ლოკალური ფაილი წარმატებით აიტვირთა და მიემაგრა საქმეს!'
+            : 'გარე ბმული წარმატებით დაემატა საქმეს!',
+        );
+      } else {
+        alert('დოკუმენტის დამატება ვერ მოხერხდა');
       }
     } catch (err) {
       console.error('Add document failed:', err);
@@ -439,21 +473,53 @@ export default function LegalCaseModal({
                   {showAddDocForm && (
                     <form
                       onSubmit={handleAddDocument}
-                      className="p-3 rounded-lg bg-white border border-blue-200 space-y-2.5"
+                      className="p-3.5 rounded-xl bg-white border border-blue-200 space-y-3"
                     >
+                      {/* Mode Switcher: Local File vs External Link */}
+                      <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setDocAddMode('file')}
+                          className={`py-1.5 px-2.5 rounded-md text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                            docAddMode === 'file'
+                              ? 'bg-primary text-white shadow-2xs'
+                              : 'text-slate-600 hover:bg-white'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">upload_file</span>
+                          <span>ლოკალური ფაილის ატვირთვა</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDocAddMode('url')}
+                          className={`py-1.5 px-2.5 rounded-md text-[11px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                            docAddMode === 'url'
+                              ? 'bg-primary text-white shadow-2xs'
+                              : 'text-slate-600 hover:bg-white'
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">link</span>
+                          <span>გარე ბმული (URL)</span>
+                        </button>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <input
                           type="text"
-                          required
+                          required={docAddMode === 'url'}
                           value={docTitle}
                           onChange={(e) => setDocTitle(e.target.value)}
-                          placeholder="დოკუმენტის დასახელება (მაგ. ბაჟის ქვითარი.pdf)"
-                          className="px-2.5 py-1.5 rounded border border-slate-300 text-xs outline-none focus:border-primary"
+                          placeholder={
+                            docAddMode === 'file'
+                              ? 'დოკუმენტის დასახელება (არასავალდებულო, აიღებს ფაილის სახელს)'
+                              : 'დოკუმენტის დასახელება *'
+                          }
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:border-primary"
                         />
                         <select
                           value={docType}
                           onChange={(e) => setDocType(e.target.value)}
-                          className="px-2.5 py-1.5 rounded border border-slate-300 text-xs bg-white outline-none focus:border-primary"
+                          className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs bg-white outline-none focus:border-primary cursor-pointer"
                         >
                           <option value="LAWSUIT">სასამართლო სარჩელი</option>
                           <option value="PAYMENT_RECEIPT">ბაჟის გადახდის ქვითარი</option>
@@ -463,40 +529,91 @@ export default function LegalCaseModal({
                           <option value="OTHER">სხვა დოკუმენტი</option>
                         </select>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={docUrl}
-                          onChange={(e) => setDocUrl(e.target.value)}
-                          placeholder="ფაილის ბმული / URL (არასავალდებულო)"
-                          className="flex-1 px-2.5 py-1.5 rounded border border-slate-300 text-xs outline-none focus:border-primary"
-                        />
-                        <button
-                          type="submit"
-                          disabled={savingDoc}
-                          className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
-                        >
-                          {savingDoc ? 'ინახება...' : 'დამატება'}
-                        </button>
-                      </div>
+
+                      {docAddMode === 'file' ? (
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <label className="flex-1 flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-dashed border-primary/50 bg-blue-50/40 hover:bg-blue-50 transition cursor-pointer">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="material-symbols-outlined text-primary text-[18px] shrink-0">
+                                attach_file
+                              </span>
+                              <span className="text-xs font-semibold text-slate-700 truncate">
+                                {docFile
+                                  ? `${docFile.name} (${(docFile.size / 1024).toFixed(1)} KB)`
+                                  : 'აირჩიეთ ფაილი კომპიუტერიდან (PDF, სურათი, Word, Excel)...'}
+                              </span>
+                            </div>
+                            <span className="px-2.5 py-1 rounded bg-white border border-blue-200 text-[11px] font-bold text-primary shrink-0">
+                              არჩევა
+                            </span>
+                            <input
+                              type="file"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0] || null;
+                                setDocFile(f);
+                                if (f && !docTitle.trim()) {
+                                  setDocTitle(f.name);
+                                }
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                          <button
+                            type="submit"
+                            disabled={savingDoc || !docFile}
+                            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50 shrink-0"
+                          >
+                            {savingDoc ? 'იტვირთება...' : 'ატვირთვა'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="url"
+                            required
+                            value={docUrl}
+                            onChange={(e) => setDocUrl(e.target.value)}
+                            placeholder="https://example.com/document.pdf *"
+                            className="flex-1 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs outline-none focus:border-primary"
+                          />
+                          <button
+                            type="submit"
+                            disabled={savingDoc}
+                            className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                          >
+                            {savingDoc ? 'ინახება...' : 'მიმაგრება'}
+                          </button>
+                        </div>
+                      )}
                     </form>
                   )}
                   <div className="flex flex-wrap gap-2 pt-1">
                     {legalCase.documents && legalCase.documents.length > 0 ? (
-                      legalCase.documents.map((doc) => (
-                        <a
-                          key={doc.id}
-                          href={doc.fileUrl || '#'}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-200 hover:border-blue-500 text-slate-800 hover:text-blue-700 text-xs font-medium transition shadow-2xs"
-                        >
-                          <span className="material-symbols-outlined text-[16px] text-emerald-600">
-                            {doc.isVerified ? 'verified' : 'description'}
-                          </span>
-                          <span>{doc.title}</span>
-                        </a>
-                      ))
+                      legalCase.documents.map((doc) => {
+                        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+                        const resolvedHref = doc.fileUrl?.startsWith('/uploads/')
+                          ? `${apiBase}${doc.fileUrl}`
+                          : doc.fileUrl || '#';
+                        return (
+                          <a
+                            key={doc.id}
+                            href={resolvedHref}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-200 hover:border-blue-500 text-slate-800 hover:text-blue-700 text-xs font-medium transition shadow-2xs"
+                          >
+                            <span className="material-symbols-outlined text-[16px] text-emerald-600">
+                              {doc.isVerified ? 'verified' : 'description'}
+                            </span>
+                            <span>{doc.title}</span>
+                            {doc.fileSize && (
+                              <span className="text-[10px] font-mono text-slate-400">
+                                ({doc.fileSize})
+                              </span>
+                            )}
+                          </a>
+                        );
+                      })
                     ) : (
                       <div className="text-slate-500 py-4">
                         დოკუმენტები ჯერჯერობით მიბმული არ არის.
@@ -722,13 +839,22 @@ export default function LegalCaseModal({
                     <label className="text-xs font-bold text-slate-700 block mb-1">
                       სასამართლო ინსტანცია:
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={courtInstanceInput}
                       onChange={(e) => setCourtInstanceInput(e.target.value)}
-                      placeholder="მაგ: თბილისის საქალაქო სასამართლო"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs focus:outline-none focus:border-primary"
-                    />
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="">აირჩიეთ სასამართლო ინსტანცია...</option>
+                      {courtInstanceInput &&
+                        !COURT_INSTANCE_OPTIONS.includes(courtInstanceInput) && (
+                          <option value={courtInstanceInput}>{courtInstanceInput}</option>
+                        )}
+                      {COURT_INSTANCE_OPTIONS.map((inst) => (
+                        <option key={inst} value={inst}>
+                          {inst}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
@@ -782,7 +908,7 @@ export default function LegalCaseModal({
                     className="w-4 h-4 rounded text-primary border-slate-300 focus:ring-primary cursor-pointer"
                   />
                   <span className={warningSent ? 'line-through text-slate-500' : 'font-medium'}>
-                    გაფრთხილების წერილი გაგზავნილია (RS.GE ფოსტით)
+                    გაფრთხილების წერილი გაგზავნილია
                   </span>
                 </label>
                 <label className="flex items-center gap-2.5 text-xs text-slate-800 cursor-pointer">
